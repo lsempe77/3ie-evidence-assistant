@@ -23,7 +23,7 @@ from rich.table import Table
 from rich.panel import Panel
 
 from src.config.settings import settings
-from src.agents.devchat_agent import DevChatAgent, DevChatAgentFactory, SearchSettings
+from src.agents.evidence_assistant_agent import EvidenceAssistantAgent, EvidenceAssistantAgentFactory, SearchSettings
 from src.generation.post_hoc_verifier import PostHocVerifier
 from evaluation.minicheck_evaluator import MiniCheckEvaluator
 
@@ -41,7 +41,7 @@ TEST_QUERIES = [
 
 async def run_single_query_pair(
     query: str,
-    agent: DevChatAgent,
+    agent: EvidenceAssistantAgent,
     evaluator: MiniCheckEvaluator,
     verifier: PostHocVerifier
 ) -> tuple:
@@ -118,9 +118,9 @@ async def main(num_queries: int = 5, collection: str = "devchat_v2_enhanced"):
     # Initialize agent with custom collection
     if collection:
         console.print(f"Using collection: [cyan]{collection}[/cyan]")
-        agent = DevChatAgentFactory.create_with_custom_collection(collection)
+        agent = EvidenceAssistantAgentFactory.create_with_custom_collection(collection)
     else:
-        agent = DevChatAgent()
+        agent = EvidenceAssistantAgent()
     
     evaluator = MiniCheckEvaluator(backend='api')
     # Use STRICTER threshold (0.75) to filter more aggressively

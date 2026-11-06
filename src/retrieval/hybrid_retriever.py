@@ -1,5 +1,5 @@
 """
-DevChat v2.0 SOTA - Hybrid Retriever
+3ie Evidence Assistant - Hybrid Retriever
 
 Implements hybrid search combining:
 - Dense vectors (semantic similarity)

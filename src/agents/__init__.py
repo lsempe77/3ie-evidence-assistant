@@ -1,7 +1,7 @@
-# DevChat v2.0 SOTA - Agents Module
-from src.agents.devchat_agent import DevChatAgent, DevChatResponse
+# 3ie Evidence Assistant - Agents Module
+from src.agents.evidence_assistant_agent import EvidenceAssistantAgent, EvidenceAssistantResponse
 
 __all__ = [
-    "DevChatAgent",
-    "DevChatResponse",
+    "EvidenceAssistantAgent",
+    "EvidenceAssistantResponse",
 ]

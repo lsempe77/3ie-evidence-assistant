@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-DevChat v2.0 SOTA - Evaluation Script
+3ie Evidence Assistant - Evaluation Script
 
 Run evaluation on a test set using RAGAS metrics.
 
@@ -19,7 +19,7 @@ from typing import Dict, List
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from src.agents.devchat_agent import DevChatAgent
+from src.agents.evidence_assistant_agent import EvidenceAssistantAgent
 from src.utils.logging import get_logger, setup_logging
 
 setup_logging()
@@ -120,7 +120,7 @@ def simple_evaluate(
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Run evaluation on DevChat"
+        description="Run evaluation on 3ie Evidence Assistant"
     )
     
     parser.add_argument(
@@ -153,7 +153,7 @@ def main():
     args = parser.parse_args()
     
     logger.info("=" * 60)
-    logger.info("DevChat v2.0 SOTA - Evaluation")
+    logger.info("3ie Evidence Assistant - Evaluation")
     logger.info("=" * 60)
     
     # Load test cases
@@ -175,8 +175,8 @@ def main():
     logger.info(f"✅ Loaded {len(test_cases)} test cases")
     
     # Initialize agent
-    logger.info("\n🤖 Initializing DevChat agent...")
-    agent = DevChatAgent()
+    logger.info("\n🤖 Initializing 3ie Evidence Assistant agent...")
+    agent = EvidenceAssistantAgent()
     
     # Run evaluation
     logger.info("\n🧪 Running evaluation...")
@@ -277,7 +277,7 @@ def main():
 def create_sample_test_file(file_path: str):
     """Create a sample test file."""
     sample = {
-        "description": "Sample evaluation test cases for DevChat",
+        "description": "Sample evaluation test cases for 3ie Evidence Assistant",
         "test_cases": [
             {
                 "question": "What are the effects of conditional cash transfers on education?",

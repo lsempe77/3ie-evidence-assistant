@@ -1,4 +1,4 @@
-# Post 2: Python Fundamentals for DevChat
+# Post 2: Python Fundamentals for 3ie Evidence Assistant
 
 **Part 2 of 50** | ⏱️ 45 minutes | [← Previous](01-project-overview.md) | [Next: FastAPI Basics →](03-fastapi-basics.md)
 
@@ -10,7 +10,7 @@
 - Pydantic models for data validation
 - Async/await for concurrent operations
 - Python imports and project structure
-- Common patterns in the DevChat codebase
+- Common patterns in the 3ie Evidence Assistant codebase
 
 ---
 
@@ -63,9 +63,9 @@ def process_document(doc: dict, user: str) -> str:
 3. **Self-documenting**: Code explains itself
 4. **Refactoring safety**: Change types confidently
 
-### DevChat Example
+### 3ie Evidence Assistant Example
 
-From `src/agents/devchat_agent.py`:
+From `src/agents/evidence_assistant_agent.py`:
 
 ```python
 from typing import List, Dict, Optional
@@ -165,7 +165,7 @@ user = User(id="123", email="invalid", name="Bob", age=200)
 
 All without a single `if` statement!
 
-### DevChat Example
+### 3ie Evidence Assistant Example
 
 From `api/schemas/chat.py`:
 
@@ -288,7 +288,7 @@ print(f"Took {time.time() - start:.2f}s")  # ~200ms (3x faster!)
 
 **`await`** = "Pause here, but let other async functions run while I wait"
 
-**Why this matters for DevChat:**
+**Why this matters for 3ie Evidence Assistant:**
 - Searching 10 documents? Do it in parallel!
 - Calling OpenAI + Cohere + Qdrant? Run simultaneously!
 - Serving 100 users? Handle all their requests at once!
@@ -315,7 +315,7 @@ async def get_all_concurrent():
     return results  # All run at once!
 ```
 
-### DevChat Example
+### 3ie Evidence Assistant Example
 
 From `src/retrieval/hybrid_retriever.py`:
 
@@ -355,12 +355,12 @@ async def search(
 
 ## 📦 Project Structure & Imports
 
-### DevChat Structure
+### 3ie Evidence Assistant Structure
 
 ```
 src/
 ├── agents/
-│   └── devchat_agent.py          # Main RAG orchestrator
+│   └── evidence_assistant_agent.py          # Main RAG orchestrator
 ├── retrieval/
 │   ├── hybrid_retriever.py       # Search implementation
 │   └── reranker.py               # Cohere reranking
@@ -392,7 +392,7 @@ from ..utils.cache import get_cached_response
 # Type-only imports (don't import at runtime)
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from src.agents.devchat_agent import DevChatAgent
+    from src.agents.evidence_assistant_agent import EvidenceAssistantAgent
 ```
 
 ---
@@ -472,9 +472,9 @@ if user is not None:
 
 ---
 
-## 💡 Real DevChat Example
+## 💡 Real 3ie Evidence Assistant Example
 
-Let's trace through `src/agents/devchat_agent.py`:
+Let's trace through `src/agents/evidence_assistant_agent.py`:
 
 ```python
 from typing import List, Dict, Optional
@@ -492,7 +492,7 @@ class SearchResult(BaseModel):
     score: float
     metadata: Dict[str, any]
 
-class DevChatAgent:
+class EvidenceAssistantAgent:
     """Main RAG agent orchestrator."""
     
     def __init__(
@@ -651,7 +651,7 @@ async def fetch_all_metadata(dois):
 ## ✅ Knowledge Check
 
 1. What's the difference between `str` and `Optional[str]`?
-2. Why does DevChat use Pydantic models?
+2. Why does 3ie Evidence Assistant use Pydantic models?
 3. When should you use `async/await`?
 4. How do you run multiple async functions concurrently?
 5. What's the benefit of dependency injection?
@@ -671,7 +671,7 @@ async def fetch_all_metadata(dois):
 
 **Next:** [Post 3: FastAPI Basics →](03-fastapi-basics.md)
 
-Learn how to build REST APIs with FastAPI, the framework powering DevChat's backend.
+Learn how to build REST APIs with FastAPI, the framework powering 3ie Evidence Assistant's backend.
 
 ---
 

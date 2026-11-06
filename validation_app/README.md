@@ -42,7 +42,7 @@ R2_PUBLIC_URL = "https://your-public-bucket-url.r2.dev"
 ### 3. Run the app
 
 ```bash
-cd devchat_v2_sota
+cd 3ie-evidence-assistant
 streamlit run validation_app/app.py
 ```
 

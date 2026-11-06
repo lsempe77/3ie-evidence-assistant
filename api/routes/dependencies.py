@@ -1,5 +1,5 @@
 """
-DevChat v2.0 SOTA - Shared Route Dependencies
+3ie Evidence Assistant - Shared Route Dependencies
 
 Common dependencies, singletons, and utilities used across route modules.
 """
@@ -18,7 +18,7 @@ from dotenv import load_dotenv
 from fastapi import Depends, HTTPException, Request, Security, status
 from fastapi.security import APIKeyHeader
 
-from src.agents.devchat_agent import DevChatAgent
+from src.agents.evidence_assistant_agent import EvidenceAssistantAgent
 from src.config.settings import settings
 from src.ingestion.indexer import QdrantIndexer
 from src.retrieval.hybrid_retriever import HybridRetriever
@@ -233,12 +233,12 @@ def get_indexer_for_user(user: Optional[AuthenticatedUser], rag_project_id: Opti
 # Global Singletons
 # =============================================================================
 
-_agent: Optional[DevChatAgent] = None
+_agent: Optional[EvidenceAssistantAgent] = None
 _indexer: Optional[QdrantIndexer] = None
-_collection_agents: dict[str, DevChatAgent] = {}
+_collection_agents: dict[str, EvidenceAssistantAgent] = {}
 
 
-def get_agent(collection_name: Optional[str] = None) -> DevChatAgent:
+def get_agent(collection_name: Optional[str] = None) -> EvidenceAssistantAgent:
     """Get or create the agent instance.
     
     Args:
@@ -251,14 +251,14 @@ def get_agent(collection_name: Optional[str] = None) -> DevChatAgent:
         # Multi-tenant: create/cache agent per collection
         if collection_name not in _collection_agents:
             # Create agent with custom collection retriever
-            _collection_agents[collection_name] = DevChatAgent(
+            _collection_agents[collection_name] = EvidenceAssistantAgent(
                 retriever=HybridRetriever(collection_name=collection_name),
             )
         return _collection_agents[collection_name]
     
     # Default single-tenant agent
     if _agent is None:
-        _agent = DevChatAgent()
+        _agent = EvidenceAssistantAgent()
     return _agent
 
 
@@ -380,10 +380,7 @@ async def trigger_modal_processing(force_reprocess: bool = False, max_documents:
     import httpx
     
     # Modal web endpoint URL
-    modal_trigger_url = os.environ.get(
-        "MODAL_TRIGGER_URL",
-        "https://lsempe77--devchat-mineru-trigger-processing.modal.run"
-    )
+    modal_trigger_url = settings.modal_trigger_url
     
     try:
         # Longer timeout (90s) to handle Modal cold starts

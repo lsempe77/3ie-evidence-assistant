@@ -1,5 +1,5 @@
 """
-DevChat v2.0 - Extraction Pipeline Schemas
+3ie Evidence Assistant - Extraction Pipeline Schemas
 
 Pydantic models for extracted effect sizes and treatment effects.
 Used by the API to serve quantitative evidence to the chatbot.

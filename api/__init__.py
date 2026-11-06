@@ -1,1 +1,1 @@
-# DevChat v2.0 SOTA - API Module
+# 3ie Evidence Assistant - API Module

@@ -24,7 +24,7 @@ async def main():
     print("=" * 60)
     
     # Import after dotenv
-    from src.agents.devchat_agent import DevChatAgent
+    from src.agents.evidence_assistant_agent import EvidenceAssistantAgent
     from evaluation.reliable_evaluator import run_reliable_evaluation
     
     # Load test cases
@@ -48,7 +48,7 @@ async def main():
     
     # Initialize agent
     print("Initializing agent...")
-    agent = DevChatAgent()
+    agent = EvidenceAssistantAgent()
     
     # Run evaluation
     print(f"\nRunning evaluation on {len(test_cases)} test cases...\n")

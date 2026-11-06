@@ -1,5 +1,5 @@
 """
-DevChat v2.0 SOTA - Admin Panel Schema Models
+3ie Evidence Assistant - Admin Panel Schema Models
 
 Models for admin dashboard, document management, and metadata review.
 """

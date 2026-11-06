@@ -1,6 +1,6 @@
-# DevChat Frontend
+# 3ie Evidence Assistant Frontend
 
-Next.js 15 application for the DevChat research workbench.
+Next.js 15 application for the 3ie Evidence Assistant research workbench.
 
 ## Quick Start
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-DevChat v2.0 SOTA - Document Ingestion Script
+3ie Evidence Assistant - Document Ingestion Script
 
 Ingest documents into the vector database.
 
@@ -30,7 +30,7 @@ logger = get_logger(__name__)
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Ingest documents into DevChat vector database"
+        description="Ingest documents into 3ie Evidence Assistant vector database"
     )
     
     parser.add_argument(
@@ -84,7 +84,7 @@ def main():
     args = parser.parse_args()
     
     logger.info("=" * 60)
-    logger.info("DevChat v2.0 SOTA - Document Ingestion")
+    logger.info("3ie Evidence Assistant - Document Ingestion")
     logger.info("=" * 60)
     logger.info(f"Source: {args.source}")
     logger.info(f"Metadata: {args.metadata}")

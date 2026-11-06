@@ -395,14 +395,14 @@ Add via Vercel dashboard or CLI:
 ```bash
 # Production
 vercel env add NEXT_PUBLIC_API_URL production
-# Enter: https://devchat-api.railway.app
+# Enter: https://evidence-assistant-api.railway.app
 
 vercel env add NEXT_PUBLIC_SUPABASE_URL production
 vercel env add NEXT_PUBLIC_SUPABASE_ANON_KEY production
 
 # Preview (for PR previews)
 vercel env add NEXT_PUBLIC_API_URL preview
-# Enter: https://devchat-api-staging.railway.app
+# Enter: https://evidence-assistant-api-staging.railway.app
 ```
 
 ### Deploy
@@ -428,7 +428,7 @@ vercel --prod
 import modal
 
 # Create Modal app
-app = modal.App("devchat-pdf-processing")
+app = modal.App("evidence-assistant-pdf-processing")
 
 # Define image with dependencies
 image = modal.Image.debian_slim(python_version="3.12").pip_install(
@@ -497,7 +497,7 @@ async def trigger_processing(doc_id: str):
         .execute()
     
     # Call Modal function
-    f = modal.Function.lookup("devchat-pdf-processing", "process_pdf")
+    f = modal.Function.lookup("evidence-assistant-pdf-processing", "process_pdf")
     result = f.remote(
         pdf_url=doc.data["file_path"],
         doc_id=doc_id

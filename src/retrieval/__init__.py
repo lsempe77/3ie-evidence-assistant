@@ -1,4 +1,4 @@
-# DevChat v2.0 SOTA - Retrieval Module
+# 3ie Evidence Assistant - Retrieval Module
 from src.retrieval.query_processor import QueryProcessor, QueryClassification
 from src.retrieval.hybrid_retriever import HybridRetriever
 from src.retrieval.reranker import CohereReranker, Reranker

@@ -1,5 +1,5 @@
 """
-DevChat v2.0 SOTA - Database Connection
+3ie Evidence Assistant - Database Connection
 
 Async PostgreSQL connection using SQLAlchemy 2.0.
 """

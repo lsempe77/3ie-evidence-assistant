@@ -1,5 +1,5 @@
 """
-DevChat v2.0 SOTA - Chat Routes
+3ie Evidence Assistant - Chat Routes
 
 Core chat endpoints for the RAG pipeline.
 """

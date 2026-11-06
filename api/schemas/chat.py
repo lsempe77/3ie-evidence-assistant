@@ -1,5 +1,5 @@
 """
-DevChat v2.0 SOTA - Chat & Query Schema Models
+3ie Evidence Assistant - Chat & Query Schema Models
 
 Models for chat/query endpoints - both frontend-compatible and legacy.
 """
@@ -127,7 +127,7 @@ class FiltersResponse(BaseModel):
 
 class FeatureSuggestionRequest(BaseModel):
     """Request for feature suggestions generation."""
-    project_name: str = Field(default="DevChat RAG Project", description="Name of the RAG project")
+    project_name: str = Field(default="3ie Evidence Assistant RAG Project", description="Name of the RAG project")
     document_count: int = Field(default=0, ge=0, description="Number of documents in the project")
     query_count: int = Field(default=0, ge=0, description="Total queries made")
     common_topics: Optional[List[str]] = Field(None, description="List of common topics/sectors")

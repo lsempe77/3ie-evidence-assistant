@@ -1,4 +1,4 @@
-# Copilot Instructions for DevChat
+# Copilot Instructions for 3ie Evidence Assistant
 
 ## ⚠️ IMPORTANT: Documentation Maintenance
 
@@ -26,7 +26,7 @@
 
 ## Project Overview
 
-DevChat is a RAG-powered research workbench for academic literature. It uses:
+3ie Evidence Assistant is a RAG-powered research workbench for academic literature. It uses:
 - **Frontend**: Next.js 15, TypeScript, Tailwind CSS, shadcn/ui
 - **Backend**: FastAPI, Python 3.12, Pydantic v2
 - **Database**: Supabase PostgreSQL with RLS
@@ -56,7 +56,7 @@ DevChat is a RAG-powered research workbench for academic literature. It uses:
 
 ```
 src/                  # Python libraries
-├── agents/           # LLM agents (DevChatAgent)
+├── agents/           # LLM agents (EvidenceAssistantAgent)
 ├── generation/       # Synthesis (ClaimLedgerSynthesizer)
 ├── ingestion/        # Chunking, classification
 ├── retrieval/        # Hybrid search, reranking

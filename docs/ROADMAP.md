@@ -1,6 +1,6 @@
-# DevChat v2 - Roadmap
+# 3ie Evidence Assistant roadmap (formerly DevChat)
 
-**Last Updated:** February 9, 2026
+**Last Updated:** November 6, 2026
 
 > This document tracks **future features** and priorities.  
 > For current implementation status, see [SETUP_TRACKER.md](../SETUP_TRACKER.md).  
@@ -23,6 +23,7 @@ These are foundational problems. Without solving them, every other "improvement"
    - `data/master_UPG.csv` exists but is NOT a complete ground truth — it's a partial reference
    - **Output:** `data/ground_truth/` with verified CSVs per study + evaluation script
    - Files: New `evaluation/ground_truth_eval.py`
+   - ➡️ **See TVET Transfer T1 and T2:** the scorer already exists, and the 8w-sr human extraction may already be the data
 
 2. **Prompt Engineering Methodology** - 12h ⬅️ **#2 BLOCKER**
    - ❌ **All 9 prompts were written once and iterated by feel.** No systematic testing.
@@ -33,6 +34,7 @@ These are foundational problems. Without solving them, every other "improvement"
    - Structured JSON mode vs free-text parsing comparison
    - **Output:** `evaluation/prompt_experiments/` with results per variant
    - Files: New `evaluation/prompt_ablation.py`
+   - ➡️ **Do after TVET Transfer T3**, so prompts are tuned on the extraction design we keep
 
 3. **Regression Testing Suite** - 8h
    - ❌ **No regression tests.** A prompt change can silently break 10 previously-working tables.
@@ -41,6 +43,7 @@ These are foundational problems. Without solving them, every other "improvement"
    - Track: classification accuracy, coefficient match rate, SE match rate
    - **Output:** `tests/extraction/` with pytest fixtures from ground truth
    - Files: New `tests/extraction/test_regression.py`
+   - ➡️ **See TVET Transfer T1:** wrap `match_outcomes.py` and `score_table_key.py` as the pytest assertions
 
 4. **Coverage Measurement (Precision & Recall)** - 6h
    - ❌ **No idea what % of effect sizes the pipeline finds vs misses.**
@@ -49,6 +52,7 @@ These are foundational problems. Without solving them, every other "improvement"
    - Break down by: table format, language, extraction method (table vs prose vs figure)
    - **Output:** Coverage report per study + aggregate metrics
    - Files: New `evaluation/coverage_analysis.py`
+   - ➡️ **See TVET Transfer T1:** `match_outcomes.py` already reports per-study recall, precision and F1 with samples of unmatched rows
 
 5. **Confidence Scores on Extractions** - 6h
    - ❌ **All outputs are point values with zero uncertainty.** Clean table extraction and blurry OCR guesses look identical.
@@ -81,6 +85,180 @@ These are foundational problems. Without solving them, every other "improvement"
 
 ---
 
+### 🔁 TVET Transfer (November 2026) ⬅️ **Start here**
+
+> **Source:** `Desktop/TVET/`, outside this repo: a parser bake-off and outcome inventory on 78 TVET
+> apprenticeship studies, October–November 2026. The document of record is
+> `TVET/pipeline/BAKEOFF_AND_INVENTORY_REPORT.md`. Read `TVET/PROCESS_REPORT.md` before quoting any
+> number, because several were corrected during that work.
+> **Rule:** copy code in with a provenance note (source path plus SHA-256), as TVET did when it vendored
+> OM_QEX. Never import across folders.
+
+**Findings that change this roadmap:**
+
+- On a 200-table human answer key (6 papers, three checkers, zero disagreements), Docling, bibr and
+  MinerU each recall 0.94 of tables. MonkeyOCR recalls 0.075, keeps only 0.543 of decimals intact, and
+  times out on papers over 24 pages. The Docling ∪ MinerU union recalls 0.955.
+- Table counts are not a quality signal: the engines disagree by a factor of 3.6. The February 2026
+  comparison in `evaluation/parser_comparison_results.json` relies on proxies of this kind.
+- Restricting the extraction prompt to treatment-effect columns raised outcome F1 from 0.33 to 0.49,
+  with recall holding at 0.82. Most of the remaining precision loss comes from the table filter keeping
+  descriptive and balance tables.
+
+1. **T1. Port the evaluation harness** - 6h ⬅️ unblocks Critical Gaps #1, #3 and #4
+   - `TVET/pipeline/score_table_key.py`: precision and recall for table detection against a human key
+   - `TVET/pipeline/match_outcomes.py`: matches rows on study, table and row label, then checks that the
+     human point estimate appears among the machine row's numbers
+   - `TVET/pipeline/bakeoff_metrics.py`: decimal recall against the PDF's own text layer, a fidelity
+     measure that needs no human labels
+   - `TVET/pipeline/make_ground_truth_sheet.py` + `pipeline/groundtruth/CHECKER_INSTRUCTIONS.md`: the
+     process for building new keys
+   - Adapt to the assistant's output schema (`extracted_estimates`, 28 columns, and
+     `extraction_pipeline/outputs/full_corpus_for_validation.csv`)
+   - **Output:** `evaluation/tvet/` with a `PROVENANCE.md`
+
+2. **T2. Ground truth for the graduation corpus** - 4h to assess, more if hand-coding is needed
+   - Check whether the 8w-sr human extraction in `data/8 week SR OM Combined.xlsx` and
+     `data/8WR QEX Combined.xlsx` carries row-level locations (page, table, row label, point
+     estimate). If it does, it is the ground truth for Critical Gap #1 at no new coding cost.
+   - If it does not, apply T1's sheet generator and checker instructions to 10–15 studies
+   - Also score the assistant's extractor on the 6 TVET pilot papers, which already have a key
+     (`TVET/ground_truth_datasets/`), as a cross-domain check
+
+3. **T3. Score both extraction designs against the same key** - 6h
+   - Our `extraction_pipeline/` (rules + LLM over MinerU JSON) vs OM_QEX phases 1–3 (table
+     discovery → filtering → extraction, as vendored in `TVET/pipeline/vendor/`)
+   - Decide which design to keep **before** further prompt work (Critical Gap #2)
+
+4. **T4. Add Docling to PDF processing and union it with MinerU** - 10h
+   - Run Docling as a CPU function in `infrastructure/modal_lib/`
+   - Port the deduplication from `TVET/pipeline/build_union_inventory.py` (study + normalised row
+     label + set of numbers, with a `_sources` column)
+   - Docling inflates text by about 1.5×, so chunking and deduplication must tolerate repeated
+     content before indexing in Qdrant
+   - Run experiments in a separate Modal app (TVET used `tvet-bakeoff`) so production
+     `devchat-mineru`, Qdrant and R2 prefixes are never touched
+   - Cost: about 8 s/page on CPU, so roughly 7 hours per 3,000 pages on one worker
+
+5. **T5. Small fixes carried over from TVET** - 3h
+   - Treatment-effect column filter in the extraction prompt (F1 0.33 → 0.49 in TVET)
+   - Tighten table classification to exclude balance and cost-decomposition tables (TVET's open item,
+     and its main source of lost precision)
+   - Quote bibliography lines beginning `system:` before sending them to OpenRouter, which refuses them
+     with HTTP 403 `system_prefix_spoofing` (check whether the assistant routes through OpenRouter)
+   - Store the PDF page index alongside the printed folio. In one TVET study they differed by 2,384
+   - Sanitise lone surrogates in parser Markdown:
+     `md.encode("utf-8", "surrogatepass").decode("utf-8", "replace")`
+
+6. **T6. Forward citations → Smart Citations** - later
+   - TVET `fwdcite` pipeline (GROBID references → Crossref / OpenAlex / OpenCitations → citing works)
+     on the TVET branch `forward-citation-refs`, not yet merged there
+   - Feeds the Short-Term "Smart Citations" item
+   - OpenAlex has been metered since 3 November 2026. Set `OPENALEX_API_KEY` before relying on it
+
+**Operational notes from TVET:** the Modal profile `lsempe77` owns `devchat-mineru`. `3ieimpact` is
+paused but is still the CLI default in `~/.modal.toml`. Use `python -m modal`, not `modal.exe`, which
+exits silently on this machine.
+
+---
+
+### 🆕 SOTA Upgrade (November 2026)
+
+> A scan of what changed between February and November 2026, run on 6 November 2026. Most sources are vendor
+> pages and third-party blogs, so every swap below goes through the TVET Transfer harness (T1) on our own
+> papers before it reaches production. Leaderboard ranks alone are not enough: TVET showed that general
+> benchmarks miss the borderless tables in economics papers.
+
+**Where the stack stands:**
+
+| Component | In use | Current options (Nov 2026) | Gap |
+| --------- | ------ | -------------------------- | --- |
+| LLMs | `gpt-4o-mini`, `gpt-4o`, Claude 3.5 Haiku, `gemini-2.0-flash-exp`, `gemini-exp-1206` | GPT-5.x line, Claude 5 family (Haiku / Sonnet / Opus 5.5), Gemini 3.x (TVET ran Gemini 4 Argon through OpenRouter) | Large: every default is a 2024 model, and the experimental Gemini ids are likely retired |
+| Reranker | Cohere `rerank-v3.5` | Cohere Rerank 4 Pro / Fast (Dec 2025, 32K context, multilingual), Voyage rerank-2.5, zerank-2 | Medium: Rerank 4 is a drop-in swap |
+| Embeddings | Cohere `embed-v4.0` | Still Cohere's latest. Voyage-4-large, Gemini Embedding, Qwen3-Embedding-8B (open) | Small: benchmark before paying for a re-index |
+| PDF parsing | MinerU ≥ 2.6 (pipeline backend) | MinerU 3.x with the MinerU2.5-Pro VLM (cross-page table merging), PaddleOCR-VL-1.6, Docling | Medium: see also TVET T4 |
+| Vector DB | Qdrant, client-side BM25 sparse vectors | Qdrant 1.20 (Oct 2026): native BM25 on full-text indexes. 1.19: unified memory setting | Small: simplification, not quality |
+| Faithfulness check | MiniCheck | RAGAS 0.4, Vectara HHEM / FaithJudge, LettuceDetect, FRANQ (ACL 2026 Findings) | Medium: the 5-query baseline is too small to steer by |
+| Answer mode | Single-pass retrieve → Claim Ledger | Routed agentic "deep research" with a claim-evidence graph for complex questions | Medium: Claim Ledger is a good base |
+
+1. **S1. Upgrade the LLM defaults** - 6h ⬅️ biggest gap
+   - Replace the defaults in `src/config/settings.py` and `api/routes/rags.py` (`DEFAULT_MODEL_CONFIG` and the
+     model picker list), and remove retired experimental ids
+   - Run each candidate on the T1/T2 ground truth for extraction and on an enlarged faithfulness set (S5)
+     before switching. A January 2026 dentistry study found model choice changed extraction accuracy
+     markedly and that cost did not track accuracy
+   - Keep a fast/strong pair per provider. Record per-call cost in Langfuse to compare
+
+2. **S2. Move to Cohere Rerank 4** - 2h
+   - `rerank_model` in `src/config/settings.py`. Test Pro against Fast for the latency budget
+   - Check Cohere's deprecation page for `rerank-v3.5`. Pinecone has served 3.5 requests with
+     Rerank 4 Fast since 1 August 2026, a sign the old model is being retired
+   - Optional: compare with Voyage rerank-2.5 on the same queries
+
+3. **S3. Embedding benchmark** - 6h (replaces the Short-Term "Cohere vs Voyage 4" item)
+   - Compare Cohere `embed-v4.0`, Voyage-4-large and Gemini Embedding on recall@k and NDCG for 50+ real queries
+   - Re-index only if the gain is clear. A re-index rebuilds every vector and contextual prefix
+
+4. **S4. Parser upgrade** - 8h, together with TVET T4
+   - Upgrade to MinerU 3.x and test the VLM / hybrid backend. Check the custom Apache-2.0-based licence
+     introduced in 3.1 before deploying
+   - Score MinerU 3, Docling and PaddleOCR-VL with `score_table_key.py` and decimal recall, not table counts
+   - Decide the union (TVET found Docling ∪ MinerU recalled 0.955 of tables)
+
+5. **S5. Stronger faithfulness evaluation** - 8h
+   - Grow the evaluation set from 5 queries to 50–100, covering comparisons, null results and out-of-corpus questions
+   - Add a second judge next to MiniCheck (HHEM or RAGAS 0.4 faithfulness) and report agreement between them
+   - Feeds the "Improve Faithfulness" item: tune against this set, not the 5-query baseline
+
+6. **S6. Deep-research mode** - 20h (absorbs the Medium-Term "Agentic RAG" item)
+   - Route simple questions to the current pipeline and complex ones to an iterative plan → search → read →
+     refine loop, writing into the Claim Ledger as a claim-evidence graph
+   - Hard caps on iterations and LLM calls. Agentic queries cost several times more than single-pass RAG
+   - Reference designs: ADORE (arXiv 2601.18267), the "RAG → Deep Research" KDD 2026 tutorial
+
+7. **S7. Dual-model extraction with disagreement flags** - 8h (addresses Critical Gaps #5 and #6)
+   - Extract each table with two different models and flag rows where they disagree for human review
+   - A living-review study found that 342 two-model answers in its test set, 87% of the total, were concordant, with 0.94 accuracy among them.
+     Disagreement is a cheap confidence signal
+
+8. **S8. Qdrant native BM25** - 4h, low priority
+   - Qdrant 1.20 ranks BM25 directly on a full-text index. That could replace the client-side sparse
+     vectors. Check the Qdrant Cloud cluster version first
+
+9. **S9. Visual page retrieval (ColQwen-style)** - later, part of the Medium-Term "Multimodal Support" item
+   - Embeds page images, so tables and figures are searchable without parsing. Storage is about 150–500 KB per
+     page against 5–20 KB for text. Test on a figure-heavy subset only
+
+**Sources consulted (6 Nov 2026):**
+[OmniDocBench](https://github.com/OpenDataLab/OmniDocBench) ·
+[MinerU releases](https://github.com/opendatalab/MinerU/releases/tag/mineru-3.3.1-released) ·
+[MinerU on PyPI](https://pypi.org/project/mineru/) ·
+[Embedding models for RAG 2026](https://blog.premai.io/best-embedding-models-for-rag-2026-ranked-by-mteb-score-cost-and-self-hosting) ·
+[Cohere Rerank 4 Fast (Pinecone)](https://docs.pinecone.io/models/cohere-rerank-4-fast) ·
+[Cohere deprecations](https://docs.cohere.com/v2/docs/deprecations) ·
+[Reranker comparison (Agentset)](https://hn.jakechampion.name/reader/https://agentset.ai/blog/best-reranker) ·
+[Qdrant 1.20](https://qdrant.tech/blog/qdrant-1.20.x/) ·
+[Qdrant 1.19](https://qdrant.tech/blog/qdrant-1.19.x/) ·
+[RAG evaluation 2026](https://blog.premai.io/rag-evaluation-metrics-frameworks-testing-2026) ·
+[FRANQ, ACL 2026 Findings](https://preview.aclanthology.org/ingest-acl/2026.findings-acl.338/) ·
+[ADORE](https://arxiv.org/html/2601.18267v1) ·
+[RAG → Deep Research tutorial](https://tutorial.lunadong.com/) ·
+[LLM numeric extraction in dentistry](https://docta.ucm.es/entities/publication/aab87bf3-d044-4322-90e6-ac074d470128/full) ·
+[OpenExtract](https://arxiv.org/abs/2603.13338) ·
+[otto-SR, ISPOR 2026](https://www.ispor.org/heor-resources/presentations-database/presentation-cti/ispor-2026/poster-session-2-4/automation-of-systematic-reviews-with-large-language-models) ·
+[Visual document retrieval](https://mixpeek.com/guides/visual-document-retrieval) ·
+[Gemini 4 status, Aug 2026](https://andrew.ooo/answers/is-gemini-4-out-yet-august-2026-status/)
+
+---
+
+### 🏷️ Rename to 3ie Evidence Assistant
+
+1. **R0. Rename product, repo, code and infrastructure** - 12h
+   - Step-by-step plan with checks and undo for each step: [docs/RENAME_PLAN.md](RENAME_PLAN.md)
+   - Do step 1 (code on a branch) together with S1, since both touch `settings.py` and `rags.py`
+
+---
+
 ### Immediate (Next Sprint)
 
 1. **Full Extraction Dataset + Human Validation** - 6h (reduced from 8h)
@@ -104,7 +282,7 @@ These are foundational problems. Without solving them, every other "improvement"
 4. **"I Don't Know" Explicit Refusal** - 2h
    - When retrieval confidence is below threshold, explicitly refuse to answer
    - Prevents hallucination when no good sources found
-   - Files: `src/agents/devchat_agent.py`, `src/generation/claim_ledger.py`
+   - Files: `src/agents/evidence_assistant_agent.py`, `src/generation/claim_ledger.py`
 
 ### Short-Term
 
@@ -116,10 +294,16 @@ These are foundational problems. Without solving them, every other "improvement"
    - Files: `api/routes/extraction.py`, `extraction_pipeline/adapters/supabase_loader.py`
    - **Next:** Run migration, upload data, build Evidence Panel component
 
-2. **Embedding Model Comparison: Cohere vs Voyage 4** - 6h
+2. **Embedding Model Comparison: Cohere vs Voyage 4** - 6h ➡️ **Superseded by SOTA Upgrade S3**
    - Benchmark Voyage AI 4 (launched Jan 15, 2026) against current Cohere embed-v4
    - Metrics: retrieval accuracy, speed, cost per 1M tokens
    - Files: `evaluation/benchmark_embeddings.py`
+
+3. **~~PDF Parser Comparison: MinerU vs MonkeyOCR~~** - ⚠️ **Superseded by TVET Transfer T4**
+   - ✅ Both parsers integrated (MinerU on a T4 GPU, MonkeyOCR as a VLM on an A10G). The integration has been uncommitted since 23 Feb 2026
+   - ✅ Proxy comparison run on 5 papers: `evaluation/compare_parsers.py` → `evaluation/parser_comparison_results.json` (table counts and numeric density, with no human key)
+   - ⚠️ The TVET bake-off scored MonkeyOCR lowest against a human key (table recall 0.075, decimal recall 0.543, timeouts above 24 pages). Do not make it the default
+   - **Decision needed:** commit the MonkeyOCR integration as an experimental path, or drop it
 
 2. **Improve Faithfulness** - 8h
    - Current: 66.47%, Target: 70%+
@@ -148,7 +332,7 @@ These are foundational problems. Without solving them, every other "improvement"
 
 ### Medium-Term
 
-1. **Agentic RAG** - 20h
+1. **Agentic RAG** - 20h ➡️ **Now SOTA Upgrade S6 (deep-research mode)**
    - Multi-step: Search → Review → Refine → Gather → Answer
    - Agent decides when to iterate on search
 
@@ -169,7 +353,7 @@ These are foundational problems. Without solving them, every other "improvement"
    - Auto-generate structured reports from evidence
 
 3. **Embeddable Widget** - 16h
-   - Embed DevChat on external sites (e.g., 3ie portal)
+   - Embed 3ie Evidence Assistant on external sites (e.g., 3ie portal)
 
 4. **Security Hardening** - 8h
    - Rate limiting, input validation, audit logs
@@ -179,8 +363,8 @@ These are foundational problems. Without solving them, every other "improvement"
    - Reference: https://www.trulens.org/
 
 6. **Slack/Teams MCP Integration** - 20h
-   - Let researchers query DevChat from Slack without switching apps
-   - Example: `@devchat What effect sizes for cash transfers?`
+   - Let researchers query 3ie Evidence Assistant from Slack without switching apps
+   - Example: `@evidence-assistant What effect sizes for cash transfers?`
    - Reference: [MCPs for Developers](https://www.oreilly.com/radar/mcps-for-developers-who-think-they-dont-need-mcps/)
 
 7. **Context7-style Live Docs MCP** - 12h
@@ -212,6 +396,12 @@ These are foundational problems. Without solving them, every other "improvement"
 | **RAG: Citation Recall** | 98.86% | 70%+ | ✅ |
 
 ---
+
+## Completed This Session (Feb 23, 2026)
+
+| Feature | Description |
+|---------|-------------|
+| **MonkeyOCR Integration** | Added `run_monkeyocr()`, `process_pdf_monkeyocr()`, `monkeyocr_image` to Modal pipeline. Outputs to `outputs/monkeyocr/` in R2. CLI: `--action monkeyocr`. |
 
 ## Completed This Session (Jan 31, 2026)
 

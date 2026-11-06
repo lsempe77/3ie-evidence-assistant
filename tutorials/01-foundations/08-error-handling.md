@@ -18,7 +18,7 @@
 
 ### The Silent Failure Scenario
 
-Imagine a user uploads a PDF to DevChat:
+Imagine a user uploads a PDF to 3ie Evidence Assistant:
 
 ```python
 # ❌ NO ERROR HANDLING
@@ -139,11 +139,11 @@ sentry.capture_exception(e)  # Sent to error tracking
 ```python
 # src/exceptions.py
 
-class DevChatError(Exception):
-    """Base exception for all DevChat errors."""
+class EvidenceAssistantError(Exception):
+    """Base exception for all 3ie Evidence Assistant errors."""
     pass
 
-class DocumentError(DevChatError):
+class DocumentError(EvidenceAssistantError):
     """Document-related errors."""
     pass
 
@@ -158,11 +158,11 @@ class DocumentProcessingError(DocumentError):
         self.reason = reason
         super().__init__(f"Failed to process {doc_id}: {reason}")
 
-class RetrievalError(DevChatError):
+class RetrievalError(EvidenceAssistantError):
     """Search/retrieval errors."""
     pass
 
-class LLMError(DevChatError):
+class LLMError(EvidenceAssistantError):
     """LLM API errors."""
     def __init__(self, provider: str, message: str):
         self.provider = provider
@@ -238,7 +238,7 @@ def setup_logging(level: str = "INFO"):
     
     # File output (production)
     logger.add(
-        "logs/devchat_{time:YYYY-MM-DD}.log",
+        "logs/evidence_assistant_{time:YYYY-MM-DD}.log",
         rotation="1 day",
         retention="30 days",
         level="INFO",
@@ -279,7 +279,7 @@ except Exception as e:
     logger.error(f"Operation failed: {e}")  # Just error message
 ```
 
-### DevChat Logging Example
+### 3ie Evidence Assistant Logging Example
 
 ```python
 from loguru import logger

@@ -1,5 +1,5 @@
 """
-DevChat v2.0 - Source-to-Claim Ledger
+3ie Evidence Assistant - Source-to-Claim Ledger
 
 ALCE-inspired two-pass synthesis for verified citations:
 
@@ -173,7 +173,7 @@ class ClaimLedgerSynthesizer:
                     additional_kwargs={
                         "extra_headers": {
                             "HTTP-Referer": "https://3ieimpact.org",
-                            "X-Title": "DevChat 3ie",
+                            "X-Title": "3ie Evidence Assistant",
                         }
                     }
                 )
@@ -190,7 +190,7 @@ class ClaimLedgerSynthesizer:
                     additional_kwargs={
                         "extra_headers": {
                             "HTTP-Referer": "https://3ieimpact.org",
-                            "X-Title": "DevChat 3ie",
+                            "X-Title": "3ie Evidence Assistant",
                         }
                     }
                 )

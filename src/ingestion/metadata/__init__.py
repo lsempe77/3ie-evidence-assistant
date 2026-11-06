@@ -1,5 +1,5 @@
 """
-DevChat v2.0 SOTA - Metadata Resolution Pipeline
+3ie Evidence Assistant - Metadata Resolution Pipeline
 
 Smart metadata extraction from multiple sources:
 1. DOI extraction from PDF

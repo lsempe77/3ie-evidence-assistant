@@ -1,5 +1,5 @@
 """
-DevChat v2.0 SOTA - Document Loader
+3ie Evidence Assistant - Document Loader
 
 Handles loading and parsing of various document formats:
 - Markdown files (primary format)

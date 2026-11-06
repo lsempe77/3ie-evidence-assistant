@@ -1,5 +1,5 @@
 """
-DevChat v2.0 SOTA - Generation Tests
+3ie Evidence Assistant - Generation Tests
 
 Tests for model routing, synthesis, and citations.
 """

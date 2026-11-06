@@ -11,7 +11,7 @@
 - Request/response validation with Pydantic
 - Dependency injection in FastAPI
 - Error handling and status codes
-- Real examples from DevChat
+- Real examples from 3ie Evidence Assistant
 
 ---
 
@@ -82,9 +82,9 @@ FastAPI automatically generates interactive API docs. Visit `http://localhost:80
 - See request/response schemas
 - No extra work needed!
 
-**Why FastAPI for DevChat?**
+**Why FastAPI for 3ie Evidence Assistant?**
 
-DevChat makes many I/O calls:
+3ie Evidence Assistant makes many I/O calls:
 - Search Qdrant (vector database)
 - Call OpenAI/Anthropic (LLMs)
 - Query Supabase (PostgreSQL)
@@ -210,7 +210,7 @@ async def chat(request: ChatRequest):
 
 ---
 
-## 🎯 DevChat API Structure
+## 🎯 3ie Evidence Assistant API Structure
 
 From `api/server.py`:
 
@@ -220,7 +220,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from api.routes import chat, api, admin
 
 app = FastAPI(
-    title="DevChat API",
+    title="3ie Evidence Assistant API",
     description="RAG-powered research assistant",
     version="2.0.0"
 )
@@ -250,14 +250,14 @@ From `api/routes/chat.py`:
 ```python
 from fastapi import APIRouter, HTTPException, Depends
 from api.schemas.chat import ChatRequest, ChatResponse
-from src.agents.devchat_agent import DevChatAgent
+from src.agents.evidence_assistant_agent import EvidenceAssistantAgent
 
 router = APIRouter()
 
 @router.post("/chat", response_model=ChatResponse)
 async def chat_endpoint(
     request: ChatRequest,
-    agent: DevChatAgent = Depends(get_agent)
+    agent: EvidenceAssistantAgent = Depends(get_agent)
 ):
     """
     Process a chat query with RAG.
@@ -316,7 +316,7 @@ async def read_users_me(user: User = Depends(get_current_user)):
     return user
 ```
 
-### DevChat Example: Database Connection
+### 3ie Evidence Assistant Example: Database Connection
 
 From `api/dependencies.py`:
 
@@ -497,7 +497,7 @@ def test_chat_endpoint():
 
 ---
 
-## 💡 Real DevChat Example: RAG Project Creation
+## 💡 Real 3ie Evidence Assistant Example: RAG Project Creation
 
 From `api/routes/api.py`:
 
@@ -609,7 +609,7 @@ async def create_project(
 
 **Next:** [Post 4: Next.js Basics →](04-nextjs-basics.md)
 
-Learn the frontend framework that powers DevChat's user interface.
+Learn the frontend framework that powers 3ie Evidence Assistant's user interface.
 
 ---
 

@@ -1,5 +1,5 @@
 """
-DevChat v2.0 SOTA - Chunking Strategies
+3ie Evidence Assistant - Chunking Strategies
 
 Implements structure-aware chunking:
 - Semantic chunking (split by meaning)

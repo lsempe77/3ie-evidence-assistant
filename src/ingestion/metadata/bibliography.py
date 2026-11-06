@@ -1,5 +1,5 @@
 """
-DevChat v2.0 SOTA - Bibliography Parser
+3ie Evidence Assistant - Bibliography Parser
 
 Parse bibliography files for metadata:
 - RIS format (.ris) - EndNote, Zotero, Mendeley

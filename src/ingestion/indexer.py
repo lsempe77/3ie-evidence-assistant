@@ -1,5 +1,5 @@
 """
-DevChat v2.0 SOTA - Qdrant Indexer
+3ie Evidence Assistant - Qdrant Indexer
 
 Manages the Qdrant vector database:
 - Collection creation with hybrid search support

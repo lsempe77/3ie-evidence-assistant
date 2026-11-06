@@ -11,8 +11,8 @@
 ### 1. Clone Repository
 
 ```bash
-git clone https://github.com/lsempe77/dev_chat.git
-cd dev_chat
+git clone https://github.com/lsempe77/3ie-evidence-assistant.git
+cd 3ie-evidence-assistant
 ```
 
 ### 2. Backend Setup

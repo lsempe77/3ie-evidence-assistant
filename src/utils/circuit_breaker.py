@@ -1,5 +1,5 @@
 """
-DevChat v2.0 - Circuit Breaker Pattern for Production Resilience
+3ie Evidence Assistant - Circuit Breaker Pattern for Production Resilience
 
 Prevents cascade failures when external services (LLM APIs, Qdrant, etc.) fail.
 Provides graceful degradation instead of hanging requests.

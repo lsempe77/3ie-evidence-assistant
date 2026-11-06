@@ -1,5 +1,5 @@
 {
-  "name": "dev-chat-root",
+  "name": "evidence-assistant-root",
   "private": true,
   "description": "Root package - actual app is in frontend/"
 }

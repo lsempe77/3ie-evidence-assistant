@@ -1,5 +1,5 @@
 [project]
-name = "devchat-v2-sota"
+name = "evidence-assistant"
 version = "2.0.0"
 description = "SOTA RAG-powered assistant for 3ie Development Evidence Portal"
 authors = [
@@ -20,10 +20,10 @@ classifiers = [
 
 [project.urls]
 Homepage = "https://www.3ieimpact.org"
-Repository = "https://github.com/3ie/devchat"
+Repository = "https://github.com/lsempe77/3ie-evidence-assistant"
 
 [project.scripts]
-devchat = "cli:main"
+evidence-assistant = "cli:main"
 
 [project.optional-dependencies]
 cli = [

@@ -1,5 +1,5 @@
 """
-DevChat v2.0 SOTA - Model Router
+3ie Evidence Assistant - Model Router
 
 Adaptive routing to select the appropriate LLM based on query complexity.
 Uses OpenRouter for unified access to multiple LLM providers.
@@ -190,7 +190,7 @@ class ModelRouter:
                 additional_kwargs={
                     "extra_headers": {
                         "HTTP-Referer": "https://3ieimpact.org",
-                        "X-Title": "DevChat 3ie",
+                        "X-Title": "3ie Evidence Assistant",
                     }
                 }
             )

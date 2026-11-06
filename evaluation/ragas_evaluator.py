@@ -1,5 +1,5 @@
 """
-DevChat v2.0 - RAGAS Evaluation Framework
+3ie Evidence Assistant - RAGAS Evaluation Framework
 
 Implements evaluation metrics for RAG quality:
 - Faithfulness: Answer uses only retrieved context
@@ -378,7 +378,7 @@ async def run_evaluation_batch(
     
     Args:
         test_cases: List of {query, ...} dicts
-        agent: DevChatAgent instance
+        agent: EvidenceAssistantAgent instance
         
     Returns:
         List of EvaluationResult objects

@@ -1,5 +1,5 @@
 """
-DevChat v2.0 SOTA - Conversation Memory
+3ie Evidence Assistant - Conversation Memory
 
 Manages conversation history for multi-turn interactions.
 Stores chat sessions and messages in PostgreSQL for persistence.

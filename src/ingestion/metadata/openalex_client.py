@@ -1,5 +1,5 @@
 """
-DevChat v2.0 SOTA - OpenAlex API Client
+3ie Evidence Assistant - OpenAlex API Client
 
 Query OpenAlex for bibliographic metadata.
 OpenAlex is free, open, and has 250M+ works indexed.

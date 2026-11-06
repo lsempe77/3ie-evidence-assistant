@@ -16,7 +16,7 @@ import asyncio
 import json
 import re
 from datetime import datetime
-from src.agents.devchat_agent import DevChatAgent, DevChatAgentFactory, SearchSettings
+from src.agents.evidence_assistant_agent import EvidenceAssistantAgent, EvidenceAssistantAgentFactory, SearchSettings
 from src.retrieval.context_builder import ContextBuilder
 from evaluation.minicheck_evaluator import MiniCheckEvaluator
 
@@ -29,9 +29,9 @@ async def full_comparison(collection_name: str = None, num_queries: int = 5):
     # Use custom collection if specified
     if collection_name:
         print(f'Using collection: {collection_name}')
-        agent = DevChatAgentFactory.create_with_custom_collection(collection_name)
+        agent = EvidenceAssistantAgentFactory.create_with_custom_collection(collection_name)
     else:
-        agent = DevChatAgent()
+        agent = EvidenceAssistantAgent()
     # Use MiniCheck dual-lane evaluator (SOTA, EMNLP 2024)
     # backend='api' uses LLM API (no model download, production-ready)
     # backend='local' downloads flan-t5-large (~3GB, development)

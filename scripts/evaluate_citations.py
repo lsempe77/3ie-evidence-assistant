@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-DevChat v2.0 - Citation Quality Evaluation
+3ie Evidence Assistant - Citation Quality Evaluation
 
 Run the custom RAGAS evaluation with citation accuracy metrics.
 
@@ -21,7 +21,7 @@ from datetime import datetime
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from src.agents.devchat_agent import DevChatAgent, SearchSettings
+from src.agents.evidence_assistant_agent import EvidenceAssistantAgent, SearchSettings
 from src.utils.logging import setup_logging, get_logger
 from evaluation.ragas_evaluator import RAGASEvaluator, EvaluationResult, generate_report
 
@@ -42,7 +42,7 @@ async def evaluate_single_query(
         print('='*60)
     
     # Initialize agent
-    agent = DevChatAgent()
+    agent = EvidenceAssistantAgent()
     settings = SearchSettings(use_structured_citations=use_structured)
     
     # Get response
@@ -160,7 +160,7 @@ async def run_batch_evaluation():
     print(f"Running evaluation on {len(test_cases)} test cases")
     print(f"{'='*60}")
     
-    agent = DevChatAgent()
+    agent = EvidenceAssistantAgent()
     evaluator = RAGASEvaluator()
     
     results_standard = []
@@ -236,7 +236,7 @@ async def run_batch_evaluation():
 
 
 async def main():
-    parser = argparse.ArgumentParser(description="Evaluate DevChat citation quality")
+    parser = argparse.ArgumentParser(description="Evaluate 3ie Evidence Assistant citation quality")
     parser.add_argument("--query", "-q", type=str, help="Single query to evaluate")
     parser.add_argument("--compare", "-c", action="store_true", help="Compare standard vs structured")
     parser.add_argument("--batch", "-b", action="store_true", help="Run batch evaluation")
@@ -253,7 +253,7 @@ async def main():
         await evaluate_single_query(args.query, use_structured=args.structured)
     else:
         # Default: show help
-        print("DevChat Citation Quality Evaluation")
+        print("3ie Evidence Assistant Citation Quality Evaluation")
         print("="*40)
         print("\nUsage examples:")
         print("  python scripts/evaluate_citations.py --query 'poverty reduction'")

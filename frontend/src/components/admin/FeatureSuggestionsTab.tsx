@@ -48,7 +48,7 @@ interface FeatureSuggestionsTabProps {
 }
 
 export function FeatureSuggestionsTab({
-  projectName = "DevChat RAG Project",
+  projectName = "3ie Evidence Assistant RAG Project",
   documentCount = 0,
   queryCount = 0,
   commonTopics = [],

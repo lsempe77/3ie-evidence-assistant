@@ -1,5 +1,5 @@
 """
-DevChat v2.0 SOTA - Query Processor
+3ie Evidence Assistant - Query Processor
 
 Handles query understanding before retrieval:
 - Query classification (simple, synthesis, comparison)

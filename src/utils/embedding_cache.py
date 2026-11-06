@@ -1,5 +1,5 @@
 """
-DevChat v2.0 SOTA - Embedding Cache
+3ie Evidence Assistant - Embedding Cache
 
 Hash-based caching for embeddings to reduce API costs.
 Caches embeddings by content hash, enabling 50-80% cost reduction

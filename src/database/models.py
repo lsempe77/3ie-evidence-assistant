@@ -1,5 +1,5 @@
 """
-DevChat v2.0 SOTA - Database Models
+3ie Evidence Assistant - Database Models
 
 SQLAlchemy models for document metadata storage.
 Zotero-compatible field structure for bibliographic metadata.

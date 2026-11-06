@@ -6,16 +6,16 @@
 
 ## 🎯 What You'll Learn
 
-- What DevChat is and what problem it solves
+- What 3ie Evidence Assistant is and what problem it solves
 - The high-level architecture of a RAG application
 - How the different components fit together
 - The tech stack and why each piece was chosen
 
 ---
 
-## 📖 What is DevChat?
+## 📖 What is 3ie Evidence Assistant?
 
-DevChat is a **production-grade RAG (Retrieval-Augmented Generation) application** for academic research. It helps researchers:
+3ie Evidence Assistant is a **production-grade RAG (Retrieval-Augmented Generation) application** for academic research. It helps researchers:
 
 1. **Upload PDFs** from their research library
 2. **Ask questions** in natural language
@@ -30,7 +30,7 @@ Researchers often need to:
 - Ensure claims are properly cited
 - Synthesize findings from multiple sources
 
-Manually doing this takes **weeks**. DevChat does it in **seconds**.
+Manually doing this takes **weeks**. 3ie Evidence Assistant does it in **seconds**.
 
 ---
 
@@ -254,7 +254,7 @@ System:
 
 ## 🎯 System Requirements
 
-To run DevChat locally, you'll need:
+To run 3ie Evidence Assistant locally, you'll need:
 
 ### Accounts (Free Tiers Available)
 - GitHub (code hosting)
@@ -280,7 +280,7 @@ Now that you understand the **what** and **why**, let's learn **how** to build i
 
 **Next:** [Post 2: Python Fundamentals →](02-python-fundamentals.md)
 
-In the next post, we'll cover the Python concepts you need to understand the DevChat codebase:
+In the next post, we'll cover the Python concepts you need to understand the 3ie Evidence Assistant codebase:
 - Type hints and Pydantic models
 - Async/await for concurrent operations
 - Python project structure
@@ -301,7 +301,7 @@ In the next post, we'll cover the Python concepts you need to understand the Dev
 
 Before moving on, make sure you can answer:
 
-1. What problem does DevChat solve?
+1. What problem does 3ie Evidence Assistant solve?
 2. What are the main components of the architecture?
 3. What is RAG and why is it better than a plain LLM?
 4. What database stores the vectors?

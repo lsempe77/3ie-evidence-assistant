@@ -1,4 +1,4 @@
-# DevChat v2.0 SOTA - Ingestion Module
+# 3ie Evidence Assistant - Ingestion Module
 from src.ingestion.document_loader import DocumentLoader
 from src.ingestion.chunking import SemanticChunker, ParentChildChunker
 from src.ingestion.embeddings import EmbeddingGenerator

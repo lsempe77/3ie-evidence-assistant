@@ -4,7 +4,6 @@ Admin Jobs Routes
 Endpoints for processing job management.
 """
 
-import os
 
 from fastapi import APIRouter, HTTPException
 
@@ -15,6 +14,7 @@ from api.schemas import (
     TriggerProcessingResponse,
 )
 from src.utils.logging import get_logger
+from src.config.settings import settings
 
 from ..dependencies import (
     get_documents_cache,
@@ -50,7 +50,7 @@ async def get_processing_jobs():
     try:
         # Get files from R2
         r2_client = get_r2_client()
-        bucket_name = os.getenv("R2_BUCKET_NAME", "devchat-pdfs")
+        bucket_name = settings.r2_bucket_name
         
         r2_files = {}
         paginator = r2_client.get_paginator('list_objects_v2')
@@ -193,7 +193,7 @@ async def get_processing_status():
     """
     try:
         r2_client = get_r2_client()
-        bucket_name = os.getenv("R2_BUCKET_NAME", "devchat-pdfs")
+        bucket_name = settings.r2_bucket_name
         
         try:
             r2_client.head_object(Bucket=bucket_name, Key="system/processing_paused")
@@ -215,7 +215,7 @@ async def pause_processing():
     """
     try:
         r2_client = get_r2_client()
-        bucket_name = os.getenv("R2_BUCKET_NAME", "devchat-pdfs")
+        bucket_name = settings.r2_bucket_name
         
         # Create the pause flag
         r2_client.put_object(
@@ -241,7 +241,7 @@ async def resume_processing():
     """
     try:
         r2_client = get_r2_client()
-        bucket_name = os.getenv("R2_BUCKET_NAME", "devchat-pdfs")
+        bucket_name = settings.r2_bucket_name
         
         # Remove the pause flag
         try:
@@ -274,7 +274,7 @@ async def clear_processing_locks():
     """
     try:
         r2_client = get_r2_client()
-        bucket_name = os.getenv("R2_BUCKET_NAME", "devchat-pdfs")
+        bucket_name = settings.r2_bucket_name
         
         # List all locks
         locks = []

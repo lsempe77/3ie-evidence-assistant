@@ -1,5 +1,5 @@
 """
-DevChat v2.0 SOTA - Reranking
+3ie Evidence Assistant - Reranking
 
 Cross-encoder reranking for precision improvement.
 Supports:

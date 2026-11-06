@@ -5,7 +5,6 @@ Endpoints for document listing, deletion, and reprocessing.
 """
 
 import asyncio
-import os
 from datetime import datetime
 from typing import Optional
 
@@ -18,6 +17,7 @@ from api.schemas import (
     DocumentSyncResponse,
 )
 from src.utils.logging import get_logger
+from src.config.settings import settings
 
 from ..dependencies import (
     DOCUMENTS_CACHE_TTL,
@@ -314,7 +314,7 @@ async def delete_document(document_id: str):
         # 2. Delete from R2 using consistent doc_id
         try:
             r2_client = get_r2_client()
-            bucket_name = os.getenv("R2_BUCKET_NAME", "devchat-pdfs")
+            bucket_name = settings.r2_bucket_name
             
             # Use doc_id consistently for all R2 paths
             prefixes_to_check = [

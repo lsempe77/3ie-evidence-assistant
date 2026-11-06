@@ -1,5 +1,5 @@
 """
-DevChat v2.0 SOTA - Graph-Enhanced Retrieval
+3ie Evidence Assistant - Graph-Enhanced Retrieval
 
 Combines vector search with knowledge graph for richer retrieval.
 

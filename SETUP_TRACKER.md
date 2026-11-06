@@ -1,6 +1,6 @@
-# DevChat v2.0 - Setup & Status Tracker
+# 3ie Evidence Assistant - Setup & Status Tracker
 
-**Last Updated:** February 4, 2026
+**Last Updated:** February 23, 2026
 
 > This document tracks **current implementation status** and configurations.  
 > For future features, see [docs/ROADMAP.md](docs/ROADMAP.md).
@@ -15,7 +15,7 @@
 | --------- | ------ | ------- |
 | Frontend (Vercel) | ✅ Live | <https://dev-chat-frontend.vercel.app/> |
 | Backend (Railway) | ✅ Live | <https://3iechat.up.railway.app> |
-| PDF Processing (Modal) | ✅ Working | MineRU + modal_lib + Contextual Retrieval |
+| PDF Processing (Modal) | ✅ Working | MineRU + MonkeyOCR + modal_lib + Contextual Retrieval |
 | Vector DB (Qdrant) | ✅ Connected | chunks, hybrid search, binary quantization |
 | Auth (Supabase) | ✅ Working | JWT auth, RLS policies |
 | Storage (R2) | ✅ Working | Cloudflare R2 for PDFs |
@@ -37,6 +37,30 @@
 **Test Results (122182713):** 52 raw → 45 clean tables, 9 captions repaired
 
 > Full docs: [docs/MINERU_POSTPROCESSING_PLAN.md](docs/MINERU_POSTPROCESSING_PLAN.md)
+
+### MonkeyOCR PDF Parser (NEW — February 2026)
+
+Alternative GPU-based VLM parser alongside MinerU, enabling side-by-side output comparison.
+
+| Component | Status | Details |
+|-----------|--------|----------|
+| `monkeyocr_image` (Modal image) | ✅ Done | CUDA base, torch, transformers, MonkeyOCR from GitHub |
+| `run_monkeyocr()` | ✅ Done | `infrastructure/modal_lib/extraction.py` — same output shape as `run_mineru()` |
+| `process_pdf_monkeyocr()` | ✅ Done | `@app.function` on A10G GPU, outputs to `outputs/monkeyocr/` in R2 |
+| Separate R2 namespace | ✅ Done | `outputs/monkeyocr/md/` and `outputs/monkeyocr/json/` — MinerU data never overwritten |
+| Optional Qdrant indexing | ✅ Done | `--index` flag; uses dedicated `devchat_monkeyocr` collection |
+| CLI action | ✅ Done | `modal run infrastructure/modal_mineru.py --action monkeyocr --pdf-key "input-pdfs/paper.pdf"` |
+
+**Usage:**
+```bash
+# Parse a single PDF with MonkeyOCR (comparison mode — no Qdrant indexing)
+modal run infrastructure/modal_mineru.py --action monkeyocr --pdf-key "input-pdfs/paper.pdf"
+
+# Force re-run + index to Qdrant for retrieval testing
+modal run infrastructure/modal_mineru.py --action monkeyocr --pdf-key "input-pdfs/paper.pdf" --force --index
+```
+
+**GPU:** A10G (24 GB VRAM) — MonkeyOCR VLM requires more memory than MinerU's pipeline backend.
 
 ### Core Features
 
@@ -376,7 +400,7 @@ Sphinx autodoc setup is complete in `docs/sphinx/`.
    - Source: Select "GitHub Actions"
    - The workflow `.github/workflows/docs.yml` will auto-deploy on push
 
-3. **Access docs at:** `https://lsempe77.github.io/dev_chat/`
+3. **Access docs at:** `https://lsempe77.github.io/3ie-evidence-assistant/`
 
 ### Build Locally:
 ```bash
@@ -398,11 +422,11 @@ sphinx-build -b html source build/html
 ## 📁 Repository Structure
 
 ```text
-devchat_v2_sota/
+3ie-evidence-assistant/
 ├── api/                    # FastAPI backend
 │   └── routes/             # API endpoints
 ├── src/                    # Core Python libraries
-│   ├── agents/             # DevChatAgent
+│   ├── agents/             # EvidenceAssistantAgent
 │   ├── generation/         # ClaimLedgerSynthesizer
 │   ├── ingestion/          # Chunking, study design
 │   ├── extraction/         # Schemas + SignificanceParser

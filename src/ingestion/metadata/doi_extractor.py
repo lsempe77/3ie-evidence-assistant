@@ -1,5 +1,5 @@
 """
-DevChat v2.0 SOTA - DOI Extractor
+3ie Evidence Assistant - DOI Extractor
 
 Extract DOI from PDF documents using multiple methods:
 1. PDF metadata (XMP, Dublin Core)

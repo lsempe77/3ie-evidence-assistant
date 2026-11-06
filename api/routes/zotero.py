@@ -61,6 +61,7 @@ from src.auth import AuthenticatedUser, get_current_user, get_supabase_client
 from src.utils.logging import get_logger
 from src.utils.zotero_client import ZoteroClient, validate_zotero_credentials
 from .dependencies import get_r2_client
+from src.config.settings import settings
 
 logger = get_logger(__name__)
 
@@ -501,7 +502,7 @@ async def sync_from_zotero(
         
         supabase = get_supabase_client()
         r2_client = get_r2_client()
-        bucket_name = os.getenv("R2_BUCKET_NAME", "devchat-pdfs")
+        bucket_name = settings.r2_bucket_name
         
         # Get items with attachment info (paginated)
         # Limited to 20 items per sync to avoid Railway 120s timeout

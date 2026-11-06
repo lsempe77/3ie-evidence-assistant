@@ -1,5 +1,5 @@
 """
-DevChat v2.0 SOTA - Langfuse Observability (v3 SDK)
+3ie Evidence Assistant - Langfuse Observability (v3 SDK)
 
 Provides tracing and observability for LLM calls, embeddings, and retrieval.
 Uses Langfuse SDK v3 API with start_as_current_span context managers.

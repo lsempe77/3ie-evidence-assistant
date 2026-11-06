@@ -1,1 +1,1 @@
-# DevChat v2.0 SOTA - Configuration Module
+# 3ie Evidence Assistant - Configuration Module

@@ -13,7 +13,7 @@ IMPROVEMENTS OVER v2:
 - More realistic few-shot examples
 - Robust LLM response parsing with retries
 
-Author: DevChat Pipeline
+Author: 3ie Evidence Assistant Pipeline
 """
 import re
 import json

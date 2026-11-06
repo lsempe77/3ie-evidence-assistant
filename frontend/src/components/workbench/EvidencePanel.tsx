@@ -109,7 +109,7 @@ export function EvidencePanel({
   title = {${title.replace(/[{}]/g, "")}},
   author = {${authors.replace(/[{}]/g, "")}},
   year = {${year}},
-  note = {Retrieved via DevChat evidence search}
+  note = {Retrieved via 3ie Evidence Assistant evidence search}
 }`;
     });
     

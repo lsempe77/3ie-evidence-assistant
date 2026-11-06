@@ -1,5 +1,5 @@
 """
-Extraction module for DevChat.
+Extraction module for 3ie Evidence Assistant.
 
 Topic-agnostic schemas and extractors for systematic review data extraction.
 """

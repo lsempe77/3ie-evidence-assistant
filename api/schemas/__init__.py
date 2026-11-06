@@ -1,5 +1,5 @@
 """
-DevChat v2.0 SOTA - API Schemas
+3ie Evidence Assistant - API Schemas
 
 Pydantic models for API request/response validation.
 

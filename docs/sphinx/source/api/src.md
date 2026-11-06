@@ -1,11 +1,11 @@
 # Core Library (src/)
 
-The `src/` package contains the core Python libraries for DevChat.
+The `src/` package contains the core Python libraries for 3ie Evidence Assistant.
 
 ## Agents
 
 ```{eval-rst}
-.. automodule:: src.agents.devchat_agent
+.. automodule:: src.agents.evidence_assistant_agent
    :members:
    :undoc-members:
    :show-inheritance:

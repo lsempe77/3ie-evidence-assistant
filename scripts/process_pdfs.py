@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-DevChat v2.0 SOTA - PDF Processing Script
+3ie Evidence Assistant - PDF Processing Script
 
 Batch process PDFs from a directory and ingest into Qdrant.
 
@@ -92,7 +92,7 @@ def main():
         sys.exit(1)
     
     logger.info("=" * 60)
-    logger.info("DevChat v2.0 - PDF Processing Pipeline")
+    logger.info("3ie Evidence Assistant - PDF Processing Pipeline")
     logger.info("=" * 60)
     logger.info(f"PDF Directory: {args.pdf_dir}")
     logger.info(f"Output Directory: {args.output_dir or 'temp'}")

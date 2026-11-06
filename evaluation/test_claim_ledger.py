@@ -18,7 +18,7 @@ load_dotenv()
 # Suppress debug logging
 os.environ.setdefault("LOG_LEVEL", "WARNING")
 
-from src.agents.devchat_agent import DevChatAgent, SearchSettings
+from src.agents.evidence_assistant_agent import EvidenceAssistantAgent, SearchSettings
 
 async def test_claim_ledger():
     """Test the claim ledger approach on a sample query."""
@@ -27,7 +27,7 @@ async def test_claim_ledger():
     print("CLAIM LEDGER SYNTHESIZER TEST")
     print("=" * 60)
     
-    agent = DevChatAgent()
+    agent = EvidenceAssistantAgent()
     
     test_query = "What is the graduation approach to poverty reduction?"
     

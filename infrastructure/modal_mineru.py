@@ -32,12 +32,14 @@ from modal_lib import (
     app,
     # Config
     base_image,
+    monkeyocr_image,
     r2_secret,
     qdrant_secret,
     cohere_secret,
     supabase_secret,
     # Processing functions (these are @app.function decorated)
     process_pdf,
+    process_pdf_monkeyocr,
     process_pdf_rag,
     # Orchestration functions (these are @app.function decorated)
     orchestrate,
@@ -161,15 +163,18 @@ def main(
     force: bool = False,
     project_id: str = None,
     max_documents: int = 0,
+    index: bool = False,
 ):
     """
-    CLI for MinerU processing.
+    CLI for MinerU / MonkeyOCR processing.
     
     Actions:
-        status  - Show R2 and Qdrant status
-        run     - Process all pending PDFs
-        single  - Process a single PDF (requires --pdf-key)
-        rag     - Process a RAG project (requires --project-id)
+        status       - Show R2 and Qdrant status
+        run          - Process all pending PDFs with MinerU
+        single       - Process a single PDF with MinerU (requires --pdf-key)
+        rag          - Process a RAG project (requires --project-id)
+        monkeyocr    - Process a single PDF with MonkeyOCR (requires --pdf-key)
+                       Use --index to also embed & index results to Qdrant.
     """
     if action == "status":
         print("\n📁 R2 Storage:")
@@ -221,7 +226,34 @@ def main(
         print(f"   Failed: {result.get('failed', 0)}")
         print(f"   Skipped: {result.get('skipped', 0)}")
         print(f"   Total: {result.get('total', 0)}")
-    
+
+    elif action == "monkeyocr":
+        if not pdf_key:
+            print("❌ --pdf-key required for monkeyocr processing")
+            return
+        print(f"\n🐒 Processing with MonkeyOCR: {pdf_key}")
+        print(f"   index_to_qdrant={index}, force_reprocess={force}")
+        result = process_pdf_monkeyocr.remote(
+            pdf_key=pdf_key,
+            force_reprocess=force,
+            index_to_qdrant=index,
+        )
+        print(f"   Success: {result['success']}")
+        if result["success"]:
+            if result.get("skipped"):
+                print(f"   Skipped ({result.get('reason')})")
+                print(f"   Output: {result.get('json_key')}")
+            else:
+                print(f"   Pages:   {result.get('pages', 0)}")
+                print(f"   Chars:   {result.get('content_length', 0)}")
+                print(f"   Tables:  {result.get('table_count', 0)}")
+                print(f"   Chunks:  {result.get('chunks_indexed', 0)}")
+                print(f"   Time:    {result.get('elapsed_seconds', 0):.1f}s")
+                print(f"   MD key:  {result.get('md_key')}")
+                print(f"   JSON key:{result.get('json_key')}")
+        else:
+            print(f"   Error: {result.get('error')}")
+
     else:
         print(f"Unknown action: {action}")
-        print("Use: status, run, single, or rag")
+        print("Use: status, run, single, rag, or monkeyocr")

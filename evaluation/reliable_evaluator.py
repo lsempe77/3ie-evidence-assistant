@@ -1,5 +1,5 @@
 """
-DevChat v2.0 - Reliable Evaluation Framework
+3ie Evidence Assistant - Reliable Evaluation Framework
 
 Uses deterministic methods instead of LLM-as-judge:
 - NLI model (BART-MNLI) for faithfulness

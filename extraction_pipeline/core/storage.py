@@ -23,7 +23,7 @@ load_dotenv()
 
 # Default project ID (graduation corpus)
 DEFAULT_PROJECT_ID = "0816e8d3-ab23-417c-bf3f-e45531411c73"
-DEFAULT_BUCKET = "devchat-pdfs"
+DEFAULT_BUCKET = os.environ.get("R2_BUCKET_NAME", "devchat-pdfs")
 
 
 def get_r2_client():

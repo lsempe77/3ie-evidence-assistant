@@ -1,10 +1,10 @@
 # Overview
 
-DevChat is a RAG-powered research workbench designed for academic literature analysis at 3ie (International Initiative for Impact Evaluation).
+3ie Evidence Assistant is a RAG-powered research workbench designed for academic literature analysis at 3ie (International Initiative for Impact Evaluation).
 
-## What is DevChat?
+## What is 3ie Evidence Assistant?
 
-DevChat helps researchers:
+The 3ie Evidence Assistant helps researchers:
 
 1. **Upload and process** academic papers (PDFs) with AI-powered parsing
 2. **Search** across their document corpus using hybrid semantic + keyword search  

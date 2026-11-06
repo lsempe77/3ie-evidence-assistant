@@ -1,5 +1,5 @@
 """
-DevChat v2.0 SOTA - API Routes Package
+3ie Evidence Assistant - API Routes Package
 
 Auto-discovers and aggregates all routers from this package.
 """

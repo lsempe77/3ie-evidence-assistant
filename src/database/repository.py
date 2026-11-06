@@ -1,5 +1,5 @@
 """
-DevChat v2.0 SOTA - Document Repository
+3ie Evidence Assistant - Document Repository
 
 CRUD operations for document metadata in PostgreSQL.
 Provides fast queries that replace Qdrant scroll operations.

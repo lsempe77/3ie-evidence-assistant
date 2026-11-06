@@ -10,7 +10,7 @@
 - React Server Components vs Client Components
 - File-based routing
 - Data fetching patterns
-- Real DevChat frontend examples
+- Real 3ie Evidence Assistant frontend examples
 
 ---
 
@@ -22,7 +22,7 @@
 - 📦 **API routes**: Backend endpoints alongside frontend
 - ⚡ **Automatic code splitting**: Only load what's needed
 
-### Why Next.js for DevChat?
+### Why Next.js for 3ie Evidence Assistant?
 
 ```typescript
 // Traditional React SPA (loads everything upfront)
@@ -59,7 +59,7 @@ app/
         └── route.ts      → /api/chat
 ```
 
-### DevChat Structure
+### 3ie Evidence Assistant Structure
 
 ```
 frontend/src/app/
@@ -227,7 +227,7 @@ export default function Page() {  // Server Component
 
 ---
 
-## 🎯 DevChat Homepage
+## 🎯 3ie Evidence Assistant Homepage
 
 From `frontend/src/app/page.tsx`:
 
@@ -244,7 +244,7 @@ export default function HomePage() {
         </h1>
         
         <p className="text-xl text-gray-600 mb-8">
-          DevChat helps you explore academic literature with 
+          3ie Evidence Assistant helps you explore academic literature with 
           AI-powered search and synthesis.
         </p>
         
@@ -338,7 +338,7 @@ export default function ProjectStats({ projectId }: { projectId: string }) {
 
 ---
 
-## 💬 DevChat Chat Interface
+## 💬 3ie Evidence Assistant Chat Interface
 
 From `frontend/src/app/chat/page.tsx`:
 
@@ -417,7 +417,7 @@ export function ChatMessage({ message }: { message: Message }) {
       isUser ? "bg-blue-50 ml-12" : "bg-gray-50 mr-12"
     )}>
       <div className="font-semibold mb-2">
-        {isUser ? 'You' : 'DevChat'}
+        {isUser ? 'You' : '3ie Evidence Assistant'}
       </div>
       
       <div className="prose prose-sm max-w-none">
@@ -444,7 +444,7 @@ export function ChatMessage({ message }: { message: Message }) {
 
 ## 🎨 Styling with Tailwind
 
-DevChat uses **Tailwind CSS** for styling.
+3ie Evidence Assistant uses **Tailwind CSS** for styling.
 
 ### Utility Classes
 
@@ -470,7 +470,7 @@ DevChat uses **Tailwind CSS** for styling.
 
 ### shadcn/ui Components
 
-DevChat uses **shadcn/ui** for pre-built components.
+3ie Evidence Assistant uses **shadcn/ui** for pre-built components.
 
 ```typescript
 import { Button } from '@/components/ui/button'

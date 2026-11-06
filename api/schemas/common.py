@@ -1,5 +1,5 @@
 """
-DevChat v2.0 SOTA - Common Schema Models
+3ie Evidence Assistant - Common Schema Models
 
 Base models, health checks, and error responses.
 """

@@ -1,9 +1,9 @@
-# DevChat Evaluation Framework
+# 3ie Evidence Assistant Evaluation Framework
 
 **Created:** January 5, 2026  
 **Status:** ✅ Production Ready
 
-This document describes DevChat's citation quality evaluation framework, including the dual-lane evaluation approach, available tools, baseline metrics, and how to run evaluations.
+This document describes 3ie Evidence Assistant's citation quality evaluation framework, including the dual-lane evaluation approach, available tools, baseline metrics, and how to run evaluations.
 
 ---
 
@@ -175,15 +175,15 @@ print(f"Citation Precision: {result.citation_precision:.2%}")
 ### Quick Evaluation (Single Query)
 
 ```bash
-cd devchat_v2_sota
+cd 3ie-evidence-assistant
 python -c "
 import asyncio
 from evaluation.minicheck_evaluator import MiniCheckEvaluator
-from src.agents.devchat_agent import DevChatAgent
+from src.agents.evidence_assistant_agent import EvidenceAssistantAgent
 from src.retrieval.settings import SearchSettings
 
 async def quick_eval():
-    agent = DevChatAgent(project_id='YOUR_PROJECT_ID')
+    agent = EvidenceAssistantAgent(project_id='YOUR_PROJECT_ID')
     settings = SearchSettings(max_studies=5, use_claim_ledger=True)
     
     result = await agent.chat('What is the graduation approach?', settings)
