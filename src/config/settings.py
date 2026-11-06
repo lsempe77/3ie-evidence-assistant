@@ -78,6 +78,15 @@ class Settings(BaseSettings):
     qdrant_url: str = Field(default="http://localhost:6333", description="Qdrant server URL")
     qdrant_api_key: Optional[str] = Field(default=None, description="Qdrant API key (for cloud)")
     qdrant_collection_name: str = Field(default="devchat_v2_contextual", description="SOTA collection: Hybrid BM25+Dense, Contextual Prefixes")
+
+    # =========================================================================
+    # Infrastructure names (single source; override per environment)
+    # =========================================================================
+    r2_bucket_name: str = Field(default="devchat-pdfs", description="Cloudflare R2 bucket for PDFs and parser output (env R2_BUCKET_NAME)")
+    modal_trigger_url: str = Field(
+        default="https://lsempe77--devchat-mineru-trigger-processing.modal.run",
+        description="Modal web endpoint that starts PDF processing (env MODAL_TRIGGER_URL)",
+    )
     
     # Quantization type for Qdrant collections
     # =========================================================================

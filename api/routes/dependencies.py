@@ -380,10 +380,7 @@ async def trigger_modal_processing(force_reprocess: bool = False, max_documents:
     import httpx
     
     # Modal web endpoint URL
-    modal_trigger_url = os.environ.get(
-        "MODAL_TRIGGER_URL",
-        "https://lsempe77--devchat-mineru-trigger-processing.modal.run"
-    )
+    modal_trigger_url = settings.modal_trigger_url
     
     try:
         # Longer timeout (90s) to handle Modal cold starts

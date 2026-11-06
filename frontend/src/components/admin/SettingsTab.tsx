@@ -49,7 +49,7 @@ export function SettingsTab() {
   const [isResettingAll, setIsResettingAll] = useState(false);
   const [dangerConfirm, setDangerConfirm] = useState<string | null>(null);
   const [storageStats, setStorageStats] = useState<StorageStats>({
-    bucket: "devchat-pdfs",
+    bucket: "",
     inputPath: "/input-pdfs/",
     outputPath: "/outputs/",
     storageUsedBytes: 0,
@@ -84,7 +84,7 @@ export function SettingsTab() {
         newConnections.push({
           name: "Cloudflare R2",
           status: health.components?.r2 ? "connected" : "disconnected",
-          details: health.components?.r2 ? "devchat-pdfs bucket" : "Connection failed",
+          details: health.components?.r2 ? "Bucket reachable" : "Connection failed",
         });
         newConnections.push({
           name: "Cohere API",
@@ -107,7 +107,7 @@ export function SettingsTab() {
         const status = statusResult.value;
         if (status.storage) {
           setStorageStats({
-            bucket: status.storage.bucket || "devchat-pdfs",
+            bucket: status.storage.bucket || "",
             inputPath: status.storage.input_path || "/input-pdfs/",
             outputPath: status.storage.output_path || "/outputs/",
             storageUsedBytes: status.storage.storage_used_bytes || 0,
@@ -419,7 +419,7 @@ export function SettingsTab() {
           <div className="p-4 rounded-lg bg-muted/50 space-y-2">
             <div className="flex items-center justify-between">
               <span className="text-sm text-muted-foreground">Bucket</span>
-              <Badge variant="secondary">{storageStats.bucket}</Badge>
+              <Badge variant="secondary">{storageStats.bucket || "not reported"}</Badge>
             </div>
             <div className="flex items-center justify-between">
               <span className="text-sm text-muted-foreground">Input Path</span>

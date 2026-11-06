@@ -13,6 +13,7 @@ from fastapi import APIRouter, BackgroundTasks, File, HTTPException, Query, Uplo
 
 from api.schemas import UploadResponse
 from src.utils.logging import get_logger
+from src.config.settings import settings
 
 from ..dependencies import (
     get_r2_client,
@@ -115,7 +116,7 @@ async def upload_document(
         base_name = os.path.splitext(safe_filename)[0]
         
         r2_client = get_r2_client()
-        bucket_name = os.getenv("R2_BUCKET_NAME", "devchat-pdfs")
+        bucket_name = settings.r2_bucket_name
         
         # Check for existing document with same content
         if not force_upload:
@@ -188,7 +189,7 @@ async def list_r2_files(prefix: str = Query("input-pdfs/", description="Prefix t
     """
     try:
         r2_client = get_r2_client()
-        bucket_name = os.getenv("R2_BUCKET_NAME", "devchat-pdfs")
+        bucket_name = settings.r2_bucket_name
         
         response = r2_client.list_objects_v2(
             Bucket=bucket_name,
@@ -226,7 +227,7 @@ async def clear_r2_bucket(
     """
     try:
         r2_client = get_r2_client()
-        bucket_name = os.getenv("R2_BUCKET_NAME", "devchat-pdfs")
+        bucket_name = settings.r2_bucket_name
         
         prefixes_to_clear = []
         if prefix == "all":
@@ -290,7 +291,7 @@ async def get_pdf_url(document_id: str):
     """
     try:
         r2_client = get_r2_client()
-        bucket_name = os.getenv("R2_BUCKET_NAME", "devchat-pdfs")
+        bucket_name = settings.r2_bucket_name
         
         # Try input-pdfs first (original uploaded PDF)
         r2_key = f"input-pdfs/{document_id}.pdf"
@@ -342,7 +343,7 @@ async def find_duplicates():
     """
     try:
         r2_client = get_r2_client()
-        bucket_name = os.getenv("R2_BUCKET_NAME", "devchat-pdfs")
+        bucket_name = settings.r2_bucket_name
         
         # Get all PDFs
         pdf_files = {}
@@ -404,7 +405,7 @@ async def cleanup_duplicates(dry_run: bool = Query(True, description="If true, o
     
     try:
         r2_client = get_r2_client()
-        bucket_name = os.getenv("R2_BUCKET_NAME", "devchat-pdfs")
+        bucket_name = settings.r2_bucket_name
         indexer = get_indexer()
         
         # First, find duplicates

@@ -4,7 +4,6 @@ DevChat v2.0 SOTA - Frontend API Routes
 Endpoints for the Research Workbench frontend (query, compare, suggest, filters).
 """
 
-import os
 import re
 from botocore.exceptions import ClientError
 from fastapi import APIRouter, HTTPException
@@ -31,6 +30,7 @@ from src.utils.circuit_breaker import get_circuit_breaker, CircuitOpenError
 from src.utils.logging import get_logger
 
 from .dependencies import get_agent, get_r2_client
+from src.config.settings import settings
 
 # UUID pattern for detecting if a string is a UUID
 UUID_PATTERN = re.compile(r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$', re.IGNORECASE)
@@ -81,7 +81,7 @@ def _generate_pdf_url(document_id: str, source_path: str = None) -> str | None:
     """
     try:
         r2_client = get_r2_client()
-        bucket_name = os.getenv("R2_BUCKET_NAME", "devchat-pdfs")
+        bucket_name = settings.r2_bucket_name
         
         # If source path is provided, use it directly (for per-RAG projects)
         if source_path:

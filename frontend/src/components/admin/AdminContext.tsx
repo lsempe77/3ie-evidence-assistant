@@ -199,7 +199,7 @@ const initialSettingsState: SettingsState = {
     { name: "Cohere API", status: "checking", details: "Checking..." },
   ],
   storageStats: {
-    bucket: "devchat-pdfs",
+    bucket: "",
     inputPath: "/input-pdfs/",
     outputPath: "/outputs/",
     storageUsedBytes: 0,

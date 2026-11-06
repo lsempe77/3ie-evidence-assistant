@@ -257,7 +257,7 @@ export function RagSettingsTab({ ragId, project, onProjectUpdated, onProjectDele
           newConnections.push({
             name: "Cloudflare R2",
             status: health.components?.r2 ? "connected" : "disconnected",
-            details: health.components?.r2 ? "devchat-pdfs bucket" : "Connection failed",
+            details: health.components?.r2 ? "Bucket reachable" : "Connection failed",
           });
         } else {
           newConnections.push({ name: "Backend API", status: "disconnected", details: "Unreachable" });

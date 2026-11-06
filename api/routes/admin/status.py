@@ -137,7 +137,7 @@ async def get_admin_status():
     """
     connections = []
     storage_info = StorageStatus(
-        bucket=os.getenv("R2_BUCKET_NAME", "devchat-pdfs"),
+        bucket=settings.r2_bucket_name,
         input_path="/input-pdfs/",
         output_path="/outputs/",
         storage_used_bytes=0,
@@ -167,7 +167,7 @@ async def get_admin_status():
                     region_name="auto",
                 )
                 
-                bucket = os.getenv("R2_BUCKET_NAME", "devchat-pdfs")
+                bucket = settings.r2_bucket_name
                 
                 # List ALL objects with pagination to get accurate count
                 file_count = 0
@@ -264,7 +264,7 @@ async def get_admin_status():
     
     # Update storage info
     storage_info = StorageStatus(
-        bucket=os.getenv("R2_BUCKET_NAME", "devchat-pdfs"),
+        bucket=settings.r2_bucket_name,
         input_path="/input-pdfs/",
         output_path="/outputs/",
         storage_used_bytes=total_size,

@@ -965,7 +965,7 @@ async def delete_rag_project(
     # Delete R2 files for this project
     try:
         r2_client = get_r2_client()
-        bucket_name = os.getenv("R2_BUCKET_NAME", "devchat-pdfs")
+        bucket_name = settings.r2_bucket_name
         prefix = f"rags/{project_id}/"
         paginator = r2_client.get_paginator("list_objects_v2")
         
@@ -1219,7 +1219,7 @@ async def sync_project_documents(
     project = await get_user_project(user, project_id)
     
     r2_client = get_r2_client()
-    bucket_name = os.getenv("R2_BUCKET_NAME", "devchat-pdfs")
+    bucket_name = settings.r2_bucket_name
     client = get_supabase_client()
     
     # Get existing documents from Supabase
@@ -1358,7 +1358,7 @@ async def upload_document(
         base_name = os.path.splitext(safe_filename)[0]
         
         r2_client = get_r2_client()
-        bucket_name = os.getenv("R2_BUCKET_NAME", "devchat-pdfs")
+        bucket_name = settings.r2_bucket_name
         
         # Check for existing document with same content (within project)
         if not force_upload:
@@ -2681,7 +2681,6 @@ async def get_document_pdf_url(
     """
     Get a presigned URL to view the PDF for a document.
     """
-    import os
     from botocore.exceptions import ClientError
     
     project = await get_user_project(user, project_id)
@@ -2697,7 +2696,7 @@ async def get_document_pdf_url(
     
     try:
         r2_client = get_r2_client()
-        bucket_name = os.getenv("R2_BUCKET_NAME", "devchat-pdfs")
+        bucket_name = settings.r2_bucket_name
         
         # Try the stored r2_input_key first, then fallback to constructed paths
         possible_keys = []
@@ -2860,7 +2859,7 @@ async def get_highlighted_pdf(
     
     try:
         r2_client = get_r2_client()
-        bucket_name = os.getenv("R2_BUCKET_NAME", "devchat-pdfs")
+        bucket_name = settings.r2_bucket_name
         
         # Find the PDF key (same logic as get_document_pdf_url)
         possible_keys = []
@@ -3026,13 +3025,12 @@ async def clear_project_storage(
     """
     Delete all PDFs and processed outputs for this project from R2.
     """
-    import os
     
     project = await get_user_project(user, project_id)
     
     try:
         r2_client = get_r2_client()
-        bucket_name = os.getenv("R2_BUCKET_NAME", "devchat-pdfs")
+        bucket_name = settings.r2_bucket_name
         deleted_count = 0
         
         # Multi-tenant path: rags/{project_id}/
@@ -3229,7 +3227,7 @@ async def delete_single_document(
             r2_endpoint = os.environ.get("R2_ENDPOINT_URL", "")
             r2_access_key = os.environ.get("R2_ACCESS_KEY_ID", "")
             r2_secret_key = os.environ.get("R2_SECRET_ACCESS_KEY", "")
-            r2_bucket = os.environ.get("R2_BUCKET_NAME", "devchat-docs")
+            r2_bucket = settings.r2_bucket_name
             
             if r2_endpoint and r2_key:
                 s3 = boto3.client(
