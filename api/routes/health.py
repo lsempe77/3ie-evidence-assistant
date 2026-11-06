@@ -1,5 +1,5 @@
 """
-DevChat v2.0 SOTA - Health Check Routes
+3ie Evidence Assistant - Health Check Routes
 
 Endpoints for service health monitoring and Kubernetes probes.
 """

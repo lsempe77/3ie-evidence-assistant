@@ -1,5 +1,5 @@
 """
-DevChat v2.0 SOTA - Citation Formatting
+3ie Evidence Assistant - Citation Formatting
 
 Format citations in various styles:
 - APA

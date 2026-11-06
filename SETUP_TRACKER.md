@@ -1,4 +1,4 @@
-# DevChat v2.0 - Setup & Status Tracker
+# 3ie Evidence Assistant - Setup & Status Tracker
 
 **Last Updated:** February 23, 2026
 

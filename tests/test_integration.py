@@ -1,5 +1,5 @@
 """
-DevChat v2.0 SOTA - Integration Tests
+3ie Evidence Assistant - Integration Tests
 
 End-to-end tests for the full pipeline.
 """

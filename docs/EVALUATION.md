@@ -1,9 +1,9 @@
-# DevChat Evaluation Framework
+# 3ie Evidence Assistant Evaluation Framework
 
 **Created:** January 5, 2026  
 **Status:** ✅ Production Ready
 
-This document describes DevChat's citation quality evaluation framework, including the dual-lane evaluation approach, available tools, baseline metrics, and how to run evaluations.
+This document describes 3ie Evidence Assistant's citation quality evaluation framework, including the dual-lane evaluation approach, available tools, baseline metrics, and how to run evaluations.
 
 ---
 

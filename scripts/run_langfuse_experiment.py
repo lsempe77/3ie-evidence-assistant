@@ -1,7 +1,7 @@
 """
 Run Langfuse Experiment
 
-Run the DevChat test suite and log results as a Langfuse experiment.
+Run the 3ie Evidence Assistant test suite and log results as a Langfuse experiment.
 This allows you to compare different configurations.
 
 Usage:
@@ -35,7 +35,7 @@ async def run_experiment(
     max_studies: int = 5,
     use_claim_ledger: bool = True,
 ):
-    """Run the test dataset through DevChat and log results."""
+    """Run the test dataset through 3ie Evidence Assistant and log results."""
     
     from src.agents.devchat_agent import DevChatAgent, SearchSettings
     from src.retrieval.hybrid_retriever import HybridRetriever
@@ -171,7 +171,7 @@ async def run_experiment(
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Run a DevChat evaluation experiment")
+    parser = argparse.ArgumentParser(description="Run a 3ie Evidence Assistant evaluation experiment")
     parser.add_argument("--name", required=True, help="Experiment name (e.g., 'baseline-v1')")
     parser.add_argument("--model", default="openai/gpt-4o", help="Model to use")
     parser.add_argument("--max-studies", type=int, default=5, help="Max studies to retrieve")

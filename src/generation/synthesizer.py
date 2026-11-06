@@ -1,5 +1,5 @@
 """
-DevChat v2.0 SOTA - Answer Synthesizer
+3ie Evidence Assistant - Answer Synthesizer
 
 Generate high-quality answers from retrieved context:
 - Structured synthesis for complex queries

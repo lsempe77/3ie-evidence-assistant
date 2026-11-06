@@ -1,1 +1,1 @@
-# DevChat v2.0 SOTA - Evaluation Module
+# 3ie Evidence Assistant - Evaluation Module

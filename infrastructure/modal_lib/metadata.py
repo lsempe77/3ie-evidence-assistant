@@ -81,7 +81,7 @@ def resolve_metadata(
                     crossref_url = f"https://api.crossref.org/works/{doi}"
                     resp = await client.get(
                         crossref_url,
-                        headers={"User-Agent": "DevChat/2.0 (mailto:dev@example.com)"}
+                        headers={"User-Agent": "3ie-Evidence-Assistant/2.0 (mailto:dev@example.com)"}
                     )
                     if resp.status_code == 200:
                         crossref_data = resp.json().get("message", {})

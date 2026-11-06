@@ -1,5 +1,5 @@
 """
-DevChat v2.0 SOTA - CrossRef API Client
+3ie Evidence Assistant - CrossRef API Client
 
 Query CrossRef for bibliographic metadata by DOI.
 CrossRef is the authoritative source for publisher-provided metadata.
@@ -71,7 +71,7 @@ class CrossRefClient:
         
         # Set up headers for polite pool
         self.headers = {
-            "User-Agent": f"DevChat/2.0 (https://3ieimpact.org; mailto:{self.email})",
+            "User-Agent": f"3ie-Evidence-Assistant/2.0 (https://3ieimpact.org; mailto:{self.email})",
             "Accept": "application/json",
         }
     

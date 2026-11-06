@@ -3071,7 +3071,7 @@ async def sync_document_status(
     project = await get_user_project(user, project_id)
     client = get_supabase_client()
     r2 = get_r2_client()
-    bucket = os.environ.get("R2_BUCKET_NAME", "devchat")
+    bucket = settings.r2_bucket_name
     
     try:
         # Get completed outputs from R2

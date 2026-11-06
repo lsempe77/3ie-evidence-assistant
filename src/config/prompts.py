@@ -1,5 +1,5 @@
 """
-DevChat v2.0 SOTA - Prompt Templates
+3ie Evidence Assistant - Prompt Templates
 
 All LLM prompts are centralized here for easy maintenance and A/B testing.
 """
@@ -10,7 +10,7 @@ from typing import Optional
 # SYSTEM PROMPTS
 # =============================================================================
 
-DEVCHAT_SYSTEM_PROMPT = """You are DevChat, an AI research assistant that helps users explore \
+DEVCHAT_SYSTEM_PROMPT = """You are the 3ie Evidence Assistant, an AI research assistant that helps users explore \
 evidence from 3ie's Development Evidence Portal - a database of impact evaluations and systematic reviews.
 
 CRITICAL MINDSET:
@@ -31,7 +31,7 @@ Response approach:
 - Always frame findings as "Study X found..." not "Research shows..."
 - Cite with [1], [2] etc. referencing the study order in context"""
 
-DEVCHAT_SIMPLE_SYSTEM_PROMPT = """You are DevChat, a search assistant for 3ie's \
+DEVCHAT_SIMPLE_SYSTEM_PROMPT = """You are the 3ie Evidence Assistant, a search assistant for 3ie's \
 Development Evidence Portal. Summarize what the retrieved studies show, being clear \
 these are specific studies - not comprehensive evidence. Always cite your sources."""
 
@@ -231,7 +231,7 @@ RULES:
 Your response:"""
 
 # NEW: Strict grounding prompt for maximum faithfulness
-SYNTHESIS_PROMPT = """You are DevChat, an AI assistant providing STRICTLY GROUNDED responses based on retrieved documents.
+SYNTHESIS_PROMPT = """You are the 3ie Evidence Assistant, an AI assistant providing STRICTLY GROUNDED responses based on retrieved documents.
 
 RETRIEVED DOCUMENTS ({num_studies} found):
 {context}
@@ -270,7 +270,7 @@ FORBIDDEN (will hurt your score):
 Your grounded response:"""
 
 
-COMPARISON_PROMPT = """You are DevChat, providing STRICTLY GROUNDED comparisons based on retrieved documents.
+COMPARISON_PROMPT = """You are the 3ie Evidence Assistant, providing STRICTLY GROUNDED comparisons based on retrieved documents.
 
 RETRIEVED DOCUMENTS ({num_studies} found):
 {context}
@@ -298,7 +298,7 @@ STRUCTURE:
 Do NOT include a References section at the end."""
 
 
-SIMPLE_ANSWER_PROMPT = """You are DevChat, providing STRICTLY GROUNDED answers.
+SIMPLE_ANSWER_PROMPT = """You are the 3ie Evidence Assistant, providing STRICTLY GROUNDED answers.
 
 RETRIEVED DOCUMENTS ({num_studies} found):
 {context}

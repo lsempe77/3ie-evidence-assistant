@@ -1,5 +1,5 @@
 """
-DevChat v2.0 SOTA - Shared Route Dependencies
+3ie Evidence Assistant - Shared Route Dependencies
 
 Common dependencies, singletons, and utilities used across route modules.
 """

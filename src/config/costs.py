@@ -1,5 +1,5 @@
 """
-DevChat v2.0 SOTA - Cost Configuration
+3ie Evidence Assistant - Cost Configuration
 
 Pricing per 1M tokens for each model/provider.
 Updated: January 2026

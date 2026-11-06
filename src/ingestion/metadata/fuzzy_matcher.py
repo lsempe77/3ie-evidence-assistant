@@ -1,5 +1,5 @@
 """
-DevChat v2.0 SOTA - Fuzzy Matcher
+3ie Evidence Assistant - Fuzzy Matcher
 
 Match bibliography entries to PDF files using fuzzy string matching.
 Handles variations in:

@@ -10,7 +10,7 @@
 - Database schema design for multi-tenancy
 - Row-Level Security (RLS)
 - Migrations and schema management
-- Real DevChat database structure
+- Real 3ie Evidence Assistant database structure
 
 ---
 
@@ -23,7 +23,7 @@
 - 📡 **Auto-generated APIs**: RESTful and real-time
 - 📦 **Storage**: File uploads and CDN
 
-### Why Supabase for DevChat?
+### Why Supabase for 3ie Evidence Assistant?
 
 ```sql
 -- Traditional approach: Check permissions in app code
@@ -41,7 +41,7 @@ SELECT * FROM documents WHERE id = 123
 
 ---
 
-## 🗄️ DevChat Database Schema
+## 🗄️ 3ie Evidence Assistant Database Schema
 
 ### Core Tables
 
@@ -357,7 +357,7 @@ USING (
 
 ## 📝 Migrations
 
-DevChat uses SQL migration files to version control schema changes.
+3ie Evidence Assistant uses SQL migration files to version control schema changes.
 
 ### Migration Structure
 
@@ -512,7 +512,7 @@ const { data, error } = await supabase
 
 ---
 
-## 💡 Real DevChat Example: Project Creation
+## 💡 Real 3ie Evidence Assistant Example: Project Creation
 
 From `api/routes/api.py`:
 

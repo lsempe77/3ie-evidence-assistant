@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-DevChat v2.0 - Citation Quality Evaluation
+3ie Evidence Assistant - Citation Quality Evaluation
 
 Run the custom RAGAS evaluation with citation accuracy metrics.
 
@@ -236,7 +236,7 @@ async def run_batch_evaluation():
 
 
 async def main():
-    parser = argparse.ArgumentParser(description="Evaluate DevChat citation quality")
+    parser = argparse.ArgumentParser(description="Evaluate 3ie Evidence Assistant citation quality")
     parser.add_argument("--query", "-q", type=str, help="Single query to evaluate")
     parser.add_argument("--compare", "-c", action="store_true", help="Compare standard vs structured")
     parser.add_argument("--batch", "-b", action="store_true", help="Run batch evaluation")
@@ -253,7 +253,7 @@ async def main():
         await evaluate_single_query(args.query, use_structured=args.structured)
     else:
         # Default: show help
-        print("DevChat Citation Quality Evaluation")
+        print("3ie Evidence Assistant Citation Quality Evaluation")
         print("="*40)
         print("\nUsage examples:")
         print("  python scripts/evaluate_citations.py --query 'poverty reduction'")

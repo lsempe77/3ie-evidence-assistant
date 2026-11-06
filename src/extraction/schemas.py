@@ -1,5 +1,5 @@
 """
-Topic-Agnostic Extraction Schema for DevChat Pipeline
+Topic-Agnostic Extraction Schema for 3ie Evidence Assistant Pipeline
 ======================================================
 
 Generic schema that works for ANY systematic review topic:

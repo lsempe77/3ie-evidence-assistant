@@ -7,7 +7,7 @@ Extracts the "List of Tables" section from academic papers and uses it to:
 3. Identify artifacts (figures misclassified as tables)
 4. Detect missing tables that weren't extracted
 
-Author: DevChat Team
+Author: 3ie Evidence Assistant Team
 Date: Feb 2, 2026
 """
 

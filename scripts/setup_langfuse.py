@@ -1,5 +1,5 @@
 """
-Setup Langfuse for DevChat Evaluation
+Setup Langfuse for 3ie Evidence Assistant Evaluation
 
 This script:
 1. Creates a dataset with our test cases
@@ -29,7 +29,7 @@ langfuse = Langfuse(
 # =============================================================================
 
 def create_test_dataset():
-    """Create the DevChat test cases dataset."""
+    """Create the 3ie Evidence Assistant test cases dataset."""
     
     # Load test cases from file
     with open("evaluation/test_cases.json", "r") as f:
@@ -41,7 +41,7 @@ def create_test_dataset():
     try:
         dataset = langfuse.create_dataset(
             name=dataset_name,
-            description="Golden test cases for DevChat evaluation - Graduation Programs focus"
+            description="Golden test cases for 3ie Evidence Assistant evaluation - Graduation Programs focus"
         )
         print(f"✅ Created dataset: {dataset_name}")
     except Exception as e:
@@ -196,7 +196,7 @@ def setup_scores():
 # =============================================================================
 
 def main():
-    print("🚀 Setting up Langfuse for DevChat Evaluation\n")
+    print("🚀 Setting up Langfuse for 3ie Evidence Assistant Evaluation\n")
     
     print("=" * 50)
     print("1. Creating Test Dataset")

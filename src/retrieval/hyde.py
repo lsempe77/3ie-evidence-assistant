@@ -1,5 +1,5 @@
 """
-DevChat v2.0 SOTA - HyDE Query Enhancement
+3ie Evidence Assistant - HyDE Query Enhancement
 
 Hypothetical Document Embeddings (HyDE) for improved retrieval.
 

@@ -488,7 +488,7 @@ USING (
 
 ---
 
-## 💡 Real DevChat Example: Chat Endpoint
+## 💡 Real 3ie Evidence Assistant Example: Chat Endpoint
 
 From `api/routes/chat.py`:
 

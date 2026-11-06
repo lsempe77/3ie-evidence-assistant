@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "DevChat - AI Research Assistant",
+  title: "3ie Evidence Assistant",
   description: "AI-powered assistant for searching and analyzing development research",
 };
 

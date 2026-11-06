@@ -14,7 +14,7 @@ Pipeline:
   0.7 LLM Verify       - LLM verification for edge cases (optional)
   0.8 LOT Cross-Ref    - Use List of Tables for caption repair (optional)
 
-Author: DevChat Pipeline
+Author: 3ie Evidence Assistant Pipeline
 """
 import re
 import json

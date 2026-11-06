@@ -1,5 +1,5 @@
 """
-DevChat v2.0 SOTA - Retrieval Tests
+3ie Evidence Assistant - Retrieval Tests
 
 Tests for query processing, hybrid retrieval, and reranking.
 """

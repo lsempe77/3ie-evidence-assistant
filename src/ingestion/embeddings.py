@@ -1,5 +1,5 @@
 """
-DevChat v2.0 SOTA - Embedding Generation
+3ie Evidence Assistant - Embedding Generation
 
 Supports multiple embedding providers:
 - Cohere embed-v4 (recommended)

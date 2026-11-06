@@ -1,5 +1,5 @@
 """
-DevChat v2.0 SOTA - Settings Configuration
+3ie Evidence Assistant - Settings Configuration
 
 Centralized configuration management using Pydantic Settings.
 All settings can be overridden via environment variables.

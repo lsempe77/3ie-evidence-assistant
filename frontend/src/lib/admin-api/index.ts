@@ -37,7 +37,7 @@ const ADMIN_API_KEY = process.env.NEXT_PUBLIC_ADMIN_API_KEY || "";
 const ADMIN_TIMEOUT_MS = 120_000; // 120 seconds (metadata enrichment can be slow)
 
 // Storage key for session token
-const SESSION_TOKEN_KEY = "devchat_admin_session";
+const SESSION_TOKEN_KEY = "evidence_assistant_admin_session";
 
 // =============================================================================
 // Session Management

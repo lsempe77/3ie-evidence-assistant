@@ -1,5 +1,5 @@
 """
-DevChat v2.0 SOTA - LLM Metadata Extractor
+3ie Evidence Assistant - LLM Metadata Extractor
 
 Use LLM to extract metadata when:
 1. No DOI found - extract title/authors from first page

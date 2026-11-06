@@ -1,5 +1,5 @@
 """
-DevChat v2.0 SOTA - Context Builder
+3ie Evidence Assistant - Context Builder
 
 Assembles retrieved results into formatted context for the LLM:
 - Parent chunk expansion

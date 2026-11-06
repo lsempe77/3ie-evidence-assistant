@@ -1,5 +1,5 @@
 """
-DevChat v2.0 - Query Clarifier
+3ie Evidence Assistant - Query Clarifier
 
 Detects vague/broad queries and suggests clarifications.
 For impact evaluation research, a good query should specify:

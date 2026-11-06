@@ -118,7 +118,7 @@ print("EXTRACTION PIPELINE REQUIREMENTS SUMMARY")
 print("=" * 100)
 
 print("""
-USE CASE 1: RAG SYNTHESIS (DevChat)
+USE CASE 1: RAG SYNTHESIS (3ie Evidence Assistant)
 ===================================
 Needs: Quick extraction of key findings for conversational AI
 - Core effect sizes (Coeff, SE, p-value, N)

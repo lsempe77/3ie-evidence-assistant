@@ -1,5 +1,5 @@
 """
-DevChat v2.0 SOTA - Database Package
+3ie Evidence Assistant - Database Package
 
 PostgreSQL metadata store for fast document queries.
 """

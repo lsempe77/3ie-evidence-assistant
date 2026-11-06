@@ -9,7 +9,7 @@
 - Environment variables and secrets management
 - Development vs production configuration
 - Docker setup for local development
-- DevChat configuration patterns
+- 3ie Evidence Assistant configuration patterns
 
 ---
 
@@ -85,7 +85,7 @@ DATABASE_URL=postgresql://prod-server:5432/prod_db
 
 ---
 
-## 🔧 DevChat Configuration Files
+## 🔧 3ie Evidence Assistant Configuration Files
 
 ### Frontend Environment
 
@@ -543,7 +543,7 @@ if __name__ == "__main__":
 
 ---
 
-## 💡 Real DevChat Example
+## 💡 Real 3ie Evidence Assistant Example
 
 From `api/server.py`:
 
@@ -563,7 +563,7 @@ logger.add(
 
 # Create FastAPI app
 app = FastAPI(
-    title="DevChat API",
+    title="3ie Evidence Assistant API",
     version="2.0.0",
     debug=(settings.environment == "development")
 )
@@ -571,7 +571,7 @@ app = FastAPI(
 @app.on_event("startup")
 async def startup():
     """Run on application startup."""
-    logger.info(f"🚀 Starting DevChat API in {settings.environment} mode")
+    logger.info(f"🚀 Starting 3ie Evidence Assistant API in {settings.environment} mode")
     
     # Validate config
     try:

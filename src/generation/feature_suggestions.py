@@ -1,5 +1,5 @@
 """
-DevChat v2.0 SOTA - Feature Suggestions Generator
+3ie Evidence Assistant - Feature Suggestions Generator
 
 Generates creative and actionable feature suggestions based on RAG project context.
 Uses LLM to analyze project data and suggest relevant features.
@@ -51,9 +51,9 @@ class FeatureSuggestion:
         }
 
 
-FEATURE_SUGGESTIONS_PROMPT = """You are a product strategist for a RAG (Retrieval-Augmented Generation) research platform called DevChat.
+FEATURE_SUGGESTIONS_PROMPT = """You are a product strategist for a RAG (Retrieval-Augmented Generation) research platform called the 3ie Evidence Assistant.
 
-DevChat helps researchers:
+The 3ie Evidence Assistant helps researchers:
 - Query academic documents with natural language
 - Get citation-grounded answers from a corpus of studies
 - Filter by year, country, sector, and study type
@@ -107,7 +107,7 @@ class FeatureSuggestionsGenerator:
 
     async def generate_suggestions(
         self,
-        project_name: str = "DevChat RAG Project",
+        project_name: str = "3ie Evidence Assistant RAG Project",
         document_count: int = 0,
         query_count: int = 0,
         common_topics: Optional[List[str]] = None,

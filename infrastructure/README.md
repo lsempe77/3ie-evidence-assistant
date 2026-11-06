@@ -112,7 +112,7 @@ client.create_collection(
 
 ## 3. Supabase Setup (PostgreSQL + Auth)
 
-> **Note:** DevChat now uses Supabase instead of Turso for the metadata database.
+> **Note:** 3ie Evidence Assistant now uses Supabase instead of Turso for the metadata database.
 
 ### Create Supabase Project
 

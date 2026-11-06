@@ -126,11 +126,11 @@ async def export_bibliography(
     # Generate export
     if format == "bibtex":
         content = _generate_bibtex(docs)
-        filename = f"devchat_export_{datetime.now().strftime('%Y%m%d')}.bib"
+        filename = f"evidence_assistant_export_{datetime.now().strftime('%Y%m%d')}.bib"
         media_type = "application/x-bibtex"
     else:
         content = _generate_ris(docs)
-        filename = f"devchat_export_{datetime.now().strftime('%Y%m%d')}.ris"
+        filename = f"evidence_assistant_export_{datetime.now().strftime('%Y%m%d')}.ris"
         media_type = "application/x-research-info-systems"
     
     return Response(

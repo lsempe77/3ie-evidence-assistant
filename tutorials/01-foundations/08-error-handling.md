@@ -18,7 +18,7 @@
 
 ### The Silent Failure Scenario
 
-Imagine a user uploads a PDF to DevChat:
+Imagine a user uploads a PDF to 3ie Evidence Assistant:
 
 ```python
 # ❌ NO ERROR HANDLING
@@ -140,7 +140,7 @@ sentry.capture_exception(e)  # Sent to error tracking
 # src/exceptions.py
 
 class DevChatError(Exception):
-    """Base exception for all DevChat errors."""
+    """Base exception for all 3ie Evidence Assistant errors."""
     pass
 
 class DocumentError(DevChatError):
@@ -279,7 +279,7 @@ except Exception as e:
     logger.error(f"Operation failed: {e}")  # Just error message
 ```
 
-### DevChat Logging Example
+### 3ie Evidence Assistant Logging Example
 
 ```python
 from loguru import logger

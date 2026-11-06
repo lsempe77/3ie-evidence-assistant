@@ -8,7 +8,7 @@ import sys
 sys.path.insert(0, os.path.abspath('../../..'))
 
 # -- Project information -----------------------------------------------------
-project = 'DevChat'
+project = '3ie Evidence Assistant'
 copyright = '2026, 3ie'
 author = '3ie'
 release = '2.0'
@@ -77,7 +77,7 @@ exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store']
 # -- Options for HTML output -------------------------------------------------
 html_theme = 'sphinx_rtd_theme'
 html_static_path = ['_static']
-html_title = 'DevChat Documentation'
+html_title = '3ie Evidence Assistant Documentation'
 
 html_theme_options = {
     'navigation_depth': 4,

@@ -1,4 +1,4 @@
-# DevChat v2.0 SOTA Docker Configuration
+# 3ie Evidence Assistant Docker Configuration
 # Multi-stage build for smaller image
 
 FROM python:3.12-slim AS builder

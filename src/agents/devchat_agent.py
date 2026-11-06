@@ -1,5 +1,5 @@
 """
-DevChat v2.0 SOTA - Main Agent
+3ie Evidence Assistant - Main Agent
 
 The central orchestrator that combines all components:
 - Query processing
@@ -64,7 +64,7 @@ class SearchSettings:
 
 @dataclass
 class DevChatResponse:
-    """Complete response from DevChat."""
+    """Complete response from 3ie Evidence Assistant."""
     answer: str
     query_type: str
     model_used: str
@@ -104,7 +104,7 @@ class DevChatResponse:
 
 class DevChatAgent:
     """
-    Main DevChat agent orchestrating the full RAG pipeline.
+    Main 3ie Evidence Assistant agent orchestrating the full RAG pipeline.
     
     Pipeline:
     1. Query Processing (classification, expansion, filter extraction)
@@ -180,7 +180,7 @@ class DevChatAgent:
                 "use_claim_ledger": user_settings.use_claim_ledger,
                 "use_structured_citations": user_settings.use_structured_citations,
             },
-            tags=["chat", "devchat"],
+            tags=["chat", "evidence-assistant", "devchat"],
         )
         
         # Get conversation context if session provided
@@ -856,7 +856,7 @@ class DevChatAgent:
 
 class DevChatAgentFactory:
     """
-    Factory for creating DevChat agents with different configurations.
+    Factory for creating 3ie Evidence Assistant agents with different configurations.
     """
     
     @staticmethod

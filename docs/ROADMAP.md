@@ -353,7 +353,7 @@ exits silently on this machine.
    - Auto-generate structured reports from evidence
 
 3. **Embeddable Widget** - 16h
-   - Embed DevChat on external sites (e.g., 3ie portal)
+   - Embed 3ie Evidence Assistant on external sites (e.g., 3ie portal)
 
 4. **Security Hardening** - 8h
    - Rate limiting, input validation, audit logs
@@ -363,7 +363,7 @@ exits silently on this machine.
    - Reference: https://www.trulens.org/
 
 6. **Slack/Teams MCP Integration** - 20h
-   - Let researchers query DevChat from Slack without switching apps
+   - Let researchers query 3ie Evidence Assistant from Slack without switching apps
    - Example: `@devchat What effect sizes for cash transfers?`
    - Reference: [MCPs for Developers](https://www.oreilly.com/radar/mcps-for-developers-who-think-they-dont-need-mcps/)
 

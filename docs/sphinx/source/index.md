@@ -1,4 +1,4 @@
-# DevChat Documentation
+# 3ie Evidence Assistant Documentation
 
 **RAG-powered research workbench for academic literature**
 

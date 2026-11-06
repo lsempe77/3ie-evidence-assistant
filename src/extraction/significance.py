@@ -134,7 +134,7 @@ class SignificanceParser:
                 additional_kwargs={
                     "extra_headers": {
                         "HTTP-Referer": "https://3ieimpact.org",
-                        "X-Title": "DevChat Significance Parser",
+                        "X-Title": "3ie Evidence Assistant Significance Parser",
                     }
                 }
             )

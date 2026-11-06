@@ -1,5 +1,5 @@
 """
-DevChat v2.0 - Response Caching for Production Performance
+3ie Evidence Assistant - Response Caching for Production Performance
 
 In-memory LRU cache with TTL for query responses.
 Reduces latency and LLM costs for repeated identical queries.

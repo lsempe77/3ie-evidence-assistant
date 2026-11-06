@@ -1,5 +1,5 @@
 """
-DevChat v2.0 SOTA - Knowledge Graph Service
+3ie Evidence Assistant - Knowledge Graph Service
 
 Entity extraction and graph-based retrieval for impact evaluations.
 

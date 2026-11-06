@@ -1,5 +1,5 @@
 """
-DevChat v2.0 SOTA - FastAPI Server
+3ie Evidence Assistant - FastAPI Server
 
 Main application entry point.
 """
@@ -37,7 +37,7 @@ logger = get_logger(__name__)
 async def lifespan(app: FastAPI):
     """Application lifespan manager."""
     # Startup
-    logger.info("🚀 DevChat v2.0 SOTA starting up...")
+    logger.info("🚀 3ie Evidence Assistant starting up...")
     logger.info(f"Environment: {settings.environment.value}")
     logger.info(f"LLM Provider: {settings.llm_provider.value}")
     logger.info(f"Fast Model: {settings.llm_fast_model}")
@@ -82,12 +82,12 @@ async def lifespan(app: FastAPI):
         except Exception:
             pass
     
-    logger.info("👋 DevChat v2.0 SOTA shutting down...")
+    logger.info("👋 3ie Evidence Assistant shutting down...")
 
 
 # Create FastAPI app
 app = FastAPI(
-    title="DevChat v2.0 SOTA",
+    title="3ie Evidence Assistant",
     description="AI-powered assistant for 3ie Development Evidence Portal",
     version="2.0.0",
     lifespan=lifespan,
@@ -198,7 +198,7 @@ app.include_router(extraction_router)  # Extracted effect sizes for evidence syn
 @app.get("/health/ping", include_in_schema=False)
 async def simple_health():
     """Lightweight health check for platform probes."""
-    return {"status": "ok", "service": "devchat-api", "version": "2.0.0"}
+    return {"status": "ok", "service": "evidence-assistant-api", "version": "2.0.0"}
 
 
 # Root endpoint
@@ -206,7 +206,7 @@ async def simple_health():
 async def root():
     """Root endpoint with API information."""
     return {
-        "name": "DevChat v2.0 SOTA",
+        "name": "3ie Evidence Assistant",
         "version": "2.0.0",
         "description": "AI-powered assistant for 3ie Development Evidence Portal",
         "docs": "/docs",

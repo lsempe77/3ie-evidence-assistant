@@ -1,5 +1,5 @@
 """
-DevChat v2.0 - RAGAS Evaluation Framework
+3ie Evidence Assistant - RAGAS Evaluation Framework
 
 Implements evaluation metrics for RAG quality:
 - Faithfulness: Answer uses only retrieved context

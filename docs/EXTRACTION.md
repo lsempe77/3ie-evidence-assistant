@@ -1,4 +1,4 @@
-# Data Extraction & Validation Framework for DevChat
+# Data Extraction & Validation Framework for 3ie Evidence Assistant
 
 **Purpose:** Design a robust framework for extracting structured data from UPG studies and validating extraction accuracy against human ground truth.
 

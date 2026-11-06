@@ -1,5 +1,5 @@
 """
-DevChat v2.0 SOTA - Frontend API Routes
+3ie Evidence Assistant - Frontend API Routes
 
 Endpoints for the Research Workbench frontend (query, compare, suggest, filters).
 """

@@ -1,5 +1,5 @@
 """
-DevChat v2.0 SOTA - PDF Processor
+3ie Evidence Assistant - PDF Processor
 
 Uses MinerU 2.6.x for SOTA PDF extraction:
 - Text extraction with layout preservation

@@ -1,5 +1,5 @@
 """
-DevChat v2.0 SOTA - Logging Configuration
+3ie Evidence Assistant - Logging Configuration
 
 Structured logging with:
 - Console output (colored)

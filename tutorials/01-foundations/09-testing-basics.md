@@ -10,7 +10,7 @@
 - Mocking external dependencies
 - Testing FastAPI endpoints
 - Frontend testing patterns
-- DevChat testing strategy
+- 3ie Evidence Assistant testing strategy
 
 ---
 
@@ -540,7 +540,7 @@ exclude_lines = [
 
 ---
 
-## 🎯 DevChat Testing Strategy
+## 🎯 3ie Evidence Assistant Testing Strategy
 
 ### Test Pyramid
 
@@ -643,7 +643,7 @@ class TestClaimLedgerSynthesizer:
 
 **Next:** [Post 10: Deployment Pipeline →](10-deployment-pipeline.md)
 
-Learn how to deploy DevChat to production with CI/CD.
+Learn how to deploy 3ie Evidence Assistant to production with CI/CD.
 
 ---
 

@@ -1,5 +1,5 @@
 """
-DevChat v2.0 SOTA - Usage Logger
+3ie Evidence Assistant - Usage Logger
 
 Persistent logging of API usage, tokens, and costs to Supabase.
 """

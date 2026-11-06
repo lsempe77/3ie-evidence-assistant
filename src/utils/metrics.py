@@ -1,5 +1,5 @@
 """
-DevChat v2.0 SOTA - Metrics Tracking
+3ie Evidence Assistant - Metrics Tracking
 
 Track and report metrics:
 - Latency (p50, p95, p99)

@@ -1,4 +1,4 @@
-# DevChat v2.0 - Railway Production Dockerfile
+# 3ie Evidence Assistant - Railway Production Dockerfile
 # Slim image for API-only deployment (no PDF processing)
 # Build: 2026-01-28 - force cache invalidation
 

@@ -202,7 +202,7 @@ export function QualityTab() {
             <Info className="h-4 w-4" />
             <AlertDescription>
               Baseline metrics from evaluation runs. Current values are from the MiniCheck test suite 
-              documented in <a href="https://github.com/lsempe77/dev_chat/blob/main/docs/EVALUATION.md" 
+              documented in <a href="https://github.com/lsempe77/3ie-evidence-assistant/blob/main/docs/EVALUATION.md" 
               target="_blank" rel="noopener noreferrer" className="underline">EVALUATION.md</a>.
             </AlertDescription>
           </Alert>
@@ -249,7 +249,7 @@ export function QualityTab() {
           <FlaskConical className="h-4 w-4" />
           <AlertDescription>
             Use <strong>Langfuse</strong> for prompt engineering, A/B testing, and detailed trace analysis. 
-            All DevChat queries are automatically traced to Langfuse with full context.
+            All 3ie Evidence Assistant queries are automatically traced to Langfuse with full context.
           </AlertDescription>
         </Alert>
 
@@ -351,7 +351,7 @@ export function QualityTab() {
         <AlertDescription>
           For details on the evaluation methodology, see{" "}
           <a
-            href="https://github.com/lsempe77/dev_chat/blob/main/docs/EVALUATION.md"
+            href="https://github.com/lsempe77/3ie-evidence-assistant/blob/main/docs/EVALUATION.md"
             target="_blank"
             rel="noopener noreferrer"
             className="underline hover:text-primary"

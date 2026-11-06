@@ -1,5 +1,5 @@
 """
-DevChat v2.0 - Structured Answer Synthesizer for Impact Evaluations
+3ie Evidence Assistant - Structured Answer Synthesizer for Impact Evaluations
 
 Two-pass approach for citation accuracy:
 1. First pass: Extract structured evidence from EACH source separately
@@ -176,7 +176,7 @@ class StructuredSynthesizer:
                     additional_kwargs={
                         "extra_headers": {
                             "HTTP-Referer": "https://3ieimpact.org",
-                            "X-Title": "DevChat 3ie",
+                            "X-Title": "3ie Evidence Assistant",
                         }
                     }
                 )

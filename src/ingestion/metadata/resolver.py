@@ -1,5 +1,5 @@
 """
-DevChat v2.0 SOTA - Metadata Resolver
+3ie Evidence Assistant - Metadata Resolver
 
 Orchestrates metadata resolution from multiple sources:
 1. DOI extraction from PDF

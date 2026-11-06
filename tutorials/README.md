@@ -1,8 +1,8 @@
-# DevChat Learning Path: From Zero to Production RAG
+# 3ie Evidence Assistant Learning Path: From Zero to Production RAG
 
 **A 50-Part Tutorial Series**
 
-> Learn to build a production-grade RAG application by studying the DevChat codebase.  
+> Learn to build a production-grade RAG application by studying the 3ie Evidence Assistant codebase.  
 > No prior experience required - we'll start from fundamentals and build up to advanced techniques.
 
 ---
@@ -26,7 +26,7 @@ Learn the basics of Python, web development, and project setup.
 | # | Title | Topics | Time |
 |---|-------|--------|------|
 | 01 | [Project Overview & Architecture](01-foundations/01-project-overview.md) | System design, tech stack | 30min |
-| 02 | [Python Fundamentals for DevChat](01-foundations/02-python-fundamentals.md) | Type hints, async/await, Pydantic | 45min |
+| 02 | [Python Fundamentals for 3ie Evidence Assistant](01-foundations/02-python-fundamentals.md) | Type hints, async/await, Pydantic | 45min |
 | 03 | [FastAPI Backend Basics](01-foundations/03-fastapi-basics.md) | Routes, schemas, validation | 60min |
 | 04 | [Next.js Frontend Basics](01-foundations/04-nextjs-basics.md) | App router, components, hooks | 60min |
 | 05 | [Database Setup with Supabase](01-foundations/05-database-setup.md) | PostgreSQL, RLS, migrations | 45min |
@@ -113,7 +113,7 @@ Add production features and deploy.
 ### Recommended Path
 1. **Start at Post 1** - Don't skip ahead, concepts build on each other
 2. **Code Along** - Type out examples, don't just copy-paste
-3. **Read the Source** - Reference actual DevChat files mentioned
+3. **Read the Source** - Reference actual 3ie Evidence Assistant files mentioned
 4. **Experiment** - Break things, fix them, learn by doing
 5. **Build Projects** - Apply learnings to your own ideas
 
@@ -169,7 +169,7 @@ Found an error or have a suggestion? Open an issue or PR:
 
 ## 🙏 Acknowledgments
 
-This tutorial series is based on the real-world DevChat project built for **3ie** (International Initiative for Impact Evaluation). All code examples are production-tested.
+This tutorial series is based on the real-world 3ie Evidence Assistant project built for **3ie** (International Initiative for Impact Evaluation). All code examples are production-tested.
 
 ---
 

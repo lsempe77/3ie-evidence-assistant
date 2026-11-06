@@ -1,5 +1,5 @@
 """
-DevChat v2.0 SOTA - Contextual Retrieval
+3ie Evidence Assistant - Contextual Retrieval
 
 Implements Anthropic's Contextual Retrieval technique (Sep 2024):
 https://www.anthropic.com/news/contextual-retrieval

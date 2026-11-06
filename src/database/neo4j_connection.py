@@ -1,5 +1,5 @@
 """
-DevChat v2.0 SOTA - Knowledge Graph Connection
+3ie Evidence Assistant - Knowledge Graph Connection
 
 Neo4j connection manager for graph-based retrieval.
 """
