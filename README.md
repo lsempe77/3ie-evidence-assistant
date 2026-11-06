@@ -1,282 +1,191 @@
 <p align="center">
-  <img src="https://img.shields.io/badge/Status-Production-brightgreen?style=for-the-badge" alt="Status">
-  <img src="https://img.shields.io/badge/Next.js-15-black?style=for-the-badge&logo=next.js" alt="Next.js">
-  <img src="https://img.shields.io/badge/FastAPI-0.109-009688?style=for-the-badge&logo=fastapi" alt="FastAPI">
-  <img src="https://img.shields.io/badge/Python-3.12-3776ab?style=for-the-badge&logo=python" alt="Python">
+  <img src="https://img.shields.io/badge/Next.js-16-black?style=for-the-badge&logo=next.js" alt="Next.js 16">
+  <img src="https://img.shields.io/badge/FastAPI-0.115+-009688?style=for-the-badge&logo=fastapi" alt="FastAPI">
+  <img src="https://img.shields.io/badge/Python-3.12-3776ab?style=for-the-badge&logo=python" alt="Python 3.12">
 </p>
 
-<h1 align="center">🔬 DevChat</h1>
+<h1 align="center">3ie Evidence Assistant</h1>
 
 <p align="center">
-  <strong>AI-Powered Research Workbench for Academic Literature</strong><br>
-  Multi-tenant RAG platform with citation-grounded synthesis
+  <strong>Citation-grounded question answering and effect-size extraction for impact evaluation literature</strong><br>
+  <sub>Formerly <em>DevChat</em>. The rename is in progress, see <a href="docs/RENAME_PLAN.md">docs/RENAME_PLAN.md</a>.</sub>
 </p>
 
 <p align="center">
-  <a href="https://dev-chat-frontend.vercel.app/">🚀 Live Demo</a> •
-  <a href="#-features">Features</a> •
-  <a href="#%EF%B8%8F-architecture">Architecture</a> •
-  <a href="#-quick-start">Quick Start</a> •
-  <a href="#-learn-the-codebase">Learn the Codebase</a>
+  <a href="https://dev-chat-frontend.vercel.app/">Live app</a> •
+  <a href="#status-november-2026">Status</a> •
+  <a href="#features">Features</a> •
+  <a href="#architecture">Architecture</a> •
+  <a href="#quick-start">Quick start</a> •
+  <a href="docs/ROADMAP.md">Roadmap</a>
 </p>
 
 ---
 
-## ✨ What is DevChat?
+## What it is
 
-DevChat is an **enterprise-grade RAG platform** designed for researchers and evidence synthesis teams. Upload your PDFs, and chat with your literature using state-of-the-art retrieval and citation-grounded responses.
+The 3ie Evidence Assistant is a multi-tenant retrieval-augmented generation (RAG) platform for researchers and
+evidence synthesis teams. Users upload study PDFs into their own projects and ask questions across them. Answers
+cite the source passage, and each citation opens the PDF at the right page.
 
-<table>
-<tr>
-<td width="50%">
-
-### 🎯 For Researchers
-
-- Upload PDFs and create personal research collections
-- Ask complex questions across your documents
-- Get answers with **clickable citations** that jump to PDF pages
-- Export citations in BibTeX, RIS, or CSV
-
-</td>
-<td width="50%">
-
-### 🏢 For Organizations
-
-- **Multi-tenant** - Each user has isolated document collections
-- **Admin dashboard** - Monitor usage, costs, and quality
-- **Langfuse observability** - Full LLM tracing and debugging
-- **Scalable** - GPU processing on Modal, vectors on Qdrant Cloud
-
-</td>
-</tr>
-</table>
+A separate extraction pipeline reads the results tables in each study and pulls out treatment effects
+(coefficients, standard errors, p-values, sample sizes), which the API serves to the chat and the Evidence Panel.
 
 ---
 
-## 📚 Learn the Codebase
+## Status (November 2026)
 
-DevChat includes a **comprehensive 50-part tutorial series** to help you understand and extend the codebase:
+| Area | State |
+| ---- | ----- |
+| Deployment | Frontend on Vercel, API on Railway, PDF processing on Modal. Last commit: April 2026 |
+| RAG answers | Working. Faithfulness 66.5% on a 5-query baseline from January 2026. Target 70%+ |
+| Extraction pipeline | 12,366 rows from 1,115 results tables in 86 studies. **Accuracy is self-measured** (no human ground truth yet) |
+| Evaluation | A human-keyed harness from the TVET parser bake-off is being ported. See the TVET Transfer section of the [Roadmap](docs/ROADMAP.md) |
+| Models | Defaults are 2024-era (`gpt-4o-mini`, `gpt-4o`, Cohere `rerank-v3.5`). Upgrade plan in [Roadmap: SOTA Upgrade](docs/ROADMAP.md#-sota-upgrade-november-2026) |
 
-- **Part 1: Foundations (Posts 1-10)** ✅ Complete
-  - Project architecture, Python/FastAPI/Next.js fundamentals, database setup, authentication, testing, deployment
-- **Part 2: Document Processing (Posts 11-20)** 🚧 Coming soon
-  - PDF parsing with MinerU, chunking strategies, metadata enrichment, Modal GPU pipeline
-- **Part 3: RAG System (Posts 21-30)** 🚧 Coming soon
-  - Vector embeddings, Qdrant, hybrid search, reranking, contextual retrieval
-- **Part 4: Synthesis & Citations (Posts 31-40)** 🚧 Coming soon  
-  - LLM integration, Claim Ledger, MiniCheck verification, citation grounding
-- **Part 5: Production (Posts 41-50)** 🚧 Coming soon
-  - Multi-tenancy, admin dashboard, observability, scaling, cost optimization
-
-**📖 [Start Learning →](tutorials/README.md)**  
-**⏱️ ~42 hours total** • Real-world analogies • Hands-on exercises • DevChat code examples
+> **Honest disclosure:** extraction accuracy has not been validated against human coding. There are no regression
+> tests and no systematic prompt methodology yet. The roadmap's
+> [Critical Gaps](docs/ROADMAP.md#-critical-gaps-must-fix-before-any-other-improvement) section lists what is
+> missing and the TVET Transfer section lists how it will be closed.
 
 ---
 
-## �📊 Quality Metrics
+## Features
 
-Our systems have been rigorously evaluated:
+### Ingestion
 
-### Citation Quality (RAG)
-| Metric | Score | Description |
-| :----: | :---: | ----------- |
-| 🎯 **Faithfulness** | **66.5%** | Claims grounded in retrieved documents |
-| 📚 **Citation Recall** | **98.9%** | All claims properly cited |
-| ✅ **Citation Precision** | **98.9%** | Citations point to correct sources |
+- **MinerU parsing on a Modal T4 GPU**: text, tables (as HTML), figures and equations
+- **Eight-step table post-processing**: removes empty tables, figures and text fragments misread as tables, merges
+  tables split across pages, grafts orphan headers, and repairs captions from the List of Tables
+- **Contextual retrieval**: each chunk is prefixed with an LLM-written summary of its place in the document
+- **Parent-child chunking**: 256-token chunks for search, 1,024-token parents for context
+- **Metadata enrichment** from Crossref and OpenAlex, and **study design classification** (22 designs)
+- **Bibliography import** (RIS, BibTeX, CSV) and **Zotero sync**
 
-### Extraction Pipeline V6
-| Metric | Value | Description |
-| :----: | :---: | ----------- |
-| 📋 **Table Classification** | **~88%** | Self-measured (no human ground truth yet) |
-| 📊 **RESULTS Tables** | **1,115** | From 86 studies in corpus |
-| 🔢 **Rows Extracted** | **12,366** | Coefficients, SEs, p-values |
-| 🌍 **Languages** | **EN/ES/FR/PT** | Multi-language support |
-| 📑 **Table Formats** | **5 types** | Standard, transposed, treatments-cols, outcomes-rows, comparison |
-| 🎯 **Precision** | **❓ Unknown** | Needs golden ground truth (see roadmap) |
-| 🔁 **Recall** | **❓ Unknown** | Needs golden ground truth (see roadmap) |
+### Retrieval
 
-> ⚠️ **Honest disclosure:** Extraction accuracy is currently **self-measured**. We do not yet have a human-coded golden ground truth dataset to validate precision/recall, no regression tests, and no systematic prompt engineering methodology. See [docs/ROADMAP.md](docs/ROADMAP.md#-critical-gaps-must-fix-before-any-other-improvement) for the full list of critical gaps.
+- **Hybrid search** in Qdrant: Cohere `embed-v4.0` dense vectors (1,536 dimensions) plus BM25-style sparse vectors
+- **Quantisation**: binary by default (about 32× smaller), scalar or none as options
+- **Query processing**: multi-query RAG-Fusion with reciprocal rank fusion, query decomposition and step-back
+  prompting. HyDE is implemented but **disabled**, because it lowered faithfulness in testing
+- **Cohere reranking** (`rerank-v3.5`), MMR diversity filtering and lost-in-the-middle reordering
+- **Caching**: embedding cache and a semantic cache for near-identical questions
 
----
+### Synthesis
 
-## 🚀 Features
+- **Claim Ledger**: a two-pass synthesis that extracts claims and binds each one to a source passage
+- **Inline citations** in `[Author, Year, p.X]` form, linked to an in-app PDF viewer with highlighting
+- **Post-hoc verification** with MiniCheck natural-language inference
+- **Per-project settings**: model choice, domain instructions, custom prompts with a ten-version history
 
-<table>
-<tr>
-<td width="33%">
-
-### 📄 Smart Ingestion
-
-- **MinerU GPU parsing** - Tables, figures, equations
-- **8-step post-processing** - Artifact removal, header grafting
-- **List of Tables repair** - Fix corrupted captions from TOC
-- **Page-aware chunking** - 256 words with page tracking
-- **Metadata enrichment** - CrossRef/OpenAlex lookup
-
-</td>
-<td width="33%">
-
-### 🔍 Hybrid Search
-
-- **Dense vectors** - Cohere embed-v4 (1536d)
-- **Binary quantization** - ~32x faster search, 95% recall
-- **Sparse vectors** - BM25-style keyword matching
-- **HyDE expansion** - Hypothetical document queries
-- **Cohere reranking** - Precision filtering
-
-</td>
-<td width="33%">
-
-### 💬 Grounded Synthesis
-
-- **Claim Ledger** - Extract claims, match to sources
-- **Inline citations** - `[Author, Year, p.X]`
-- **PDF viewer** - Click citations → jump to page
-- **Post-hoc verification** - NLI faithfulness check
-
-</td>
-</tr>
-</table>
-
-### 📊 Extraction Pipeline V3
-
-Automatically extract effect sizes from academic papers:
+### Extraction pipeline
 
 ```bash
-# Classify all tables in corpus
-python -m extraction_pipeline.batch.classify
-
-# Extract values from RESULTS tables
-python -m extraction_pipeline.batch.extract
-
-# Full pipeline for single study
-python -m extraction_pipeline.pipeline --study_id 121058356
+python -m extraction_pipeline.batch.classify   # classify every table: RESULTS / DESCRIPTIVE / SKIP
+python -m extraction_pipeline.batch.extract    # extract values from RESULTS tables
+python -m extraction_pipeline.pipeline --study_id 121058356   # one study end to end
 ```
 
-| Stage | Tool | Output |
-| ----- | ---- | ------ |
-| **1. Post-process** | `mineru_postprocessor.py` | Remove artifacts (52→45 tables) |
-| **2. Caption repair** | `list_of_tables_parser.py` | Fix 9 corrupted captions |
-| **3. Classify** | `table_classifier_v3.py` | RESULTS / DESCRIPTIVE / SKIP |
-| **4. Extract** | `batch_extract_values.py` | Coefficients, SEs, p-values |
+| Stage | Module | What it does |
+| ----- | ------ | ------------ |
+| 1. Post-process | `extraction_pipeline/postprocessing/mineru.py` | Removes MinerU artefacts |
+| 2. Caption repair | `extraction_pipeline/postprocessing/lot_parser.py` | Repairs captions from the List of Tables |
+| 3. Classify | `extraction_pipeline/classification/` | Rules first, then an LLM classifier with few-shot examples |
+| 4. Extract | `extraction_pipeline/extraction/` | Handlers for five table layouts, plus prose and figure fallbacks |
+| 5. Store | `extraction_pipeline/adapters/supabase_loader.py` | Loads the `extracted_estimates` table in Supabase |
 
-### 🎛️ Admin Panel
+Results are served by ten endpoints under `/extraction/*` ([api/routes/extraction.py](api/routes/extraction.py)).
+Full detail is in [extraction_pipeline/README.md](extraction_pipeline/README.md).
 
-| Tab | Capabilities |
-| --- | ------------ |
-| **Overview** | Usage stats, cost projections, system health |
-| **Users & RAGs** | All users, projects, document counts |
-| **Quality** | Langfuse experiments, baseline metrics |
-| **Documents** | Processing status, metadata review |
+### Admin panel
+
+Overview (usage, costs, projections), users and projects, quality (Langfuse experiments and baselines),
+documents, processing jobs, and a metadata editor with a PDF viewer.
 
 ---
 
-## 🏗️ Architecture
+## Architecture
 
 ```mermaid
 graph LR
-    subgraph Frontend
-        A[Next.js 15] --> B[Vercel]
-        U[Chat Interface]
-        V[Evidence Panel]
+    subgraph Frontend["Frontend (Vercel)"]
+        A[Next.js 16 app] --> U[Chat and workbench]
+        A --> V[Evidence Panel]
     end
-    
-    subgraph Backend
-        C[FastAPI] --> D[Railway]
-        X[/extraction API]
+
+    subgraph API["API (Railway)"]
+        C[FastAPI] --> X["/extraction endpoints"]
     end
-    
-    subgraph Processing
-        E[MinerU] --> F[Modal GPU]
+
+    subgraph Processing["Processing (Modal)"]
+        E[MinerU on T4 GPU]
     end
-    
-    subgraph Extraction["Extraction Pipeline"]
-        Q[extraction_pipeline] --> R[Table Classification]
-        R --> S[Value Extraction]
-        S --> T[Effect Sizes]
+
+    subgraph Extraction["Extraction pipeline"]
+        Q[Classify tables] --> S[Extract effects]
     end
-    
+
     subgraph Storage
-        G[(Qdrant)] --> H[Vectors]
-        I[(Supabase)] --> J[PostgreSQL]
-        K[(R2)] --> L[PDFs + JSON]
+        G[(Qdrant: vectors)]
+        I[(Supabase: Postgres + auth)]
+        K[(Cloudflare R2: PDFs + parser JSON)]
     end
-    
-    subgraph LLM
-        M[OpenRouter] --> N[GPT-4o / Claude]
-        O[Cohere] --> P[Embed + Rerank]
+
+    subgraph Models
+        M[OpenRouter: LLMs]
+        O[Cohere: embed + rerank]
     end
-    
+
     A --> C
     C --> G
     C --> M
     C --> O
     C --> E
-    E --> G
     E --> K
+    E --> G
     K --> Q
     Q --> M
-    T --> I
+    S --> I
     X --> I
-    C --> X
     V --> X
 ```
 
-> **Integration Complete:** The extraction pipeline stores effect sizes in Supabase and serves them via `/extraction/*` API endpoints for the Evidence Panel and chatbot synthesis.
+### Tech stack
+
+| Layer | Technology |
+| ----- | ---------- |
+| Frontend | Next.js 16, React 19, TypeScript, Tailwind CSS 4, shadcn/ui |
+| API | FastAPI, Python 3.12, Pydantic v2 |
+| Auth and database | Supabase (Postgres, JWT, row-level security) |
+| Vectors | Qdrant Cloud (dense + sparse, binary quantisation) |
+| Embeddings | Cohere `embed-v4.0`, 1,536 dimensions |
+| Reranking | Cohere `rerank-v3.5` |
+| LLMs | OpenRouter. Defaults `openai/gpt-4o-mini` (fast) and `openai/gpt-4o` (reasoning) |
+| PDF processing | MinerU 2.6+ on Modal (T4 GPU) |
+| Storage | Cloudflare R2 |
+| Observability | Langfuse |
 
 ---
 
-## 🔧 Tech Stack
-
-<table>
-<tr><td><b>Frontend</b></td><td>Next.js 15, TypeScript, Tailwind CSS, shadcn/ui</td></tr>
-<tr><td><b>Backend</b></td><td>FastAPI, Python 3.12, Pydantic v2</td></tr>
-<tr><td><b>Auth</b></td><td>Supabase Auth (JWT + RLS)</td></tr>
-<tr><td><b>Database</b></td><td>Supabase PostgreSQL</td></tr>
-<tr><td><b>Vectors</b></td><td>Qdrant Cloud (dense + sparse)</td></tr>
-<tr><td><b>Embeddings</b></td><td>Cohere embed-v4 (1536 dims)</td></tr>
-<tr><td><b>Reranking</b></td><td>Cohere rerank-v3.5</td></tr>
-<tr><td><b>LLM</b></td><td>OpenRouter → GPT-4o, Claude, Gemini</td></tr>
-<tr><td><b>PDF Processing</b></td><td>MinerU 2.6.8 on Modal (T4 GPU)</td></tr>
-<tr><td><b>Storage</b></td><td>Cloudflare R2</td></tr>
-<tr><td><b>Observability</b></td><td>Langfuse</td></tr>
-</table>
-
----
-
-## 🚀 Quick Start
+## Quick start
 
 ### Prerequisites
 
-```bash
-# Required accounts
-- Supabase (auth + database)
-- Qdrant Cloud (vectors)
-- Modal (GPU processing)
-- OpenRouter (LLM)
-- Cohere (embeddings + reranking)
-- Cloudflare R2 (storage)
-```
+Accounts for Supabase, Qdrant Cloud, Modal, OpenRouter, Cohere and Cloudflare R2, plus Python 3.12 and Node 20+.
 
-### Backend
+### API
 
 ```bash
-# Clone repository
-git clone https://github.com/lsempe77/dev_chat.git
-cd dev_chat
+git clone https://github.com/lsempe77/3ie-evidence-assistant.git
+cd 3ie-evidence-assistant
 
-# Create virtual environment
 python -m venv .venv
-source .venv/bin/activate  # or .venv\Scripts\activate on Windows
-
-# Install dependencies
+source .venv/bin/activate        # Windows: .venv\Scripts\activate
 pip install -e .
 
-# Configure environment
-cp .env.example .env
-# Edit .env with your API keys
+# Create .env with the keys listed in src/config/settings.py
+# (there is no .env.example yet)
 
-# Run locally
 uvicorn api.server:app --reload --port 8000
 ```
 
@@ -288,138 +197,62 @@ npm install
 npm run dev
 ```
 
-### Modal Worker
+### Modal worker
 
 ```bash
-# Deploy GPU processing worker
-modal deploy infrastructure/modal_mineru.py
+python -m modal deploy infrastructure/modal_mineru.py
+```
+
+Use `python -m modal`, not the `modal` executable, which exits silently on some Windows set-ups. The Modal
+workspace that owns the deployed app is `lsempe77`. Activate that profile before deploying.
+
+---
+
+## Project structure
+
+```
+.
+├── api/                    FastAPI app
+│   ├── routes/             chat, rags, extraction, zotero, health, admin/
+│   └── schemas/            Pydantic models
+├── src/                    Core library
+│   ├── agents/             query orchestration
+│   ├── retrieval/          hybrid retriever, reranker, query processing, HyDE
+│   ├── generation/         Claim Ledger, synthesiser, post-hoc verifier, router
+│   ├── ingestion/          chunking, contextualiser, embeddings, indexer, metadata
+│   ├── extraction/         extraction schemas
+│   ├── auth/ database/ config/ utils/
+├── extraction_pipeline/    Effect-size extraction
+│   ├── core/ parsing/ classification/ extraction/
+│   ├── enrichment/ postprocessing/ batch/ adapters/
+│   └── pipeline.py         orchestration
+├── infrastructure/         Modal app (modal_mineru.py, modal_lib/)
+├── frontend/               Next.js app (app/, components/, lib/)
+├── supabase/migrations/    SQL migrations
+├── evaluation/             evaluation scripts and baselines
+├── tests/                  pytest suite
+├── scripts/                maintenance utilities
+├── tutorials/              learning series (Part 1 written)
+└── docs/                   roadmap, evaluation, extraction, Sphinx docs
 ```
 
 ---
 
-## 📁 Project Structure
+## Documentation
 
-```
-devchat_v2_sota/
-├── 📂 api/                    # FastAPI backend
-│   ├── routes/               # API endpoints
-│   │   ├── admin/           # Admin panel APIs
-│   │   ├── chat.py          # Chat/query endpoint
-│   │   └── rags.py          # RAG management
-│   └── schemas/              # Pydantic models
-│
-├── 📂 src/                    # Core Python libraries
-│   ├── agents/               # DevChatAgent (orchestrator)
-│   ├── retrieval/            # HybridRetriever
-│   ├── generation/           # ClaimLedger synthesis
-│   ├── ingestion/            # Embeddings, parsers
-│   └── utils/                # Langfuse, caching
-│
-├── 📂 extraction_pipeline/    # Table extraction & classification
-│   ├── core/                 # Config, errors, LLM client
-│   ├── adapters/             # Schema conversion
-│   ├── postprocessing/       # Effect sizes, outcome classification
-│   ├── table_classifier_v3.py  # LLM-based classification
-│   ├── batch_classify_v3.py    # Batch classification
-│   ├── batch_extract_values.py # Extract coefficients/SEs
-│   ├── mineru_postprocessor.py # 8-step artifact removal
-│   └── list_of_tables_parser.py # Caption repair
-│
-├── 📂 frontend/               # Next.js 15 app
-│   └── src/
-│       ├── app/              # App router pages
-│       ├── components/       # React components
-│       └── lib/              # API clients
-│
-├── 📂 infrastructure/         # Modal configs
-├── 📂 evaluation/             # Quality metrics
-├── 📂 scripts/                # Utilities
-├── 📂 tutorials/              # 50-part learning series
-├── 📂 docs/                   # Documentation
-└── 📂 archive/                # Historical files
-```
+| Document | Contents |
+| -------- | -------- |
+| [SETUP_TRACKER.md](SETUP_TRACKER.md) | Implementation status and configuration |
+| [docs/ROADMAP.md](docs/ROADMAP.md) | Priorities, including the TVET Transfer and SOTA Upgrade plans |
+| [docs/RENAME_PLAN.md](docs/RENAME_PLAN.md) | Steps for the DevChat → 3ie Evidence Assistant rename |
+| [docs/EVALUATION.md](docs/EVALUATION.md) | Citation-quality evaluation framework and baselines |
+| [docs/EXTRACTION.md](docs/EXTRACTION.md) | Extraction pipeline reference |
+| [docs/MINERU_POSTPROCESSING_PLAN.md](docs/MINERU_POSTPROCESSING_PLAN.md) | The eight post-processing steps |
+| [tutorials/README.md](tutorials/README.md) | Learning series. Part 1 (posts 1–10) is written, Parts 2–5 are planned |
+| [CHANGELOG.md](CHANGELOG.md) | Version history (last entry January 2026) |
 
 ---
 
-## 📚 Documentation
+## Acknowledgements
 
-| Document | Description |
-| -------- | ----------- |
-| [SETUP_TRACKER.md](SETUP_TRACKER.md) | Current implementation status |
-| [docs/ROADMAP.md](docs/ROADMAP.md) | Future features and priorities |
-| [docs/EVALUATION.md](docs/EVALUATION.md) | Citation quality evaluation |
-| [CHANGELOG.md](CHANGELOG.md) | Version history |
-
----
-
-## 🗺️ Roadmap
-
-### ✅ Completed
-
-- [x] Multi-tenant RAG with per-user collections
-- [x] Hybrid search (dense + sparse vectors)
-- [x] Citation-grounded synthesis with Claim Ledger
-- [x] Admin panel with usage & cost tracking
-- [x] Langfuse observability integration
-- [x] Zotero bibliography sync
-- [x] Per-RAG model selection (GPT-4o / Claude / Gemini)
-- [x] PDF citation highlighting with inline viewer
-- [x] Study design classification (22 types)
-- [x] Contextual retrieval (49% fewer failures)
-- [x] Parent-child chunking
-- [x] **Extraction Pipeline V6** - LLM table classification with ~88% self-measured accuracy
-- [x] **MinerU Post-Processing** - 8-step artifact removal (52→45 tables)
-- [x] **List of Tables Cross-Reference** - Caption repair from TOC
-- [x] **Batch Value Extraction** - 12,366 rows from 1,115 RESULTS tables
-- [x] **Multi-Language Support** - EN, ES, FR, PT table extraction
-- [x] **5 Table Format Handlers** - Standard, transposed, treatments-cols, outcomes-rows, comparison
-- [x] **Prose & Figure Fallbacks** - LLM extraction when tables unavailable
-- [x] **Treatment Arm Normalization** - Map T1/T2 to descriptive names from captions
-- [x] **Production API Integration** - Supabase storage + `/extraction/*` endpoints
-
-### � Critical Gaps (Top Priority)
-
-Foundational issues that block measuring any future improvement. See [docs/ROADMAP.md](docs/ROADMAP.md#-critical-gaps-must-fix-before-any-other-improvement).
-
-1. **Golden ground truth database** — No human-coded gold standard exists
-2. **Prompt engineering methodology** — All 9 prompts iterated by feel, no variants tested
-3. **Regression testing suite** — Changes can silently break working extractions
-4. **Coverage measurement** — Real precision/recall unknown
-5. **Confidence scores** — All outputs are point values with zero uncertainty
-6. **Contradiction resolution** — Table vs prose disagreements undetected
-7. **Validation against published meta-analyses** — Existing reviews not used
-8. **User feedback loop** — No way for researchers to flag/correct errors
-
-### 🔜 Coming Soon
-
-See [docs/ROADMAP.md](docs/ROADMAP.md) for the full prioritized list.
-
-**Immediate:**
-
-- Study design filter in Evidence Panel
-- Auto-classify on document ingest
-- Domain-specific intervention components
-
-**Short-Term:**
-
-- Improve faithfulness (66% → 70%+)
-- Smart citations (supporting/contrasting)
-- Consensus meter visualization
-
----
-
-## 🙏 Acknowledgments
-
-Built with ❤️ by **[3ie](https://www.3ieimpact.org/)** (International Initiative for Impact Evaluation)
-
-<p align="center">
-  <sub>Empowering evidence-informed decision making through AI</sub>
-</p>
-
----
-
-<p align="center">
-  <a href="https://dev-chat-frontend.vercel.app/">
-    <img src="https://img.shields.io/badge/Try%20DevChat-Live%20Demo-blue?style=for-the-badge" alt="Try DevChat">
-  </a>
-</p>
+Built by [3ie](https://www.3ieimpact.org/), the International Initiative for Impact Evaluation.
