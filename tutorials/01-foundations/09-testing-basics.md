@@ -275,10 +275,10 @@ def test_enrich_from_doi(mock_get):
 # tests/test_chat_agent.py
 import pytest
 from unittest.mock import AsyncMock, patch
-from src.agents.devchat_agent import DevChatAgent
+from src.agents.evidence_assistant_agent import EvidenceAssistantAgent
 
 @pytest.mark.asyncio
-@patch('src.agents.devchat_agent.OpenAI')
+@patch('src.agents.evidence_assistant_agent.OpenAI')
 async def test_query_with_mock_llm(mock_openai_class):
     """Test agent with mocked LLM."""
     
@@ -299,7 +299,7 @@ async def test_query_with_mock_llm(mock_openai_class):
     )
     
     # Test agent
-    agent = DevChatAgent()
+    agent = EvidenceAssistantAgent()
     response = await agent.query(
         query="What are the effects?",
         project_id="test_123",

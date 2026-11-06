@@ -223,7 +223,7 @@ async def query_evidence(request: QueryRequest):
                         year_min = settings_obj.yearCutoff
                 
                 # Convert API settings to agent SearchSettings
-                from src.agents.devchat_agent import SearchSettings as AgentSearchSettings
+                from src.agents.evidence_assistant_agent import SearchSettings as AgentSearchSettings
                 agent_settings = None
                 if settings_obj:
                     agent_settings = AgentSearchSettings(

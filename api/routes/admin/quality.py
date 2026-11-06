@@ -142,13 +142,13 @@ async def run_evaluation_task(run_id: str, evaluator: str, collection_name: Opti
             raise ValueError("No test cases found")
         
         # Import evaluator and agent
-        from src.agents.devchat_agent import DevChatAgent
+        from src.agents.evidence_assistant_agent import EvidenceAssistantAgent
         from src.retrieval.settings import SearchSettings
         
         # Use default graduation collection if not specified
         project_id = collection_name or "0816e8d3-ab23-417c-bf3f-e45531411c73"
         
-        agent = DevChatAgent(project_id=project_id)
+        agent = EvidenceAssistantAgent(project_id=project_id)
         search_settings = SearchSettings(max_studies=5, use_claim_ledger=True)
         
         # Select evaluator

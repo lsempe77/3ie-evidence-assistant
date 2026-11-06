@@ -139,11 +139,11 @@ sentry.capture_exception(e)  # Sent to error tracking
 ```python
 # src/exceptions.py
 
-class DevChatError(Exception):
+class EvidenceAssistantError(Exception):
     """Base exception for all 3ie Evidence Assistant errors."""
     pass
 
-class DocumentError(DevChatError):
+class DocumentError(EvidenceAssistantError):
     """Document-related errors."""
     pass
 
@@ -158,11 +158,11 @@ class DocumentProcessingError(DocumentError):
         self.reason = reason
         super().__init__(f"Failed to process {doc_id}: {reason}")
 
-class RetrievalError(DevChatError):
+class RetrievalError(EvidenceAssistantError):
     """Search/retrieval errors."""
     pass
 
-class LLMError(DevChatError):
+class LLMError(EvidenceAssistantError):
     """LLM API errors."""
     def __init__(self, provider: str, message: str):
         self.provider = provider

@@ -10,7 +10,7 @@ from typing import Optional
 # SYSTEM PROMPTS
 # =============================================================================
 
-DEVCHAT_SYSTEM_PROMPT = """You are the 3ie Evidence Assistant, an AI research assistant that helps users explore \
+EVIDENCE_ASSISTANT_SYSTEM_PROMPT = """You are the 3ie Evidence Assistant, an AI research assistant that helps users explore \
 evidence from 3ie's Development Evidence Portal - a database of impact evaluations and systematic reviews.
 
 CRITICAL MINDSET:
@@ -31,7 +31,7 @@ Response approach:
 - Always frame findings as "Study X found..." not "Research shows..."
 - Cite with [1], [2] etc. referencing the study order in context"""
 
-DEVCHAT_SIMPLE_SYSTEM_PROMPT = """You are the 3ie Evidence Assistant, a search assistant for 3ie's \
+EVIDENCE_ASSISTANT_SIMPLE_SYSTEM_PROMPT = """You are the 3ie Evidence Assistant, a search assistant for 3ie's \
 Development Evidence Portal. Summarize what the retrieved studies show, being clear \
 these are specific studies - not comprehensive evidence. Always cite your sources."""
 
@@ -397,5 +397,5 @@ def get_system_prompt(query_type: Optional[str] = None) -> str:
         System prompt string
     """
     if query_type == "simple":
-        return DEVCHAT_SIMPLE_SYSTEM_PROMPT
-    return DEVCHAT_SYSTEM_PROMPT
+        return EVIDENCE_ASSISTANT_SIMPLE_SYSTEM_PROMPT
+    return EVIDENCE_ASSISTANT_SYSTEM_PROMPT

@@ -19,7 +19,7 @@ from typing import Dict, List
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from src.agents.devchat_agent import DevChatAgent
+from src.agents.evidence_assistant_agent import EvidenceAssistantAgent
 from src.utils.logging import get_logger, setup_logging
 
 setup_logging()
@@ -176,7 +176,7 @@ def main():
     
     # Initialize agent
     logger.info("\n🤖 Initializing 3ie Evidence Assistant agent...")
-    agent = DevChatAgent()
+    agent = EvidenceAssistantAgent()
     
     # Run evaluation
     logger.info("\n🧪 Running evaluation...")

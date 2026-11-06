@@ -282,7 +282,7 @@ exits silently on this machine.
 4. **"I Don't Know" Explicit Refusal** - 2h
    - When retrieval confidence is below threshold, explicitly refuse to answer
    - Prevents hallucination when no good sources found
-   - Files: `src/agents/devchat_agent.py`, `src/generation/claim_ledger.py`
+   - Files: `src/agents/evidence_assistant_agent.py`, `src/generation/claim_ledger.py`
 
 ### Short-Term
 

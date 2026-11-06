@@ -21,7 +21,7 @@ from datetime import datetime
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from src.agents.devchat_agent import DevChatAgent, SearchSettings
+from src.agents.evidence_assistant_agent import EvidenceAssistantAgent, SearchSettings
 from src.utils.logging import setup_logging, get_logger
 from evaluation.ragas_evaluator import RAGASEvaluator, EvaluationResult, generate_report
 
@@ -42,7 +42,7 @@ async def evaluate_single_query(
         print('='*60)
     
     # Initialize agent
-    agent = DevChatAgent()
+    agent = EvidenceAssistantAgent()
     settings = SearchSettings(use_structured_citations=use_structured)
     
     # Get response
@@ -160,7 +160,7 @@ async def run_batch_evaluation():
     print(f"Running evaluation on {len(test_cases)} test cases")
     print(f"{'='*60}")
     
-    agent = DevChatAgent()
+    agent = EvidenceAssistantAgent()
     evaluator = RAGASEvaluator()
     
     results_standard = []

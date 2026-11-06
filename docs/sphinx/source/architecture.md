@@ -62,7 +62,7 @@
 
 ```
 src/
-├── agents/           # DevChatAgent - main orchestrator
+├── agents/           # EvidenceAssistantAgent - main orchestrator
 ├── generation/       # Synthesis and verification
 │   ├── claim_ledger.py      # Two-pass citation extraction
 │   ├── post_hoc_verifier.py # MiniCheck NLI

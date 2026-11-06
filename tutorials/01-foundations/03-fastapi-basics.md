@@ -250,14 +250,14 @@ From `api/routes/chat.py`:
 ```python
 from fastapi import APIRouter, HTTPException, Depends
 from api.schemas.chat import ChatRequest, ChatResponse
-from src.agents.devchat_agent import DevChatAgent
+from src.agents.evidence_assistant_agent import EvidenceAssistantAgent
 
 router = APIRouter()
 
 @router.post("/chat", response_model=ChatResponse)
 async def chat_endpoint(
     request: ChatRequest,
-    agent: DevChatAgent = Depends(get_agent)
+    agent: EvidenceAssistantAgent = Depends(get_agent)
 ):
     """
     Process a chat query with RAG.

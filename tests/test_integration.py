@@ -7,7 +7,7 @@ End-to-end tests for the full pipeline.
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from src.agents.devchat_agent import DevChatAgent, DevChatAgentFactory, DevChatResponse
+from src.agents.evidence_assistant_agent import EvidenceAssistantAgent, EvidenceAssistantAgentFactory, EvidenceAssistantResponse
 from src.config.settings import Settings
 
 
@@ -22,11 +22,11 @@ def mock_settings():
 
 
 class TestDevChatAgent:
-    """Integration tests for DevChatAgent."""
+    """Integration tests for EvidenceAssistantAgent."""
     
     @pytest.mark.asyncio
     async def test_agent_chat_returns_response(self):
-        """Test that agent returns a DevChatResponse."""
+        """Test that agent returns a EvidenceAssistantResponse."""
         # This test would require mocking the entire pipeline
         # For now, just test the factory
         pass
@@ -38,8 +38,8 @@ class TestDevChatAgent:
         pass
     
     def test_chat_response_to_dict(self):
-        """Test DevChatResponse serialization."""
-        response = DevChatResponse(
+        """Test EvidenceAssistantResponse serialization."""
+        response = EvidenceAssistantResponse(
             answer="Test answer",
             query_type="synthesis",
             model_used="claude-3-5-haiku",
@@ -60,14 +60,14 @@ class TestDevChatAgent:
 
 
 class TestAgentFactory:
-    """Tests for DevChatAgentFactory."""
+    """Tests for EvidenceAssistantAgentFactory."""
     
     def test_factory_methods_exist(self):
         """Test factory methods exist."""
-        assert hasattr(DevChatAgentFactory, 'create_default')
-        assert hasattr(DevChatAgentFactory, 'create_fast')
-        assert hasattr(DevChatAgentFactory, 'create_accurate')
-        assert hasattr(DevChatAgentFactory, 'create_with_custom_collection')
+        assert hasattr(EvidenceAssistantAgentFactory, 'create_default')
+        assert hasattr(EvidenceAssistantAgentFactory, 'create_fast')
+        assert hasattr(EvidenceAssistantAgentFactory, 'create_accurate')
+        assert hasattr(EvidenceAssistantAgentFactory, 'create_with_custom_collection')
 
 
 class TestEndToEnd:

@@ -3,7 +3,7 @@
 import asyncio
 import json
 from evaluation.ragas_evaluator import RAGASEvaluator, run_evaluation_batch, generate_report
-from src.agents.devchat_agent import DevChatAgent
+from src.agents.evidence_assistant_agent import EvidenceAssistantAgent
 
 
 async def run_full_eval():
@@ -12,7 +12,7 @@ async def run_full_eval():
         data = json.load(f)
     test_cases = data['test_cases']  # All 8 graduation-focused cases
     
-    agent = DevChatAgent()
+    agent = EvidenceAssistantAgent()
     
     print(f'Running RAGAS evaluation on {len(test_cases)} test cases...\n')
     for i, tc in enumerate(test_cases):

@@ -179,11 +179,11 @@ cd devchat_v2_sota
 python -c "
 import asyncio
 from evaluation.minicheck_evaluator import MiniCheckEvaluator
-from src.agents.devchat_agent import DevChatAgent
+from src.agents.evidence_assistant_agent import EvidenceAssistantAgent
 from src.retrieval.settings import SearchSettings
 
 async def quick_eval():
-    agent = DevChatAgent(project_id='YOUR_PROJECT_ID')
+    agent = EvidenceAssistantAgent(project_id='YOUR_PROJECT_ID')
     settings = SearchSettings(max_studies=5, use_claim_ledger=True)
     
     result = await agent.chat('What is the graduation approach?', settings)

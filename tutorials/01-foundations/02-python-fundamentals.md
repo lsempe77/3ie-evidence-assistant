@@ -65,7 +65,7 @@ def process_document(doc: dict, user: str) -> str:
 
 ### 3ie Evidence Assistant Example
 
-From `src/agents/devchat_agent.py`:
+From `src/agents/evidence_assistant_agent.py`:
 
 ```python
 from typing import List, Dict, Optional
@@ -360,7 +360,7 @@ async def search(
 ```
 src/
 ├── agents/
-│   └── devchat_agent.py          # Main RAG orchestrator
+│   └── evidence_assistant_agent.py          # Main RAG orchestrator
 ├── retrieval/
 │   ├── hybrid_retriever.py       # Search implementation
 │   └── reranker.py               # Cohere reranking
@@ -392,7 +392,7 @@ from ..utils.cache import get_cached_response
 # Type-only imports (don't import at runtime)
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from src.agents.devchat_agent import DevChatAgent
+    from src.agents.evidence_assistant_agent import EvidenceAssistantAgent
 ```
 
 ---
@@ -474,7 +474,7 @@ if user is not None:
 
 ## 💡 Real 3ie Evidence Assistant Example
 
-Let's trace through `src/agents/devchat_agent.py`:
+Let's trace through `src/agents/evidence_assistant_agent.py`:
 
 ```python
 from typing import List, Dict, Optional
@@ -492,7 +492,7 @@ class SearchResult(BaseModel):
     score: float
     metadata: Dict[str, any]
 
-class DevChatAgent:
+class EvidenceAssistantAgent:
     """Main RAG agent orchestrator."""
     
     def __init__(

@@ -63,7 +63,7 @@ class SearchSettings:
 
 
 @dataclass
-class DevChatResponse:
+class EvidenceAssistantResponse:
     """Complete response from 3ie Evidence Assistant."""
     answer: str
     query_type: str
@@ -102,7 +102,7 @@ class DevChatResponse:
         }
 
 
-class DevChatAgent:
+class EvidenceAssistantAgent:
     """
     Main 3ie Evidence Assistant agent orchestrating the full RAG pipeline.
     
@@ -143,7 +143,7 @@ class DevChatAgent:
         session_id: Optional[str] = None,
         model_config: Optional[Dict[str, Any]] = None,
         prompt_config: Optional[Dict[str, Any]] = None,
-    ) -> DevChatResponse:
+    ) -> EvidenceAssistantResponse:
         """
         Process a user query and generate a response.
         
@@ -160,7 +160,7 @@ class DevChatAgent:
                           Dict with provider, model, reasoning_model, temperature
             
         Returns:
-            DevChatResponse with answer and metadata
+            EvidenceAssistantResponse with answer and metadata
         """
         import time
         
@@ -426,7 +426,7 @@ class DevChatAgent:
             total_time = (time.time() - total_start) * 1000
             threshold_pct = int(user_settings.relevance_threshold * 100)
             max_score_pct = int(threshold_max_score * 100)
-            return DevChatResponse(
+            return EvidenceAssistantResponse(
                 answer=(
                     f"No results meet the current relevance threshold ({threshold_pct}%). "
                     f"The best matching document scored {max_score_pct}%. "
@@ -580,7 +580,7 @@ class DevChatAgent:
             logger.warning(f"Failed to log usage: {e}")
         
         # Build response
-        response = DevChatResponse(
+        response = EvidenceAssistantResponse(
             answer=answer,
             query_type=processed_query.query_type.value,
             model_used=model_used,
@@ -671,7 +671,7 @@ class DevChatAgent:
         self,
         query: str,
         include_citations: bool = True,
-    ) -> DevChatResponse:
+    ) -> EvidenceAssistantResponse:
         """Synchronous chat."""
         import asyncio
         return asyncio.run(self.chat(query, include_citations))
@@ -854,31 +854,31 @@ class DevChatAgent:
             ]
 
 
-class DevChatAgentFactory:
+class EvidenceAssistantAgentFactory:
     """
     Factory for creating 3ie Evidence Assistant agents with different configurations.
     """
     
     @staticmethod
-    def create_default() -> DevChatAgent:
+    def create_default() -> EvidenceAssistantAgent:
         """Create agent with default settings."""
-        return DevChatAgent()
+        return EvidenceAssistantAgent()
     
     @staticmethod
-    def create_fast() -> DevChatAgent:
+    def create_fast() -> EvidenceAssistantAgent:
         """Create agent optimized for speed (less accuracy)."""
         from src.retrieval.reranker import NoOpReranker
         
-        return DevChatAgent(
+        return EvidenceAssistantAgent(
             reranker=NoOpReranker(),
         )
     
     @staticmethod
-    def create_accurate() -> DevChatAgent:
+    def create_accurate() -> EvidenceAssistantAgent:
         """Create agent optimized for accuracy (slower)."""
         from src.retrieval.hybrid_retriever import HierarchicalRetriever
         
-        return DevChatAgent(
+        return EvidenceAssistantAgent(
             retriever=HierarchicalRetriever(
                 num_studies=8,
                 chunks_per_study=4,
@@ -886,8 +886,8 @@ class DevChatAgentFactory:
         )
     
     @staticmethod
-    def create_with_custom_collection(collection_name: str) -> "DevChatAgent":
+    def create_with_custom_collection(collection_name: str) -> "EvidenceAssistantAgent":
         """Create agent for a specific Qdrant collection (multi-tenant support)."""
-        return DevChatAgent(
+        return EvidenceAssistantAgent(
             retriever=HybridRetriever(collection_name=collection_name),
         )

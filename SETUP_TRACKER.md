@@ -426,7 +426,7 @@ devchat_v2_sota/
 ├── api/                    # FastAPI backend
 │   └── routes/             # API endpoints
 ├── src/                    # Core Python libraries
-│   ├── agents/             # DevChatAgent
+│   ├── agents/             # EvidenceAssistantAgent
 │   ├── generation/         # ClaimLedgerSynthesizer
 │   ├── ingestion/          # Chunking, study design
 │   ├── extraction/         # Schemas + SignificanceParser

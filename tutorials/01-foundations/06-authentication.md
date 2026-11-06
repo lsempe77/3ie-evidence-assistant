@@ -496,7 +496,7 @@ From `api/routes/chat.py`:
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from api.dependencies import get_current_user
-from src.agents.devchat_agent import DevChatAgent
+from src.agents.evidence_assistant_agent import EvidenceAssistantAgent
 
 router = APIRouter()
 
@@ -508,7 +508,7 @@ class ChatRequest(BaseModel):
 async def chat_endpoint(
     request: ChatRequest,
     user = Depends(get_current_user),
-    agent: DevChatAgent = Depends(get_agent)
+    agent: EvidenceAssistantAgent = Depends(get_agent)
 ):
     """
     Process a chat query.

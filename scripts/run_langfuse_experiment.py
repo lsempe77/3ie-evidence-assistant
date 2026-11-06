@@ -37,7 +37,7 @@ async def run_experiment(
 ):
     """Run the test dataset through 3ie Evidence Assistant and log results."""
     
-    from src.agents.devchat_agent import DevChatAgent, SearchSettings
+    from src.agents.evidence_assistant_agent import EvidenceAssistantAgent, SearchSettings
     from src.retrieval.hybrid_retriever import HybridRetriever
     from evaluation.minicheck_evaluator import MiniCheckEvaluator
     
@@ -54,7 +54,7 @@ async def run_experiment(
     
     # Initialize agent with custom collection and evaluator
     collection_name = "rag_0816e8d3-ab23-417c-bf3f-e45531411c73"
-    agent = DevChatAgent(retriever=HybridRetriever(collection_name=collection_name))
+    agent = EvidenceAssistantAgent(retriever=HybridRetriever(collection_name=collection_name))
     evaluator = MiniCheckEvaluator(backend='api', api_model='openai/gpt-4o-mini')
     
     settings = SearchSettings(

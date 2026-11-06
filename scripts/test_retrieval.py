@@ -2,10 +2,10 @@
 """Test the full agent retrieval after deduplication."""
 
 import asyncio
-from src.agents.devchat_agent import DevChatAgent, SearchSettings
+from src.agents.evidence_assistant_agent import EvidenceAssistantAgent, SearchSettings
 
 async def test():
-    agent = DevChatAgent()
+    agent = EvidenceAssistantAgent()
     settings = SearchSettings(max_studies=5, use_claim_ledger=True)
     resp = await agent.chat('What is the graduation approach to poverty reduction?', search_settings=settings)
     

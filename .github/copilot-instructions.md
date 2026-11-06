@@ -56,7 +56,7 @@
 
 ```
 src/                  # Python libraries
-├── agents/           # LLM agents (DevChatAgent)
+├── agents/           # LLM agents (EvidenceAssistantAgent)
 ├── generation/       # Synthesis (ClaimLedgerSynthesizer)
 ├── ingestion/        # Chunking, classification
 ├── retrieval/        # Hybrid search, reranking

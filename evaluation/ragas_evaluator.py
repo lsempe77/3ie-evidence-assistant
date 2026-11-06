@@ -378,7 +378,7 @@ async def run_evaluation_batch(
     
     Args:
         test_cases: List of {query, ...} dicts
-        agent: DevChatAgent instance
+        agent: EvidenceAssistantAgent instance
         
     Returns:
         List of EvaluationResult objects
