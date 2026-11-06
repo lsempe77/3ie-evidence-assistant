@@ -1,7 +1,18 @@
 # Rename plan: DevChat → 3ie Evidence Assistant
 
-**Status:** planned, nothing executed yet (6 November 2026)
+**Status (6 November 2026):** steps 1 and 2 done. Steps 3 to 9 not started.
 **Scope agreed:** everything, including infrastructure
+
+| Step | State |
+| ---- | ----- |
+| 1. Code on branch `rename/evidence-assistant` | Done, not merged. Tests 51 passed / 2 skipped, no new lint findings, frontend type-check clean |
+| 2. GitHub repo rename | Done. `lsempe77/dev_chat` now redirects to `lsempe77/3ie-evidence-assistant` |
+| 3–7. Infrastructure cutover | Not started |
+| 8. Decommission | Not started |
+| 9. Local folder | Not started |
+
+Step 1 left `docker-compose.yml` unchanged (local-only service, container and network names), because the
+file is outside the editing permissions used for this work.
 
 This plan renames the product, the repository, the code and the cloud resources. Each step lists how to undo
 it. Steps that touch production run in the order below, so the live app keeps working at every point.
