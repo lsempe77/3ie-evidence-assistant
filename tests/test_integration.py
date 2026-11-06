@@ -21,7 +21,7 @@ def mock_settings():
     )
 
 
-class TestDevChatAgent:
+class TestEvidenceAssistantAgent:
     """Integration tests for EvidenceAssistantAgent."""
     
     @pytest.mark.asyncio

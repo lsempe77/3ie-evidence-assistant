@@ -400,7 +400,7 @@ Sphinx autodoc setup is complete in `docs/sphinx/`.
    - Source: Select "GitHub Actions"
    - The workflow `.github/workflows/docs.yml` will auto-deploy on push
 
-3. **Access docs at:** `https://lsempe77.github.io/dev_chat/`
+3. **Access docs at:** `https://lsempe77.github.io/3ie-evidence-assistant/`
 
 ### Build Locally:
 ```bash
@@ -422,7 +422,7 @@ sphinx-build -b html source build/html
 ## 📁 Repository Structure
 
 ```text
-devchat_v2_sota/
+3ie-evidence-assistant/
 ├── api/                    # FastAPI backend
 │   └── routes/             # API endpoints
 ├── src/                    # Core Python libraries

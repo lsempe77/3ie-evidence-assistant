@@ -113,7 +113,7 @@ These are foundational problems. Without solving them, every other "improvement"
      measure that needs no human labels
    - `TVET/pipeline/make_ground_truth_sheet.py` + `pipeline/groundtruth/CHECKER_INSTRUCTIONS.md`: the
      process for building new keys
-   - Adapt to devchat's output schema (`extracted_estimates`, 28 columns, and
+   - Adapt to the assistant's output schema (`extracted_estimates`, 28 columns, and
      `extraction_pipeline/outputs/full_corpus_for_validation.csv`)
    - **Output:** `evaluation/tvet/` with a `PROVENANCE.md`
 
@@ -122,11 +122,11 @@ These are foundational problems. Without solving them, every other "improvement"
      `data/8WR QEX Combined.xlsx` carries row-level locations (page, table, row label, point
      estimate). If it does, it is the ground truth for Critical Gap #1 at no new coding cost.
    - If it does not, apply T1's sheet generator and checker instructions to 10–15 studies
-   - Also score devchat's extractor on the 6 TVET pilot papers, which already have a key
+   - Also score the assistant's extractor on the 6 TVET pilot papers, which already have a key
      (`TVET/ground_truth_datasets/`), as a cross-domain check
 
 3. **T3. Score both extraction designs against the same key** - 6h
-   - devchat `extraction_pipeline/` (rules + LLM over MinerU JSON) vs OM_QEX phases 1–3 (table
+   - Our `extraction_pipeline/` (rules + LLM over MinerU JSON) vs OM_QEX phases 1–3 (table
      discovery → filtering → extraction, as vendored in `TVET/pipeline/vendor/`)
    - Decide which design to keep **before** further prompt work (Critical Gap #2)
 
@@ -145,7 +145,7 @@ These are foundational problems. Without solving them, every other "improvement"
    - Tighten table classification to exclude balance and cost-decomposition tables (TVET's open item,
      and its main source of lost precision)
    - Quote bibliography lines beginning `system:` before sending them to OpenRouter, which refuses them
-     with HTTP 403 `system_prefix_spoofing` (check whether devchat routes through OpenRouter)
+     with HTTP 403 `system_prefix_spoofing` (check whether the assistant routes through OpenRouter)
    - Store the PDF page index alongside the printed folio. In one TVET study they differed by 2,384
    - Sanitise lone surrogates in parser Markdown:
      `md.encode("utf-8", "surrogatepass").decode("utf-8", "replace")`
@@ -364,7 +364,7 @@ exits silently on this machine.
 
 6. **Slack/Teams MCP Integration** - 20h
    - Let researchers query 3ie Evidence Assistant from Slack without switching apps
-   - Example: `@devchat What effect sizes for cash transfers?`
+   - Example: `@evidence-assistant What effect sizes for cash transfers?`
    - Reference: [MCPs for Developers](https://www.oreilly.com/radar/mcps-for-developers-who-think-they-dont-need-mcps/)
 
 7. **Context7-style Live Docs MCP** - 12h

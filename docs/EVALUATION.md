@@ -175,7 +175,7 @@ print(f"Citation Precision: {result.citation_precision:.2%}")
 ### Quick Evaluation (Single Query)
 
 ```bash
-cd devchat_v2_sota
+cd 3ie-evidence-assistant
 python -c "
 import asyncio
 from evaluation.minicheck_evaluator import MiniCheckEvaluator

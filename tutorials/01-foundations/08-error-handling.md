@@ -238,7 +238,7 @@ def setup_logging(level: str = "INFO"):
     
     # File output (production)
     logger.add(
-        "logs/devchat_{time:YYYY-MM-DD}.log",
+        "logs/evidence_assistant_{time:YYYY-MM-DD}.log",
         rotation="1 day",
         retention="30 days",
         level="INFO",

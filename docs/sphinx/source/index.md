@@ -35,7 +35,7 @@ changelog
 
 - **Production:** https://dev-chat-frontend.vercel.app/
 - **API Health:** https://3iechat.up.railway.app/health
-- **GitHub:** https://github.com/lsempe77/dev_chat
+- **GitHub:** https://github.com/lsempe77/3ie-evidence-assistant
 
 ## Features
 
