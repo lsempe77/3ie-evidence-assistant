@@ -283,6 +283,194 @@ def run_mineru(pdf_path: Path, save_debug_output: bool = False) -> dict:
 
 
 # ============================================================================
+# MonkeyOCR Extraction
+# ============================================================================
+
+def run_monkeyocr(pdf_path: Path) -> dict:
+    """
+    Run MonkeyOCR extraction on a PDF file.
+
+    MonkeyOCR installs as the ``magic_pdf`` package (same namespace as MinerU)
+    but exposes a VLM-based pipeline via ``magic_pdf.model.custom_model.MonkeyOCR``.
+    Model weights are downloaded from HuggingFace ``echo840/MonkeyOCR`` on first
+    run and cached in the Modal volume at ``/cache/monkeyocr/``.
+
+    Args:
+        pdf_path: Path to the PDF file
+
+    Returns:
+        dict with the same top-level keys as run_mineru():
+            success, content, content_list, tables, formulas, page_count,
+            title, authors, year, abstract, model_output, extraction_config
+    """
+    import json
+    import os
+    import re as _re
+    import tempfile
+
+    print(f"  Running MonkeyOCR on {pdf_path.name}...")
+
+    # ── Model weight paths ────────────────────────────────────────────────────
+    MODEL_DIR   = Path("/cache/monkeyocr")
+    CONFIG_PATH = "/tmp/monkeyocr_config.yaml"
+
+    try:
+        # ── 1. Download weights once; cache in the Modal volume ───────────────
+        if not (MODEL_DIR / "Recognition").exists():
+            from huggingface_hub import snapshot_download  # type: ignore
+            print("    Downloading MonkeyOCR weights from HuggingFace (~7 GB, one-time)…")
+            MODEL_DIR.mkdir(parents=True, exist_ok=True)
+            snapshot_download(
+                repo_id="echo840/MonkeyOCR",
+                local_dir=str(MODEL_DIR),
+                ignore_patterns=["*.gitattributes", "*.gitignore", "README.md"],
+            )
+            print("    Download complete.")
+        else:
+            print("    Using cached MonkeyOCR weights.")
+
+        # ── 2. Write model_configs.yaml ───────────────────────────────────────
+        # Use 'doclayout_yolo' layout model (bundled .pt) and 'transformers'
+        # backend so we don't need lmdeploy installed.
+        import yaml  # type: ignore
+
+        config = {
+            "device": "cuda",
+            "weights": {
+                "doclayout_yolo": "Structure/doclayout_yolo_docstructbench_imgsz1280_2501.pt",
+                "PP-DocLayout_plus-L": "Structure/PP-DocLayout_plus-L",
+                "layoutreader": "Relation",
+            },
+            "models_dir": str(MODEL_DIR),
+            "layout_config": {
+                "model": "doclayout_yolo",
+                # reader key must be INSIDE layout_config (read by layout_config.get('reader'))
+                "reader": {
+                    "name": "layoutreader",
+                },
+            },
+            "chat_config": {
+                "weight_path": str(MODEL_DIR / "Recognition"),
+                "backend": "transformers",
+                "batch_size": 4,
+            },
+        }
+        with open(CONFIG_PATH, "w") as fh:
+            yaml.safe_dump(config, fh)
+
+        # ── 3. Initialise MonkeyOCR model ─────────────────────────────────────
+        from magic_pdf.model.custom_model import MonkeyOCR as _MonkeyOCR  # type: ignore
+        from magic_pdf.data.data_reader_writer import (  # type: ignore
+            FileBasedDataWriter,
+            FileBasedDataReader,
+        )
+        from magic_pdf.data.dataset import PymuDocDataset  # type: ignore
+        from magic_pdf.model.doc_analyze_by_custom_model_llm import doc_analyze_llm  # type: ignore
+
+        print("    Loading MonkeyOCR model…")
+        model = _MonkeyOCR(CONFIG_PATH)
+
+        # ── 4. Run inference ──────────────────────────────────────────────────
+        with tempfile.TemporaryDirectory() as out_dir:
+            img_dir = os.path.join(out_dir, "images")
+            os.makedirs(img_dir, exist_ok=True)
+
+            reader = FileBasedDataReader()
+            file_bytes = reader.read(str(pdf_path))
+            ds = PymuDocDataset(file_bytes)
+
+            image_writer = FileBasedDataWriter(img_dir)
+            md_writer    = FileBasedDataWriter(out_dir)
+
+            print("    Running inference…")
+            infer_result = ds.apply(doc_analyze_llm, MonkeyOCR_model=model)
+            pipe_result  = infer_result.pipe_ocr_mode(image_writer, MonkeyOCR_model=model)
+
+            stem = pdf_path.stem
+            pipe_result.dump_md(md_writer, f"{stem}.md", "images")
+            pipe_result.dump_content_list(md_writer, f"{stem}_content_list.json", "images")
+
+            md_path    = os.path.join(out_dir, f"{stem}.md")
+            cl_path    = os.path.join(out_dir, f"{stem}_content_list.json")
+
+            md_content = open(md_path, encoding="utf-8").read()
+            try:
+                content_list = json.loads(open(cl_path, encoding="utf-8").read())
+            except Exception:
+                content_list = []
+
+        # ── 5. Extract tables from content_list ───────────────────────────────
+        tables: list = []
+        for item in content_list:
+            if item.get("type") in ("table", "table_body"):
+                tables.append({
+                    "type": "table",
+                    "table_body": (
+                        item.get("table_body")
+                        or item.get("html")
+                        or item.get("content")
+                        or ""
+                    ),
+                    "table_caption": item.get("table_caption", []),
+                    "page_idx": item.get("page_idx"),
+                    "_extraction_meta": {
+                        "source": "monkeyocr",
+                        "extraction_timestamp": datetime.now().isoformat(),
+                    },
+                })
+
+        # Fall back to regex extraction if content_list had no tables
+        if not tables:
+            html_pat = _re.compile(r'(<table[\s\S]*?</table>)', _re.IGNORECASE)
+            md_pat   = _re.compile(r'(\|.+\|\n\|[-| :]+\|\n(?:\|.+\|\n?)+)', _re.MULTILINE)
+            for match in html_pat.finditer(md_content):
+                tables.append({
+                    "type": "table", "table_body": match.group(1),
+                    "table_caption": [], "page_idx": None,
+                    "_extraction_meta": {"source": "monkeyocr_regex"},
+                })
+            if not tables:
+                for match in md_pat.finditer(md_content):
+                    tables.append({
+                        "type": "table", "table_body": match.group(0),
+                        "table_caption": [], "page_idx": None,
+                        "_extraction_meta": {"source": "monkeyocr_regex"},
+                    })
+
+        # ── 6. Page count (heuristic from content_list) ───────────────────────
+        all_pages = [item.get("page_idx") for item in content_list if item.get("page_idx") is not None]
+        page_count = (max(all_pages) + 1) if all_pages else 0
+
+        print(f"    MonkeyOCR done: {len(md_content)} chars, {len(tables)} tables, {page_count} pages")
+
+        return {
+            "success": True,
+            "content": md_content,
+            "content_list": content_list,
+            "tables": tables,
+            "figures_detected": [],
+            "artifacts_filtered": [],
+            "formulas": [],
+            "page_count": page_count,
+            "title": extract_title(md_content),
+            "authors": extract_authors_from_text(md_content),
+            "year": extract_year_from_text(md_content),
+            "abstract": extract_abstract(md_content),
+            "model_output": None,
+            "extraction_config": {
+                "backend": "monkeyocr",
+                "model": "echo840/MonkeyOCR",
+                "inference_backend": "transformers",
+            },
+        }
+
+    except Exception as e:
+        error_msg = f"{e}\n{traceback.format_exc()}"
+        print(f"  MonkeyOCR failed: {error_msg}")
+        return {"success": False, "error": str(e)}
+
+
+# ============================================================================
 # Text Extraction Helpers
 # ============================================================================
 

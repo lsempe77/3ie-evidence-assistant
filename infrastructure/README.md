@@ -1,6 +1,6 @@
 # Infrastructure Setup Guide
 
-**Last Updated:** January 15, 2026
+**Last Updated:** February 23, 2026
 
 ## Architecture Overview
 
@@ -29,13 +29,14 @@
 │   ┌───────────────────────────────────────────────────────────────────────┐  │
 │   │                      PROCESSING (Modal)                                │  │
 │   │                                                                        │  │
-│   │   ┌─────────────────┐         ┌─────────────────┐                     │  │
-│   │   │  orchestrator() │────────▶│  process_pdf()  │                     │  │
-│   │   │  (CPU, $0.10/hr)│  spawn  │  (T4 GPU, $0.59)│                     │  │
-│   │   └─────────────────┘         └─────────────────┘                     │  │
-│   │                                                                        │  │
+│   │   ┌─────────────────┐         ┌─────────────────┐  ┌───────────────────┐ │  │
+│   │   │  orchestrator() │────────▶│  process_pdf()  │  │process_pdf_       │ │  │
+│   │   │  (CPU, $0.10/hr)│  spawn  │  (T4 GPU, $0.59)│  │monkeyocr()        │ │  │
+│   │   └─────────────────┘         └─────────────────┘  │(A10G GPU, $0.99)  │ │  │
+│   │                                 MinerU parser       └───────────────────┘ │  │
+│   │                                                       MonkeyOCR VLM       │  │
 │   │   Scale: 0 → 10 workers automatically                                 │  │
-│   │   Cost: ~$0.01 per PDF (30 pages)                                     │  │
+│   │   Cost: ~$0.01/PDF (MinerU) · ~$0.02/PDF (MonkeyOCR)                 │  │
 │   │                                                                        │  │
 │   └───────────────────────────────────────────────────────────────────────┘  │
 │                                                                              │
@@ -190,12 +191,27 @@ modal deploy modal_mineru.py
 # Check status
 modal run modal_mineru.py --action status
 
-# Process all new PDFs
+# Process all new PDFs (MinerU)
 modal run modal_mineru.py --action run
 
-# Process single PDF
+# Process single PDF with MinerU
 modal run modal_mineru.py --action single --pdf-key "input-pdfs/paper.pdf"
+
+# Process single PDF with MonkeyOCR (comparison mode — no Qdrant indexing)
+modal run modal_mineru.py --action monkeyocr --pdf-key "input-pdfs/paper.pdf"
+
+# MonkeyOCR: force re-run + index to dedicated Qdrant collection
+modal run modal_mineru.py --action monkeyocr --pdf-key "input-pdfs/paper.pdf" --force --index
 ```
+
+### Parser Comparison
+
+Both parsers write to separate R2 namespaces so outputs can be compared:
+
+| Parser | R2 paths | Qdrant collection | GPU | Notes |
+|--------|----------|-------------------|-----|-------|
+| MinerU | `outputs/md/`, `outputs/json/` | `devchat_v2_enhanced` | T4 | Production default |
+| MonkeyOCR | `outputs/monkeyocr/md/`, `outputs/monkeyocr/json/` | `devchat_monkeyocr` | A10G | Comparison / evaluation |
 
 ---
 
@@ -265,12 +281,13 @@ NEXT_PUBLIC_API_URL=http://localhost:8000  # or production URL
 
 ### Paid Usage (1000+ PDFs/month)
 
-| Service | Rate | 1000 PDFs/mo |
-|---------|------|--------------|
-| Modal GPU | $0.59/hr T4 | ~$12 (20 hrs) |
-| R2 Storage | $0.015/GB | ~$0.15 (10GB) |
-| Cohere | Free tier | $0 |
-| **Total** | | **~$12/month** |
+| Service | Rate | 1000 PDFs/mo (MinerU) | 1000 PDFs/mo (MonkeyOCR) |
+|---------|------|-----------------------|--------------------------|
+| Modal GPU (T4) | $0.59/hr | ~$12 (20 hrs) | — |
+| Modal GPU (A10G) | $0.99/hr | — | ~$20 (20 hrs) |
+| R2 Storage | $0.015/GB | ~$0.15 (10GB) | ~$0.15 (10GB) |
+| Cohere | Free tier | $0 | $0 |
+| **Total** | | **~$12/month** | **~$20/month** |
 
 ---
 
@@ -310,7 +327,15 @@ docker-compose up -d
 
 ### MinerU: "CUDA out of memory"
 - PDF too large for T4 (16GB VRAM)
-- Split PDF or use A10G ($0.99/hr, 24GB)
+- Split PDF or use A10G (`gpu="A10G"` in config)
+
+### MonkeyOCR: "ImportError: MonkeyOCR not installed"
+- The `monkeyocr_image` builds from GitHub source
+- Re-deploy if the image cache is stale: `modal deploy infrastructure/modal_mineru.py`
+
+### MonkeyOCR: "CUDA out of memory"
+- Requires A10G (24 GB VRAM) — already enforced in `process_pdf_monkeyocr()`
+- Very large PDFs (100+ pages) may still OOM; split first
 
 
 ---

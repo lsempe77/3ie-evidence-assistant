@@ -1,12 +1,12 @@
 """
-Modal MinerU Library
+Modal MinerU / MonkeyOCR Library
 
 Modular components for PDF processing pipeline.
 
 Modules:
-- config: Modal app, image, secrets, volumes
+- config: Modal app, images (MinerU + MonkeyOCR), secrets, volumes
 - utils: Helper functions (R2 client, sanitization)
-- extraction: MinerU PDF extraction
+- extraction: MinerU & MonkeyOCR PDF extraction
 - metadata: CrossRef, OpenAlex, LLM enrichment
 - embedding: Chunking, embedding, Qdrant operations
 - processing: PDF processing functions (GPU)
@@ -16,6 +16,7 @@ Modules:
 from .config import (
     app,
     base_image,
+    monkeyocr_image,
     model_cache,
     r2_secret,
     qdrant_secret,
@@ -34,6 +35,7 @@ from .utils import (
 
 from .extraction import (
     run_mineru,
+    run_monkeyocr,
     post_process_content,
     extract_title,
     extract_abstract,
@@ -52,6 +54,7 @@ from .embedding import (
 
 from .processing import (
     process_pdf,
+    process_pdf_monkeyocr,
     process_pdf_rag,
     check_qdrant_indexed,
     delete_qdrant_chunks,
@@ -71,6 +74,7 @@ __all__ = [
     # Config
     "app",
     "base_image",
+    "monkeyocr_image",
     "model_cache",
     "r2_secret",
     "qdrant_secret",
@@ -85,6 +89,7 @@ __all__ = [
     "sanitize_dict",
     # Extraction
     "run_mineru",
+    "run_monkeyocr",
     "post_process_content",
     "extract_title",
     "extract_abstract",
@@ -97,6 +102,7 @@ __all__ = [
     "chunk_content_with_pages",
     # Processing
     "process_pdf",
+    "process_pdf_monkeyocr",
     "process_pdf_rag",
     "check_qdrant_indexed",
     "delete_qdrant_chunks",

@@ -19,6 +19,7 @@ from typing import Optional, Tuple
 from .config import (
     app,
     base_image,
+    monkeyocr_image,
     r2_secret,
     qdrant_secret,
     cohere_secret,
@@ -507,6 +508,194 @@ def process_pdf(pdf_key: str, skip_extraction: bool = False, force_reindex: bool
             pass
         print(f"  ERROR: {e}")
         return {"success": False, "pdf_key": pdf_key, "error": str(e)}
+
+
+# ============================================================================
+# MonkeyOCR Processing Function (GPU)
+# ============================================================================
+
+@app.function(
+    image=monkeyocr_image,
+    gpu="A10G",        # MonkeyOCR VLM needs more VRAM than MinerU's pipeline
+    timeout=2400,
+    secrets=[r2_secret, qdrant_secret, cohere_secret, openrouter_secret],
+    volumes={"/cache": model_cache},
+    retries=0,
+)
+def process_pdf_monkeyocr(
+    pdf_key: str,
+    force_reprocess: bool = False,
+    index_to_qdrant: bool = False,
+) -> dict:
+    """
+    Process a single PDF from R2 using MonkeyOCR (alternative to MinerU).
+
+    Outputs are written to a separate R2 prefix (outputs/monkeyocr/) so
+    results can be compared side-by-side with MinerU without overwriting.
+
+    Args:
+        pdf_key: R2 key for the PDF (e.g., "input-pdfs/paper.pdf")
+        force_reprocess: Re-run even if MonkeyOCR output already exists in R2
+        index_to_qdrant: Also embed & index the output (default False for comparison mode)
+
+    Returns:
+        dict with processing results and R2 output keys
+    """
+    import tempfile
+    import asyncio
+
+    from .extraction import run_monkeyocr, post_process_content
+
+    os.environ["HF_HOME"] = "/cache/huggingface"
+    os.environ["TRANSFORMERS_CACHE"] = "/cache/huggingface"
+
+    print(f"[MonkeyOCR] Processing: {pdf_key}")
+    start_time = datetime.now()
+
+    s3 = get_r2_client()
+    bucket = get_bucket_name()
+    doc_id = Path(pdf_key).stem
+
+    # Output keys use a dedicated monkeyocr/ sub-namespace
+    md_key   = f"outputs/monkeyocr/md/{doc_id}.md"
+    json_key = f"outputs/monkeyocr/json/{doc_id}.json"
+
+    # Skip if output already exists and not forcing
+    if not force_reprocess:
+        try:
+            s3.head_object(Bucket=bucket, Key=json_key)
+            print(f"  [MonkeyOCR] Already processed ({json_key}), skipping.")
+            return {
+                "success": True,
+                "doc_id": doc_id,
+                "pdf_key": pdf_key,
+                "skipped": True,
+                "reason": "already_processed",
+                "md_key": md_key,
+                "json_key": json_key,
+            }
+        except Exception:
+            pass  # Object not found — proceed
+
+    # Download PDF
+    with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
+        s3.download_file(bucket, pdf_key, tmp.name)
+        pdf_path = Path(tmp.name)
+
+    print(f"  Downloaded: {pdf_path} ({pdf_path.stat().st_size / 1024:.1f} KB)")
+
+    result = run_monkeyocr(pdf_path)
+
+    if not result["success"]:
+        pdf_path.unlink(missing_ok=True)
+        return {"success": False, "pdf_key": pdf_key, "doc_id": doc_id, "error": result.get("error")}
+
+    print(f"  MonkeyOCR extracted: {len(result['content'])} chars, {len(result['tables'])} tables")
+
+    # Sanitize
+    result["content"] = sanitize_text(result["content"])
+    result["tables"]  = sanitize_dict(result["tables"])
+    if result.get("title"):
+        result["title"] = sanitize_text(result["title"])
+    if result.get("abstract"):
+        result["abstract"] = sanitize_text(result["abstract"])
+
+    result["content"] = post_process_content(
+        content=result["content"],
+        title=result.get("title"),
+        authors=result.get("authors"),
+        year=result.get("year"),
+        pdf_name=Path(pdf_key).name,
+    )
+
+    # Upload to R2 under monkeyocr namespace
+    s3.put_object(
+        Bucket=bucket,
+        Key=md_key,
+        Body=result["content"].encode("utf-8"),
+        ContentType="text/markdown",
+    )
+    output_data = {
+        "doc_id": doc_id,
+        "source_key": pdf_key,
+        "parser": "monkeyocr",
+        "model": "echo-miao/MonkeyOCR",
+        "processed_at": datetime.now().isoformat(),
+        "title": result.get("title"),
+        "authors": result.get("authors"),
+        "year": result.get("year"),
+        "abstract": result.get("abstract"),
+        "content": result["content"],
+        "tables": result["tables"],
+        "formulas": result["formulas"],
+        "page_count": result.get("page_count", 0),
+        "extraction_config": result.get("extraction_config", {}),
+    }
+    s3.put_object(
+        Bucket=bucket,
+        Key=json_key,
+        Body=json.dumps(output_data, indent=2, ensure_ascii=False).encode("utf-8"),
+        ContentType="application/json",
+    )
+    print(f"  Uploaded: {md_key}, {json_key}")
+
+    # Optionally index to Qdrant (separate collection to avoid polluting MinerU data)
+    chunk_count = 0
+    if index_to_qdrant:
+        enriched_metadata = resolve_metadata(
+            content=result["content"],
+            title=result.get("title"),
+            authors=result.get("authors", []),
+            year=result.get("year"),
+            pdf_filename=Path(pdf_key).name,
+        )
+        enriched_metadata["doc_id"] = doc_id
+        enriched_metadata["source"] = pdf_key
+        enriched_metadata["parser"] = "monkeyocr"
+
+        openrouter_key = os.environ.get("OPENROUTER_API_KEY")
+        if openrouter_key:
+            abstract_text = enriched_metadata.get("abstract") or result.get("abstract") or result["content"][:8000]
+            study_design_result = asyncio.run(
+                classify_study_design_llm(
+                    title=enriched_metadata.get("title") or result.get("title") or "",
+                    abstract_or_content=abstract_text,
+                    api_key=openrouter_key,
+                )
+            )
+            enriched_metadata.update({
+                "study_design": study_design_result.get("study_design", "unknown"),
+                "study_design_confidence": study_design_result.get("study_design_confidence", 0.0),
+                "study_design_reasoning": study_design_result.get("study_design_reasoning", ""),
+            })
+
+        # Use a dedicated MonkeyOCR Qdrant collection to keep parity with MinerU
+        monkeyocr_collection = "devchat_monkeyocr"
+        chunk_count = embed_and_index(
+            content=result["content"],
+            metadata=enriched_metadata,
+            doc_id=doc_id,
+            content_list=result.get("content_list"),
+            collection_name=monkeyocr_collection,
+        )
+        print(f"  Indexed {chunk_count} chunks to Qdrant ({monkeyocr_collection})")
+
+    pdf_path.unlink(missing_ok=True)
+
+    elapsed = (datetime.now() - start_time).total_seconds()
+    return {
+        "success": True,
+        "doc_id": doc_id,
+        "pdf_key": pdf_key,
+        "md_key": md_key,
+        "json_key": json_key,
+        "pages": result.get("page_count", 0),
+        "chunks_indexed": chunk_count,
+        "elapsed_seconds": elapsed,
+        "title": result.get("title"),
+        "content_length": len(result["content"]),
+        "table_count": len(result["tables"]),
+    }
 
 
 @app.function(
