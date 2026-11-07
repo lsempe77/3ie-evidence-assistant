@@ -285,7 +285,7 @@ class DocumentSyncRequest(BaseModel):
     """
     Request to sync a document from Modal to Postgres.
     
-    Sent by Modal after successful Qdrant indexing.
+    Sent by Modal after successful chunk indexing.
     """
     doc_id: str
     title: str

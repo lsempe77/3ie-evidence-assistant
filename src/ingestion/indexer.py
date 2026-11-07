@@ -1,529 +1,178 @@
 """
-3ie Evidence Assistant - Qdrant Indexer
+3ie Evidence Assistant - Chunk indexer
 
-Manages the Qdrant vector database:
-- Collection creation with hybrid search support
-- Document indexing (dense + sparse vectors)
-- Metadata payload indexing
+Writes document chunks and their embeddings to Supabase (the `chunks` table),
+replacing the Qdrant indexer. Keyword search needs no client-side work: Postgres
+builds the full-text vector from each chunk's text when the row is written.
 """
 
-from typing import Dict, List, Optional
+from __future__ import annotations
 
-from qdrant_client import QdrantClient, models
-from qdrant_client.http.exceptions import UnexpectedResponse
+import asyncio
+from types import SimpleNamespace
+from typing import Any, Dict, List, Optional
 
-from src.config.settings import settings
-from src.ingestion.embeddings import EmbeddingGenerator, get_embedding_dimension
+from src.ingestion.embeddings import EmbeddingGenerator
 from src.utils.logging import get_logger
+from src.vectorstore import ChunkStore, legacy_collection_to_project_id
 
 logger = get_logger(__name__)
 
+# Node metadata keys that map onto table columns rather than the metadata JSONB.
+_TEXT_KEYS = {"text", "parent_text", "parent_text_full", "contextual_prefix", "text_with_context"}
 
-class QdrantIndexer:
-    """
-    Manage Qdrant vector database for hybrid search.
-    
-    Features:
-    - Dense vectors (semantic similarity)
-    - Sparse vectors (BM25/keyword matching)
-    - Metadata payload indexing
-    """
-    
+
+def doc_key_from(identifier: str) -> str:
+    """Normalise 'input-pdfs/a1b2_file.pdf', 'a1b2_file.pdf' or 'a1b2_file' to 'a1b2_file'."""
+    base = identifier.replace("\\", "/").rsplit("/", 1)[-1]
+    return base.rsplit(".", 1)[0] if "." in base else base
+
+
+class ChunkIndexer:
+    """Index and manage one project's chunks."""
+
     def __init__(
         self,
-        url: str = settings.qdrant_url,
-        api_key: Optional[str] = settings.qdrant_api_key,
-        collection_name: str = settings.qdrant_collection_name,
+        project_id: Optional[str] = None,
+        store: Optional[ChunkStore] = None,
+        embedding_generator: Optional[EmbeddingGenerator] = None,
+        collection_name: Optional[str] = None,  # Legacy 'rag_<hex>' name, mapped to project_id
     ):
-        self.collection_name = collection_name
-        
-        # Initialize client
-        if api_key:
-            self.client = QdrantClient(url=url, api_key=api_key)
-        else:
-            self.client = QdrantClient(url=url)
-        
-        self.embedding_generator = EmbeddingGenerator()
-        self.embedding_dim = get_embedding_dimension()
-        
-        logger.info(f"Connected to Qdrant at {url}")
-    
-    def create_collection(
-        self,
-        recreate: bool = False,
-        enable_hybrid: bool = settings.hybrid_enabled,
-    ) -> None:
-        """
-        Create or recreate the Qdrant collection.
-        
-        Args:
-            recreate: If True, delete existing collection first
-            enable_hybrid: If True, configure for hybrid search
-        """
-        # Check if collection exists
-        try:
-            collection_info = self.client.get_collection(self.collection_name)
-            if collection_info and not recreate:
-                logger.info(f"Collection '{self.collection_name}' already exists")
-                return
-            elif collection_info and recreate:
-                logger.warning(f"Deleting existing collection '{self.collection_name}'")
-                self.client.delete_collection(self.collection_name)
-        except UnexpectedResponse:
-            pass  # Collection doesn't exist
-        
-        # Configure vectors
-        vectors_config = {
-            "dense": models.VectorParams(
-                size=self.embedding_dim,
-                distance=models.Distance.COSINE,
-            )
-        }
-        
-        # Configure sparse vectors for hybrid search
-        sparse_vectors_config = None
-        if enable_hybrid:
-            sparse_vectors_config = {
-                "sparse": models.SparseVectorParams(
-                    modifier=models.Modifier.IDF,  # BM25-like scoring
-                )
-            }
-        
-        # Create collection
-        self.client.create_collection(
-            collection_name=self.collection_name,
-            vectors_config=vectors_config,
-            sparse_vectors_config=sparse_vectors_config,
-            optimizers_config=models.OptimizersConfigDiff(
-                indexing_threshold=20000,
-            ),
-        )
-        
-        # Create payload indexes for metadata filtering
-        self._create_payload_indexes()
-        
-        logger.info(
-            f"Created collection '{self.collection_name}' "
-            f"(hybrid={enable_hybrid}, dim={self.embedding_dim})"
-        )
-    
-    def _create_payload_indexes(self) -> None:
-        """Create indexes on metadata fields for efficient filtering."""
-        # Index commonly filtered fields
-        index_fields = [
-            ("study_id", models.PayloadSchemaType.KEYWORD),
-            ("document_id", models.PayloadSchemaType.KEYWORD),
-            ("source", models.PayloadSchemaType.KEYWORD),
-            ("year", models.PayloadSchemaType.INTEGER),
-            ("sector", models.PayloadSchemaType.KEYWORD),
-            ("country", models.PayloadSchemaType.KEYWORD),
-            ("region", models.PayloadSchemaType.KEYWORD),
-            ("study_type", models.PayloadSchemaType.KEYWORD),
-            ("confidence_rating", models.PayloadSchemaType.KEYWORD),
-        ]
-        
-        for field_name, field_type in index_fields:
-            try:
-                self.client.create_payload_index(
-                    collection_name=self.collection_name,
-                    field_name=field_name,
-                    field_schema=field_type,
-                )
-            except Exception as e:
-                logger.debug(f"Index for '{field_name}' may already exist: {e}")
-    
-    def ensure_indexes(self) -> Dict[str, bool]:
-        """
-        Ensure all required payload indexes exist on the collection.
-        Can be called on existing collections to add missing indexes.
-        
-        Returns:
-            Dict of field_name -> success status
-        """
-        index_fields = [
-            ("study_id", models.PayloadSchemaType.KEYWORD),
-            ("document_id", models.PayloadSchemaType.KEYWORD),
-            ("source", models.PayloadSchemaType.KEYWORD),
-            ("year", models.PayloadSchemaType.INTEGER),
-            ("sector", models.PayloadSchemaType.KEYWORD),
-            ("country", models.PayloadSchemaType.KEYWORD),
-            ("region", models.PayloadSchemaType.KEYWORD),
-            ("study_type", models.PayloadSchemaType.KEYWORD),
-            ("study_design", models.PayloadSchemaType.KEYWORD),  # LLM-classified: rct, did, qualitative
-            ("confidence_rating", models.PayloadSchemaType.KEYWORD),
-        ]
-        
-        results = {}
-        for field_name, field_type in index_fields:
-            try:
-                self.client.create_payload_index(
-                    collection_name=self.collection_name,
-                    field_name=field_name,
-                    field_schema=field_type,
-                )
-                results[field_name] = True
-                logger.info(f"Created index for '{field_name}'")
-            except Exception as e:
-                if "already exists" in str(e).lower():
-                    results[field_name] = True
-                    logger.debug(f"Index for '{field_name}' already exists")
-                else:
-                    results[field_name] = False
-                    logger.warning(f"Failed to create index for '{field_name}': {e}")
-        
-        return results
+        self.project_id = project_id or legacy_collection_to_project_id(collection_name)
+        if not self.project_id:
+            raise ValueError("ChunkIndexer needs a project_id (or a legacy 'rag_<id>' collection name)")
+        self.store = store or ChunkStore()
+        self._embedding_generator = embedding_generator
 
-    def index_nodes(
-        self,
-        nodes: List,
-        batch_size: int = 100,
-        enable_sparse: bool = settings.hybrid_enabled,
-    ) -> None:
-        """
-        Index nodes into Qdrant.
-        
-        Args:
-            nodes: List of LlamaIndex nodes with embeddings
-            batch_size: Number of points to upsert at once
-            enable_sparse: Whether to generate sparse vectors
-        """
-        from tqdm import tqdm
-        
-        # Ensure embeddings are present
-        nodes_without_embeddings = [n for n in nodes if n.embedding is None]
-        if nodes_without_embeddings:
-            logger.info(f"Generating embeddings for {len(nodes_without_embeddings)} nodes")
-            self.embedding_generator.embed_nodes(nodes_without_embeddings)
-        
-        # Prepare points
-        points = []
-        for node in tqdm(nodes, desc="Preparing points"):
-            point = self._node_to_point(node, enable_sparse=enable_sparse)
-            points.append(point)
-        
-        # Batch upsert
-        for i in tqdm(range(0, len(points), batch_size), desc="Indexing batches"):
-            batch = points[i:i + batch_size]
-            self.client.upsert(
-                collection_name=self.collection_name,
-                points=batch,
-            )
-        
-        logger.info(f"Indexed {len(points)} points to '{self.collection_name}'")
-    
-    def _node_to_point(
-        self,
-        node,
-        enable_sparse: bool = True,
-    ) -> models.PointStruct:
-        """Convert a LlamaIndex node to a Qdrant point."""
-        # Dense vector
-        vectors = {
-            "dense": node.embedding,
-        }
-        
-        # Sparse vector (BM25-style)
-        if enable_sparse:
-            sparse_vector = self._generate_sparse_vector(node.get_content())
-            vectors["sparse"] = sparse_vector
-        
-        # Payload (metadata)
-        payload = {
-            "text": node.get_content(),
-            "node_id": node.node_id,
-            **node.metadata,
-        }
-        
-        return models.PointStruct(
-            id=self._generate_point_id(node.node_id),
-            vector=vectors,
-            payload=payload,
-        )
-    
-    def _generate_sparse_vector(self, text: str) -> models.SparseVector:
-        """
-        Generate a sparse vector for BM25-style matching.
-        
-        Uses simple term frequency for now.
-        For production, consider SPLADE or learned sparse encoders.
-        """
-        import hashlib
-        import re
-        from collections import Counter, defaultdict
-        
-        # Simple tokenization
-        tokens = re.findall(r'\b\w+\b', text.lower())
-        
-        # Filter short tokens and stopwords
-        stopwords = {
-            'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for',
-            'of', 'with', 'by', 'from', 'is', 'are', 'was', 'were', 'be', 'been',
-            'being', 'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would',
-            'could', 'should', 'may', 'might', 'must', 'shall', 'can', 'this',
-            'that', 'these', 'those', 'it', 'its', 'as', 'if', 'then', 'than',
-        }
-        tokens = [t for t in tokens if len(t) > 2 and t not in stopwords]
-        
-        # Count frequencies
-        freq = Counter(tokens)
-        
-        # Convert to sparse vector format
-        # Using deterministic hash (MD5) instead of Python's randomized hash()
-        # Aggregate values for colliding indices to ensure uniqueness
-        index_values = defaultdict(float)
-        for token, count in freq.items():
-            # Deterministic hash: MD5 -> int -> modulo
-            hash_bytes = hashlib.md5(token.encode()).digest()
-            idx = int.from_bytes(hash_bytes[:4], 'big') % 100000
-            index_values[idx] += float(count)  # Aggregate colliding indices
-        
-        # Extract unique indices and their aggregated values
-        indices = list(index_values.keys())
-        values = list(index_values.values())
-        
-        return models.SparseVector(indices=indices, values=values)
-    
-    def _generate_point_id(self, node_id: str) -> str:
-        """Generate a valid Qdrant point ID from node ID."""
-        import hashlib
-        # Create a UUID-like ID from node_id
-        hash_bytes = hashlib.md5(node_id.encode()).hexdigest()
-        return hash_bytes
-    
-    def get_collection_info(self) -> Dict:
-        """Get information about the collection."""
-        try:
-            info = self.client.get_collection(self.collection_name)
-            # Handle different Qdrant client versions
-            vectors_count = getattr(info, 'vectors_count', None) or info.points_count
-            return {
-                "name": self.collection_name,
-                "points_count": info.points_count,
-                "vectors_count": vectors_count,
-                "status": str(info.status),
-            }
-        except Exception as e:
-            logger.error(f"Failed to get collection info: {e}")
-            return {"error": str(e)}
-    
-    def sample_points(self, limit: int = 5) -> List[Dict]:
-        """Sample a few points from the collection to inspect payloads."""
-        try:
-            results, _ = self.client.scroll(
-                collection_name=self.collection_name,
-                limit=limit,
-                with_payload=True,
-                with_vectors=False,
-            )
-            return [
-                {"id": p.id, "payload": p.payload}
-                for p in results
-            ]
-        except Exception as e:
-            logger.error(f"Failed to sample points: {e}")
-            return []
+    @property
+    def embedding_generator(self) -> EmbeddingGenerator:
+        if self._embedding_generator is None:
+            self._embedding_generator = EmbeddingGenerator()
+        return self._embedding_generator
 
-    def delete_collection(self) -> None:
-        """Delete the collection."""
-        try:
-            self.client.delete_collection(self.collection_name)
-            logger.info(f"Deleted collection '{self.collection_name}'")
-        except Exception as e:
-            logger.error(f"Failed to delete collection: {e}")
-    
+    # ------------------------------------------------------------------ indexing
+
+    def index_nodes(self, nodes: List, batch_size: int = 200) -> int:
+        """
+        Index LlamaIndex nodes, embedding any that have no embedding yet.
+
+        Returns the number of chunks written.
+        """
+        missing = [n for n in nodes if n.embedding is None]
+        if missing:
+            logger.info(f"Generating embeddings for {len(missing)} nodes")
+            self.embedding_generator.embed_nodes(missing)
+
+        rows = [self.node_to_row(node, position) for position, node in enumerate(nodes)]
+        written = self.store.upsert_chunks(self.project_id, rows, batch_size=batch_size)
+        logger.info(f"Indexed {written} chunks into project {self.project_id}")
+        return written
+
+    @staticmethod
+    def node_to_row(node, position: int = 0) -> Dict[str, Any]:
+        """Convert a LlamaIndex node into a chunk row."""
+        meta = dict(node.metadata or {})
+        doc_key = doc_key_from(str(
+            meta.get("doc_id") or meta.get("document_id") or meta.get("pdf_name")
+            or meta.get("source") or meta.get("filename") or node.node_id
+        ))
+        row: Dict[str, Any] = {
+            "doc_key": doc_key,
+            "chunk_index": int(meta.get("chunk_index", position)),
+            "content": node.get_content(),
+            "context_prefix": meta.get("contextual_prefix") or None,
+            "parent_text": meta.get("parent_text") or meta.get("parent_text_full") or None,
+            "page_start": meta.get("page_start") or meta.get("page_number"),
+            "page_end": meta.get("page_end") or meta.get("page_number"),
+            "section": meta.get("section"),
+            "embedding": node.embedding,
+            "metadata": {k: v for k, v in meta.items() if k not in _TEXT_KEYS} | {"node_id": node.node_id},
+        }
+        return row
+
+    # --------------------------------------------------------------- management
+
+    async def ensure_collection_exists(self) -> None:
+        """No-op: all projects share the chunks table. Kept for callers of the old API."""
+        return None
+
     def delete_by_document_id(self, document_id: str) -> int:
-        """
-        Delete all points (chunks) associated with a document_id or source.
-        
-        Uses scroll to find matching points since payload fields may not be indexed.
-        
-        Args:
-            document_id: The universal doc_id (e.g., "a1b2c3d4_filename") or legacy identifier
-            
-        Returns:
-            Number of points deleted
-        """
+        """Delete every chunk of one document (accepts R2 keys, filenames or doc keys)."""
+        deleted = self.store.delete_document(self.project_id, doc_key_from(document_id))
+        logger.info(f"Deleted {deleted} chunks for {document_id}")
+        return deleted
+
+    delete_by_filename = delete_by_document_id
+
+    def delete_collection(self) -> int:
+        """Delete every chunk in the project."""
+        deleted = self.store.delete_project(self.project_id)
+        logger.info(f"Deleted {deleted} chunks for project {self.project_id}")
+        return deleted
+
+    async def delete_collection_async(self) -> int:
+        return await asyncio.to_thread(self.delete_collection)
+
+    def get_collection_info(self) -> Dict[str, Any]:
+        """Chunk statistics, in the shape the old Qdrant info call returned."""
         try:
-            # Extract the doc_id from various input formats
-            # Input could be: "input-pdfs/a1b2c3d4_file.pdf" or "a1b2c3d4_file" or "a1b2c3d4_file.pdf"
-            doc_id_parts = document_id.split("/")
-            base_name = doc_id_parts[-1] if doc_id_parts else document_id
-            doc_id = base_name.rsplit(".", 1)[0] if "." in base_name else base_name
-            
-            logger.info(f"Deleting document with doc_id: {doc_id} (from input: {document_id})")
-            
-            # Scroll through all points to find matches
-            matching_point_ids = []
-            next_offset = None
-            
-            while True:
-                results, next_offset = self.client.scroll(
-                    collection_name=self.collection_name,
-                    limit=100,
-                    offset=next_offset,
-                    with_payload=True,
-                    with_vectors=False,
-                )
-                
-                for point in results:
-                    payload = point.payload or {}
-                    
-                    # Match on doc_id (primary) or legacy fields
-                    if (payload.get("doc_id") == doc_id or
-                        payload.get("pdf_name") == doc_id or
-                        payload.get("document_id") == doc_id or
-                        payload.get("source") == document_id or
-                        payload.get("filename") == doc_id):
-                        matching_point_ids.append(point.id)
-                
-                if next_offset is None or len(results) == 0:
-                    break
-            
-            if not matching_point_ids:
-                logger.warning(f"No points found for doc_id: {doc_id}")
-                return 0
-            
-            # Delete the matching points by ID
-            self.client.delete(
-                collection_name=self.collection_name,
-                points_selector=models.PointIdsList(
-                    points=matching_point_ids,
-                ),
-            )
-            
-            logger.info(f"Deleted {len(matching_point_ids)} points for doc_id: {doc_id}")
-            return len(matching_point_ids)
-            
+            stats = self.store.stats(self.project_id)
+            return {
+                "name": self.project_id,
+                "points_count": stats["chunk_count"],
+                "vectors_count": stats["embedded_count"],
+                "documents_count": stats["document_count"],
+                "status": "green",
+            }
         except Exception as e:
-            logger.error(f"Failed to delete document {document_id}: {e}")
-            raise
-    
-    def delete_by_filename(self, filename: str) -> int:
+            logger.error(f"Failed to get chunk stats: {e}")
+            return {"error": str(e)}
+
+    # ------------------------------------------------------------ reading back
+
+    @staticmethod
+    def _record(row: Dict[str, Any]) -> SimpleNamespace:
+        """A chunk as (id, payload), with payload keys matching the old Qdrant payload."""
+        payload = dict(row.get("metadata") or {})
+        payload.setdefault("doc_id", row.get("doc_key"))
+        payload.setdefault("pdf_name", row.get("doc_key"))
+        for key in ("chunk_index", "page_start", "page_end"):
+            if row.get(key) is not None:
+                payload.setdefault(key, row[key])
+        if row.get("page_start") is not None:
+            payload.setdefault("page", row["page_start"])
+        if "content" in row:
+            payload.setdefault("text", row["content"])
+        return SimpleNamespace(id=row["id"], payload=payload)
+
+    def scroll(self, limit: int = 100, offset: Optional[int] = None, doc_key: Optional[str] = None,
+               with_text: bool = False):
         """
-        Delete all points (chunks) associated with a filename.
-        
-        Uses scroll to find matching points since payload fields may not be indexed.
-        
-        Args:
-            filename: The source filename to delete
-            
-        Returns:
-            Number of points deleted
+        Page through chunks ordered by (doc_key, chunk_index).
+
+        Returns (records, next_offset); next_offset is None after the last page,
+        so loops written for Qdrant's scroll keep working.
         """
-        try:
-            # Extract base name for flexible matching
-            base_name = filename.split("/")[-1] if "/" in filename else filename
-            base_name_no_ext = base_name.rsplit(".", 1)[0] if "." in base_name else base_name
-            
-            # Scroll through all points to find matches
-            matching_point_ids = []
-            next_offset = None
-            
-            while True:
-                results, next_offset = self.client.scroll(
-                    collection_name=self.collection_name,
-                    limit=100,
-                    offset=next_offset,
-                    with_payload=True,
-                    with_vectors=False,
-                )
-                
-                for point in results:
-                    payload = point.payload or {}
-                    source = payload.get("source", "")
-                    pdf_name = payload.get("pdf_name", "")
-                    
-                    # Match if filename is in the source/pdf_name path
-                    if (filename in source or source == filename or
-                        filename in pdf_name or pdf_name == filename or
-                        base_name in source or base_name == pdf_name or
-                        base_name_no_ext == pdf_name):
-                        matching_point_ids.append(point.id)
-                
-                if next_offset is None or len(results) == 0:
-                    break
-            
-            if not matching_point_ids:
-                logger.warning(f"No points found for filename: {filename}")
-                return 0
-            
-            # Delete the matching points by ID
-            self.client.delete(
-                collection_name=self.collection_name,
-                points_selector=models.PointIdsList(
-                    points=matching_point_ids,
-                ),
-            )
-            
-            logger.info(f"Deleted {len(matching_point_ids)} points for filename: {filename}")
-            return len(matching_point_ids)
-            
-        except Exception as e:
-            logger.error(f"Failed to delete by filename {filename}: {e}")
-            raise
+        columns = ["id", "doc_key", "chunk_index", "page_start", "page_end", "metadata"]
+        if with_text:
+            columns.append("content")
+        start = offset or 0
+        rows = self.store.list_chunks(self.project_id, doc_key=doc_key, columns=columns,
+                                      limit=limit, offset=start)
+        next_offset = start + len(rows) if len(rows) == limit else None
+        return [self._record(r) for r in rows], next_offset
 
+    def count(self, doc_key: Optional[str] = None) -> int:
+        return self.store.count(self.project_id, doc_key=doc_key)
 
-class LlamaIndexQdrantAdapter:
-    """
-    Adapter to use Qdrant with LlamaIndex's VectorStoreIndex.
-    
-    Provides a cleaner integration with LlamaIndex workflows.
-    """
-    
-    def __init__(self, indexer: Optional[QdrantIndexer] = None):
-        self.indexer = indexer or QdrantIndexer()
-    
-    def get_vector_store(self):
-        """Get a LlamaIndex-compatible vector store."""
-        try:
-            from llama_index.vector_stores.qdrant import QdrantVectorStore
-        except ImportError:
-            raise ImportError(
-                "Qdrant vector store not installed. "
-                "Run: pip install llama-index-vector-stores-qdrant"
-            )
-        
-        return QdrantVectorStore(
-            client=self.indexer.client,
-            collection_name=self.indexer.collection_name,
-            enable_hybrid=settings.hybrid_enabled,
-        )
-    
-    def create_index(self, nodes: List):
-        """Create a LlamaIndex VectorStoreIndex."""
-        from llama_index.core import VectorStoreIndex, StorageContext
-        
-        vector_store = self.get_vector_store()
-        storage_context = StorageContext.from_defaults(vector_store=vector_store)
-        
-        # Create index
-        index = VectorStoreIndex(
-            nodes=nodes,
-            storage_context=storage_context,
-            embed_model=self.indexer.embedding_generator.get_embed_model(),
-        )
-        
-        return index
+    def doc_keys(self) -> List[str]:
+        return self.store.doc_keys(self.project_id)
 
+    def merge_metadata(self, doc_key: str, patch: Dict[str, Any]) -> int:
+        """Merge `patch` into the metadata of every chunk of one document."""
+        return self.store.merge_metadata(self.project_id, doc_key, patch)
 
-# =============================================================================
-# Async Wrappers for Multi-Tenant Support
-# =============================================================================
-
-async def ensure_collection_exists_async(indexer: QdrantIndexer) -> None:
-    """Async wrapper to ensure a collection exists."""
-    import asyncio
-    loop = asyncio.get_event_loop()
-    await loop.run_in_executor(None, indexer.create_collection, False, settings.hybrid_enabled)
-
-
-async def delete_collection_async(indexer: QdrantIndexer) -> None:
-    """Async wrapper to delete a collection."""
-    import asyncio
-    loop = asyncio.get_event_loop()
-    await loop.run_in_executor(None, indexer.delete_collection)
-
-
-# Add async methods directly to QdrantIndexer for convenience
-QdrantIndexer.ensure_collection_exists = lambda self: ensure_collection_exists_async(self)
-QdrantIndexer.delete_collection_async = lambda self: delete_collection_async(self)
+    def sample_points(self, limit: int = 5) -> List[Dict[str, Any]]:
+        """A few chunks, to inspect their metadata."""
+        rows = self.store.list_chunks(self.project_id, limit=limit)
+        return [{"id": r["id"], "payload": {**(r.get("metadata") or {}), "text": r.get("content")}} for r in rows]

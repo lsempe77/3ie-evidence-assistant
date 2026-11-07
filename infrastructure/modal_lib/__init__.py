@@ -8,7 +8,8 @@ Modules:
 - utils: Helper functions (R2 client, sanitization)
 - extraction: MinerU & MonkeyOCR PDF extraction
 - metadata: CrossRef, OpenAlex, LLM enrichment
-- embedding: Chunking, embedding, Qdrant operations
+- embedding: Chunking, embedding, writing chunks to Supabase
+- chunks: Supabase chunk-store helpers (shared client in src/vectorstore)
 - processing: PDF processing functions (GPU)
 - orchestration: Batch processing orchestration
 """
@@ -19,11 +20,9 @@ from .config import (
     monkeyocr_image,
     model_cache,
     r2_secret,
-    qdrant_secret,
     cohere_secret,
     openrouter_secret,
     supabase_secret,
-    QDRANT_COLLECTION_NAME,
 )
 
 from .utils import (
@@ -56,18 +55,20 @@ from .processing import (
     process_pdf,
     process_pdf_monkeyocr,
     process_pdf_rag,
-    check_qdrant_indexed,
-    delete_qdrant_chunks,
-    ensure_qdrant_indexes,
     sync_to_postgres,
     sync_to_supabase_rag,
+)
+
+from .chunks import (
+    check_chunks_indexed,
+    delete_doc_chunks,
 )
 
 from .orchestration import (
     orchestrate,
     orchestrate_rag,
     list_pdfs,
-    check_qdrant_status,
+    check_vector_store_status,
 )
 
 __all__ = [
@@ -77,11 +78,9 @@ __all__ = [
     "monkeyocr_image",
     "model_cache",
     "r2_secret",
-    "qdrant_secret",
     "cohere_secret",
     "openrouter_secret",
     "supabase_secret",
-    "QDRANT_COLLECTION_NAME",
     # Utils
     "get_r2_client",
     "get_bucket_name",
@@ -104,14 +103,13 @@ __all__ = [
     "process_pdf",
     "process_pdf_monkeyocr",
     "process_pdf_rag",
-    "check_qdrant_indexed",
-    "delete_qdrant_chunks",
-    "ensure_qdrant_indexes",
+    "check_chunks_indexed",
+    "delete_doc_chunks",
     "sync_to_postgres",
     "sync_to_supabase_rag",
     # Orchestration
     "orchestrate",
     "orchestrate_rag",
     "list_pdfs",
-    "check_qdrant_status",
+    "check_vector_store_status",
 ]

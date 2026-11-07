@@ -64,8 +64,9 @@ A separate extraction pipeline reads the results tables in each study and pulls 
 
 ### Retrieval
 
-- **Hybrid search** in Qdrant: Cohere `embed-v4.0` dense vectors (1,536 dimensions) plus BM25-style sparse vectors
-- **Quantisation**: binary by default (about 32× smaller), scalar or none as options
+- **Hybrid search** in Supabase Postgres: Cohere `embed-v4.0` vectors (1,536 dimensions, pgvector HNSW) plus
+  English full-text search, fused with reciprocal rank fusion in one SQL function (`hybrid_search`)
+- **Compact vectors**: stored as `halfvec` (half-precision), about 3 KB per chunk
 - **Query processing**: multi-query RAG-Fusion with reciprocal rank fusion, query decomposition and step-back
   prompting. HyDE is implemented but **disabled**, because it lowered faithfulness in testing
 - **Cohere reranking** (`rerank-v3.5`), MMR diversity filtering and lost-in-the-middle reordering
@@ -126,8 +127,7 @@ graph LR
     end
 
     subgraph Storage
-        G[(Qdrant: vectors)]
-        I[(Supabase: Postgres + auth)]
+        I[(Supabase: Postgres, pgvector, auth)]
         K[(Cloudflare R2: PDFs + parser JSON)]
     end
 
@@ -137,12 +137,11 @@ graph LR
     end
 
     A --> C
-    C --> G
     C --> M
     C --> O
     C --> E
     E --> K
-    E --> G
+    E --> I
     K --> Q
     Q --> M
     S --> I
@@ -156,8 +155,7 @@ graph LR
 | ----- | ---------- |
 | Frontend | Next.js 16, React 19, TypeScript, Tailwind CSS 4, shadcn/ui |
 | API | FastAPI, Python 3.12, Pydantic v2 |
-| Auth and database | Supabase (Postgres, JWT, row-level security) |
-| Vectors | Qdrant Cloud (dense + sparse, binary quantisation) |
+| Auth, database and vectors | Supabase Pro (Postgres 17, pgvector 0.8, JWT, row-level security) |
 | Embeddings | Cohere `embed-v4.0`, 1,536 dimensions |
 | Reranking | Cohere `rerank-v3.5` |
 | LLMs | OpenRouter. Defaults `openai/gpt-4o-mini` (fast) and `openai/gpt-4o` (reasoning) |
@@ -171,7 +169,7 @@ graph LR
 
 ### Prerequisites
 
-Accounts for Supabase, Qdrant Cloud, Modal, OpenRouter, Cohere and Cloudflare R2, plus Python 3.12 and Node 20+.
+Accounts for Supabase, Modal, OpenRouter, Cohere and Cloudflare R2, plus Python 3.12 and Node 20+.
 
 ### API
 
@@ -183,8 +181,11 @@ python -m venv .venv
 source .venv/bin/activate        # Windows: .venv\Scripts\activate
 pip install -e .
 
-# Create .env with the keys listed in src/config/settings.py
-# (there is no .env.example yet)
+# Create .env with the keys listed in src/config/settings.py (there is no .env.example yet):
+# SUPABASE_URL, SUPABASE_ANON_KEY (publishable key), SUPABASE_SERVICE_ROLE_KEY (secret key),
+# SUPABASE_DB_URL (session pooler, for migrations), plus the Cohere, OpenRouter and R2 keys.
+
+python scripts/db_migrate.py     # create or update the database schema
 
 uvicorn api.server:app --reload --port 8000
 ```

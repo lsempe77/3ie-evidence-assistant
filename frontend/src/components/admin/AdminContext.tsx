@@ -194,7 +194,7 @@ const initialMetadataState: MetadataState = {
 const initialSettingsState: SettingsState = {
   connections: [
     { name: "Cloudflare R2", status: "checking", details: "Checking..." },
-    { name: "Qdrant Cloud", status: "checking", details: "Checking..." },
+    { name: "Supabase vectors", status: "checking", details: "Checking..." },
     { name: "Modal", status: "checking", details: "Checking..." },
     { name: "Cohere API", status: "checking", details: "Checking..." },
   ],

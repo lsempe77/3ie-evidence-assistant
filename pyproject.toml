@@ -116,7 +116,6 @@ explicit_package_bases = true
 [[tool.mypy.overrides]]
 module = [
     "llama_index.*",
-    "qdrant_client.*",
     "gradio.*",
     "langfuse.*",
     "ragas.*",

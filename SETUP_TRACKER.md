@@ -1,6 +1,6 @@
 # 3ie Evidence Assistant - Setup & Status Tracker
 
-**Last Updated:** February 23, 2026
+**Last Updated:** November 7, 2026
 
 > This document tracks **current implementation status** and configurations.  
 > For future features, see [docs/ROADMAP.md](docs/ROADMAP.md).
@@ -11,14 +11,18 @@
 
 ### Infrastructure
 
+> **November 2026: fresh start in progress.** The old Supabase project and the Qdrant cluster were lost after
+> months without use. A new Supabase project (`jyqzexzyemypdtfyfmhp`, Pro) now holds the database, sign-in and
+> the vectors (pgvector), replacing Qdrant. See [docs/SUPABASE_CONSOLIDATION_PLAN.md](docs/SUPABASE_CONSOLIDATION_PLAN.md).
+
 | Component | Status | Details |
 | --------- | ------ | ------- |
-| Frontend (Vercel) | ✅ Live | <https://dev-chat-frontend.vercel.app/> |
-| Backend (Railway) | ✅ Live | <https://3iechat.up.railway.app> |
-| PDF Processing (Modal) | ✅ Working | MineRU + MonkeyOCR + modal_lib + Contextual Retrieval |
-| Vector DB (Qdrant) | ✅ Connected | chunks, hybrid search, binary quantization |
-| Auth (Supabase) | ✅ Working | JWT auth, RLS policies |
-| Storage (R2) | ✅ Working | Cloudflare R2 for PDFs |
+| Frontend (Vercel) | ⏳ To repoint | <https://dev-chat-frontend.vercel.app/>, still configured for the old Supabase project |
+| Backend (Railway) | ⏳ To repoint | <https://3iechat.up.railway.app>, still configured for the old Supabase project |
+| PDF Processing (Modal) | ⏳ To redeploy | App renamed `evidence-assistant-mineru`; writes chunks to Supabase |
+| Database, auth and vectors (Supabase) | ✅ Schema applied | Postgres 17, pgvector 0.8.2, `chunks` + `hybrid_search()`, RLS on every table; no data yet |
+| Vector DB (Qdrant) | ❌ Removed | Replaced by Supabase pgvector |
+| Storage (R2) | ✅ Working | Cloudflare R2 for PDFs and parser output (graduation corpus outputs kept) |
 | Observability (Langfuse) | ✅ Working | Full tracing |
 
 ### MinerU Post-Processing (NEW)
@@ -48,16 +52,16 @@ Alternative GPU-based VLM parser alongside MinerU, enabling side-by-side output 
 | `run_monkeyocr()` | ✅ Done | `infrastructure/modal_lib/extraction.py` — same output shape as `run_mineru()` |
 | `process_pdf_monkeyocr()` | ✅ Done | `@app.function` on A10G GPU, outputs to `outputs/monkeyocr/` in R2 |
 | Separate R2 namespace | ✅ Done | `outputs/monkeyocr/md/` and `outputs/monkeyocr/json/` — MinerU data never overwritten |
-| Optional Qdrant indexing | ✅ Done | `--index` flag; uses dedicated `devchat_monkeyocr` collection |
+| Optional indexing | ✅ Done | `--index --index-project-id <uuid>`; chunks go to that project in Supabase |
 | CLI action | ✅ Done | `modal run infrastructure/modal_mineru.py --action monkeyocr --pdf-key "input-pdfs/paper.pdf"` |
 
 **Usage:**
 ```bash
-# Parse a single PDF with MonkeyOCR (comparison mode — no Qdrant indexing)
+# Parse a single PDF with MonkeyOCR (comparison mode — no indexing)
 modal run infrastructure/modal_mineru.py --action monkeyocr --pdf-key "input-pdfs/paper.pdf"
 
-# Force re-run + index to Qdrant for retrieval testing
-modal run infrastructure/modal_mineru.py --action monkeyocr --pdf-key "input-pdfs/paper.pdf" --force --index
+# Force re-run + index into a comparison project for retrieval testing
+modal run infrastructure/modal_mineru.py --action monkeyocr --pdf-key "input-pdfs/paper.pdf" --force --index --index-project-id <uuid>
 ```
 
 **GPU:** A10G (24 GB VRAM) — MonkeyOCR VLM requires more memory than MinerU's pipeline backend.
@@ -69,7 +73,7 @@ modal run infrastructure/modal_mineru.py --action monkeyocr --pdf-key "input-pdf
 | Multi-tenant RAG | ✅ Done | Users create/manage own projects |
 | Document Upload | ✅ Done | Drag-drop, batch, deduplication |
 | Hybrid Search | ✅ Done | Cohere embed-v4 + BM25 sparse |
-| **Binary Quantization** | ✅ Done | Qdrant native BinaryQuantization, ~32x faster search |
+| **Binary Quantization** | ↪️ Replaced | Vectors now stored as pgvector `halfvec` (half precision) with an HNSW index |
 | **HNSW Tuning** | ✅ Done | m=16, ef_construct=200 for better recall |
 | **MMR Diversity** | ✅ Done | Maximal Marginal Relevance, lambda=0.7 |
 | **Lost-in-Middle** | ✅ Done | Reorder chunks [1,3,5,7,8,6,4,2] pattern |
@@ -81,15 +85,10 @@ modal run infrastructure/modal_mineru.py --action monkeyocr --pdf-key "input-pdf
 | **Step-Back Prompting** | ✅ Done | Specific questions get broader context query first |
 | **Scalar Quantization** | ✅ Done | Configurable: binary (32x), scalar/int8 (4x), or none |
 
-#### Quantization Options Reference
+#### Vector storage
 
-| Setting | Compression | Precision | Speed | When to Use |
-|---------|-------------|-----------|-------|-------------|
-| `binary` | ~32x | Good | Fastest | **Default** - Cohere embed-v4 is optimized for this |
-| `scalar` | ~4x | Better | Fast | When precision is critical (medical/legal data) |
-| `none` | 1x | Full | Slower | Small collections, maximum accuracy needed |
-
-**To change:** Set `QDRANT_QUANTIZATION_TYPE=scalar` in `.env`, then delete collection and re-index.
+Chunks are stored in Supabase `public.chunks` as 1,536-dimension `halfvec` with an HNSW cosine index, plus an
+English full-text index. `hybrid_search()` fuses the two rankings. The Qdrant quantisation options no longer apply.
 
 | Reranking | ✅ Done | Cohere rerank-v3.5 |
 | Claim Ledger Synthesis | ✅ Done | Two-pass extraction with citations |
@@ -453,8 +452,8 @@ sphinx-build -b html source build/html
 ### Environment Variables
 
 ```text
-SUPABASE_URL, SUPABASE_SERVICE_KEY
-QDRANT_URL, QDRANT_API_KEY
+SUPABASE_URL, SUPABASE_ANON_KEY (publishable), SUPABASE_SERVICE_ROLE_KEY (secret), SUPABASE_DB_URL
+DEFAULT_PROJECT_ID (optional, legacy single-project endpoints)
 OPENROUTER_API_KEY
 COHERE_API_KEY
 CLOUDFLARE_R2_* (access key, secret, bucket, URL)

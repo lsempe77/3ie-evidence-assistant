@@ -13,7 +13,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from api.qdrant_status import warm_up_qdrant_connection
+from api.vector_status import warm_up_vector_store
 from api.routes import admin_router, api_router, chat_router, health_router, router
 from api.routes.rags import router as rags_router
 from api.routes.zotero import router as zotero_router
@@ -63,9 +63,9 @@ async def lifespan(app: FastAPI):
             logger.error(f"⚠️ PostgreSQL init failed: {e}")
             logger.error(traceback.format_exc())
     else:
-        logger.info("ℹ️ DATABASE_URL not set - using Qdrant for metadata")
+        logger.info("ℹ️ DATABASE_URL not set - using the chunk store for metadata")
 
-    warmup_task = asyncio.create_task(warm_up_qdrant_connection())
+    warmup_task = asyncio.create_task(warm_up_vector_store())
 
     yield
 

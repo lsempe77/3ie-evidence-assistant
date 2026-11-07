@@ -2,7 +2,7 @@
 from src.ingestion.document_loader import DocumentLoader
 from src.ingestion.chunking import SemanticChunker, ParentChildChunker
 from src.ingestion.embeddings import EmbeddingGenerator
-from src.ingestion.indexer import QdrantIndexer
+from src.ingestion.indexer import ChunkIndexer
 from src.ingestion.pdf_processor import MinerUProcessor, process_pdfs
 
 __all__ = [
@@ -10,7 +10,7 @@ __all__ = [
     "SemanticChunker", 
     "ParentChildChunker",
     "EmbeddingGenerator",
-    "QdrantIndexer",
+    "ChunkIndexer",
     "MinerUProcessor",
     "process_pdfs",
 ]

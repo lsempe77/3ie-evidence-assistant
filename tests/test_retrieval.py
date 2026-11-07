@@ -53,23 +53,24 @@ class TestQueryProcessor:
 class TestExtractedFilters:
     """Tests for ExtractedFilters."""
     
-    def test_to_qdrant_filter_empty(self):
-        """Test empty filters produce no Qdrant filter."""
-        filters = ExtractedFilters()
-        result = filters.to_qdrant_filter()
-        assert result is None
-    
-    def test_to_qdrant_filter_year(self):
-        """Test year filter conversion."""
-        filters = ExtractedFilters(year_min=2020, year_max=2025)
-        result = filters.to_qdrant_filter()
-        assert result is not None
-    
-    def test_to_qdrant_filter_sector(self):
-        """Test sector filter conversion."""
-        filters = ExtractedFilters(sectors=["education", "health"])
-        result = filters.to_qdrant_filter()
-        assert result is not None
+    def test_to_search_params_empty(self):
+        """Empty filters produce no search parameters."""
+        assert ExtractedFilters().to_search_params() == {}
+
+    def test_to_search_params_year(self):
+        """Year bounds pass through."""
+        params = ExtractedFilters(year_min=2020, year_max=2025).to_search_params()
+        assert params == {"year_min": 2020, "year_max": 2025}
+
+    def test_to_search_params_sector(self):
+        """Sectors pass through as a list."""
+        params = ExtractedFilters(sectors=["education", "health"]).to_search_params()
+        assert params == {"sectors": ["education", "health"]}
+
+    def test_to_search_params_ignores_unpopulated_fields(self):
+        """Country and study-type filters stay off, as before."""
+        params = ExtractedFilters(countries=["Kenya"], study_types=["rct"]).to_search_params()
+        assert params == {}
 
 
 class TestRetrievalResult:

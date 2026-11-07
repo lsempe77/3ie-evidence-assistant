@@ -124,7 +124,8 @@ class EvidenceAssistantAgent:
         hyde_enhancer: Optional[HyDEEnhancer] = None,
     ):
         # Initialize components
-        self.retriever = retriever or HybridRetriever()
+        # Without an explicit retriever, search the default project (DEFAULT_PROJECT_ID).
+        self.retriever = retriever or HybridRetriever(project_id=settings.default_project_id)
         self.reranker = reranker or get_reranker()
         self.query_processor = query_processor or QueryProcessor()
         self.synthesizer = synthesizer or Synthesizer()
@@ -887,7 +888,7 @@ class EvidenceAssistantAgentFactory:
     
     @staticmethod
     def create_with_custom_collection(collection_name: str) -> "EvidenceAssistantAgent":
-        """Create agent for a specific Qdrant collection (multi-tenant support)."""
+        """Create agent for one project, given its id or legacy 'rag_<hex>' name."""
         return EvidenceAssistantAgent(
             retriever=HybridRetriever(collection_name=collection_name),
         )

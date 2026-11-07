@@ -425,7 +425,7 @@ export function ProcessingTab() {
                         isProcessingInModal ? (
                           <Badge className="bg-blue-500 text-xs">
                             <Loader2 className="h-3 w-3 mr-1 animate-spin" />
-                            Triggered – awaiting Modal/Qdrant
+                            Triggered – awaiting Modal
                           </Badge>
                         ) : (
                           <Badge variant="outline" className="text-xs">

@@ -27,7 +27,6 @@ interface RAGProject {
   name: string;
   description: string | null;
   slug: string | null;
-  qdrant_collection: string;
   is_public: boolean;
   status: string;
   document_count: number;

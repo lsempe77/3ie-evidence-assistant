@@ -34,7 +34,6 @@ interface RAGProject {
   id: string;
   name: string;
   description: string | null;
-  qdrant_collection: string;
   status: string;
   document_count: number;
   chunk_count: number;

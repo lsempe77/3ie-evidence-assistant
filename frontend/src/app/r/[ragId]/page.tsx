@@ -39,7 +39,6 @@ interface RAGProject {
   id: string;
   name: string;
   description: string | null;
-  qdrant_collection: string;
   is_public: boolean;
 }
 
@@ -222,7 +221,7 @@ export default function RAGChatPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           query: searchQuery,
-          collection: project.qdrant_collection,
+          collection: project.id,
           project_id: project.id,  // Use actual UUID, not slug
           settings: searchSettings,
         }),

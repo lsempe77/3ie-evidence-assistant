@@ -8,7 +8,7 @@ import re
 from botocore.exceptions import ClientError
 from fastapi import APIRouter, HTTPException
 
-from api.qdrant_status import mark_qdrant_healthy
+from api.vector_status import mark_vector_store_healthy
 from api.schemas import (
     CompareRequest,
     CompareResponse,
@@ -322,7 +322,7 @@ async def query_evidence(request: QueryRequest):
                     
                     # Get page info and highlight text for PDF navigation
                     page_num = c.get("page_start") or c.get("page")
-                    # Use full_text from Qdrant chunk (not truncated snippet) for better highlighting
+                    # Use full_text from the stored chunk (not truncated snippet) for better highlighting
                     full_chunk_text = c.get("full_text", "")
                     if isinstance(full_chunk_text, list):
                         full_chunk_text = " ".join(str(t) for t in full_chunk_text)
@@ -398,7 +398,7 @@ async def query_evidence(request: QueryRequest):
                         "Focus on more recent studies?",
                     ]
 
-                await mark_qdrant_healthy()
+                await mark_vector_store_healthy()
 
                 query_response = QueryResponse(
                     answer=response.answer,
@@ -481,7 +481,7 @@ async def get_available_filters():
     """
     Get available filter options from the database.
     """
-    # TODO: Query Qdrant for distinct values
+    # TODO: query the chunk store for distinct values
     return FiltersResponse(
         countries=["Kenya", "India", "Mexico", "Brazil", "Uganda", "Ethiopia", "Bangladesh"],
         sectors=["Education", "Health", "Social Protection", "Agriculture", "Nutrition"],

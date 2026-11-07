@@ -1,25 +1,25 @@
 """
 3ie Evidence Assistant - Hybrid Retriever
 
-Implements hybrid search combining:
-- Dense vectors (semantic similarity)
-- Sparse vectors (BM25/keyword matching)
+Implements hybrid search over Supabase Postgres (pgvector), combining:
+- Dense vectors (semantic similarity, HNSW cosine)
+- Postgres full-text search (keyword matching)
 - Metadata filtering
-- Reciprocal Rank Fusion (RRF)
+- Reciprocal Rank Fusion (RRF), inside the hybrid_search SQL function
 - MMR diversity filtering
 - Multi-Query RAG-Fusion (query variants with RRF)
 """
 
+import asyncio
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 import numpy as np
 
-from qdrant_client import QdrantClient, models
-
 from src.config.settings import settings
 from src.ingestion.embeddings import EmbeddingGenerator
-from src.retrieval.query_processor import ExtractedFilters, QueryClassification
+from src.retrieval.query_processor import ExtractedFilters
 from src.utils.logging import get_logger
+from src.vectorstore import ChunkStore, legacy_collection_to_project_id
 
 logger = get_logger(__name__)
 
@@ -146,78 +146,35 @@ class RetrievalResult:
 
 class HybridRetriever:
     """
-    Hybrid retrieval combining dense and sparse search.
-    
+    Hybrid retrieval over one project's chunks.
+
     Features:
-    - Dense vector search (Cohere embed-v4)
-    - Sparse vector search (BM25-style)
-    - Metadata filtering
-    - Reciprocal Rank Fusion
+    - Dense vector search (Cohere embed-v4, pgvector HNSW)
+    - Keyword search (Postgres full-text, English stemming)
+    - Metadata filtering (year, sector, target population)
+    - Reciprocal Rank Fusion of the two rankings
     - MMR diversity filtering
     """
-    
+
     def __init__(
         self,
-        client: Optional[QdrantClient] = None,
-        collection_name: str = settings.qdrant_collection_name,
+        project_id: Optional[str] = None,
+        store: Optional[ChunkStore] = None,
         embedding_generator: Optional[EmbeddingGenerator] = None,
         mmr_enabled: bool = True,
         mmr_lambda: float = 0.7,  # Balance: 1.0 = pure relevance, 0.0 = pure diversity
+        collection_name: Optional[str] = None,  # Legacy 'rag_<hex>' name, mapped to project_id
     ):
-        if client is None:
-            if settings.qdrant_api_key:
-                client = QdrantClient(
-                    url=settings.qdrant_url,
-                    api_key=settings.qdrant_api_key,
-                )
-            else:
-                client = QdrantClient(url=settings.qdrant_url)
-        
-        self.client = client
-        self.collection_name = collection_name
+        self.project_id = project_id or legacy_collection_to_project_id(collection_name)
+        if not self.project_id:
+            raise ValueError(
+                "HybridRetriever needs a project_id (or a legacy 'rag_<id>' collection name)"
+            )
+        self.store = store or ChunkStore()
         self.embedding_generator = embedding_generator or EmbeddingGenerator()
-        self._has_sparse_vectors: Optional[bool] = None  # Cached check
-        self._has_binary_quantization: Optional[bool] = None  # Cached check for binary quantization
         self.mmr_enabled = mmr_enabled
         self.mmr_lambda = mmr_lambda
-    
-    def _check_sparse_support(self) -> bool:
-        """Check if the collection has sparse vector support."""
-        if self._has_sparse_vectors is not None:
-            return self._has_sparse_vectors
-        
-        try:
-            collection_info = self.client.get_collection(self.collection_name)
-            # Check if sparse vectors are configured
-            vectors_config = collection_info.config.params.vectors
-            if isinstance(vectors_config, dict):
-                self._has_sparse_vectors = "sparse" in vectors_config
-            else:
-                self._has_sparse_vectors = False
-            logger.info(f"Collection {self.collection_name} sparse support: {self._has_sparse_vectors}")
-        except Exception as e:
-            logger.warning(f"Could not check sparse support: {e}")
-            self._has_sparse_vectors = False
-        
-        return self._has_sparse_vectors
-    
-    def _check_binary_quantization(self) -> bool:
-        """Check if the collection has binary quantization enabled for fast search."""
-        if self._has_binary_quantization is not None:
-            return self._has_binary_quantization
-        
-        try:
-            collection_info = self.client.get_collection(self.collection_name)
-            # Binary quantization is handled automatically by Qdrant when configured
-            quant_config = collection_info.config.quantization_config
-            self._has_binary_quantization = quant_config is not None
-            logger.info(f"Collection {self.collection_name} binary quantization: {self._has_binary_quantization}")
-        except Exception as e:
-            logger.warning(f"Could not check binary quantization: {e}")
-            self._has_binary_quantization = False
-        
-        return self._has_binary_quantization
-    
+
     async def retrieve(
         self,
         query: str,
@@ -227,59 +184,43 @@ class HybridRetriever:
     ) -> List[RetrievalResult]:
         """
         Perform hybrid retrieval with optional MMR diversity filtering.
-        
-        Binary quantization (if enabled on collection) is handled automatically
-        by Qdrant for ~32x faster search with automatic rescoring.
-        
-        MMR (Maximal Marginal Relevance) promotes diversity by balancing
-        relevance to query against similarity to already-selected documents.
-        
+
+        Keyword search joins the fusion when hybrid search is enabled and alpha < 1,
+        matching the previous Qdrant behaviour (unweighted RRF of the two rankings).
+        MMR (Maximal Marginal Relevance) then promotes diversity by balancing
+        relevance to the query against similarity to already-selected chunks.
+
         Args:
             query: Search query
             top_k: Number of results to return
             filters: Metadata filters
-            alpha: Weight for dense vs sparse (1.0 = pure dense)
-            
+            alpha: Hybrid switch: 1.0 = dense only, < 1.0 = dense + keyword
+
         Returns:
             List of retrieval results
         """
-        # Log if binary quantization is active (handled automatically by Qdrant)
-        if self._check_binary_quantization():
-            logger.debug("Binary quantization enabled - Qdrant handles fast candidate retrieval automatically")
-        
-        # Generate query embedding
         query_embedding = self.embedding_generator.embed_query(query)
-        
-        # Build Qdrant filter
-        qdrant_filter = filters.to_qdrant_filter() if filters else None
-        
-        # Determine if we need to fetch extra results for MMR filtering
+
         # MMR needs a larger candidate pool to select diverse results from
         fetch_k = top_k * 2 if self.mmr_enabled else top_k
-        
-        # Perform hybrid search
-        # Only use hybrid if enabled, alpha < 1, AND collection supports sparse vectors
-        use_hybrid = settings.hybrid_enabled and alpha < 1.0 and self._check_sparse_support()
-        
-        if use_hybrid:
-            results, embeddings = await self._hybrid_search(
-                query=query,
-                query_embedding=query_embedding,
-                top_k=fetch_k,
-                qdrant_filter=qdrant_filter,
-                alpha=alpha,
-                with_vectors=self.mmr_enabled,
-            )
-        else:
-            results, embeddings = await self._dense_search(
-                query_embedding=query_embedding,
-                top_k=fetch_k,
-                qdrant_filter=qdrant_filter,
-                with_vectors=self.mmr_enabled,
-            )
-        
-        # Apply MMR diversity filtering if enabled
-        if self.mmr_enabled and len(results) > top_k and embeddings:
+        use_keyword = settings.hybrid_enabled and alpha < 1.0
+
+        rows = await asyncio.to_thread(
+            self.store.hybrid_search,
+            self.project_id,
+            query,
+            query_embedding,
+            match_count=fetch_k,
+            candidate_count=max(fetch_k, settings.retrieval_top_k),
+            full_text_weight=1.0 if use_keyword else 0.0,
+            semantic_weight=1.0,
+            with_embeddings=self.mmr_enabled,
+            **(filters.to_search_params() if filters else {}),
+        )
+        results = [self._row_to_result(r) for r in rows]
+        embeddings = [r.get("embedding") or [] for r in rows] if self.mmr_enabled else None
+
+        if self.mmr_enabled and len(results) > top_k and embeddings and all(embeddings):
             logger.debug(f"Applying MMR diversity filter (lambda={self.mmr_lambda}) to {len(results)} candidates")
             results = mmr_diversity_filter(
                 results=results,
@@ -290,11 +231,35 @@ class HybridRetriever:
             )
             logger.info(f"MMR selected {len(results)} diverse results from {fetch_k} candidates")
         elif len(results) > top_k:
-            # Truncate to top_k if MMR not applied
             results = results[:top_k]
-        
+
         logger.info(f"Retrieved {len(results)} results for query: '{query[:50]}...'")
         return results
+
+    @staticmethod
+    def _row_to_result(row: Dict[str, Any]) -> RetrievalResult:
+        """Convert a hybrid_search row to a RetrievalResult.
+
+        Metadata keeps the keys the Qdrant payload used (doc_id, page_start, page_end,
+        chunk_index, contextual_prefix, ...) so downstream code is unchanged.
+        """
+        metadata = dict(row.get("metadata") or {})
+        metadata.setdefault("doc_id", row.get("doc_key"))
+        metadata.setdefault("chunk_index", row.get("chunk_index"))
+        for key in ("page_start", "page_end", "section"):
+            if row.get(key) is not None:
+                metadata.setdefault(key, row[key])
+        if row.get("context_prefix"):
+            metadata.setdefault("contextual_prefix", row["context_prefix"])
+        metadata["semantic_rank"] = row.get("semantic_rank")
+        metadata["keyword_rank"] = row.get("keyword_rank")
+        return RetrievalResult(
+            node_id=str(row["id"]),
+            text=row.get("content") or "",
+            score=float(row.get("score") or 0.0),
+            metadata=metadata,
+            parent_text=row.get("parent_text") or None,
+        )
 
     async def retrieve_multi_query(
         self,
@@ -481,229 +446,6 @@ class HybridRetriever:
             fused.append(result)
         
         return fused
-    
-    async def _dense_search(
-        self,
-        query_embedding: List[float],
-        top_k: int,
-        qdrant_filter: Optional[models.Filter] = None,
-        with_vectors: bool = False,
-    ) -> tuple[List[RetrievalResult], Optional[List[List[float]]]]:
-        """
-        Perform dense-only vector search.
-        
-        Binary quantization (if enabled) is handled automatically by Qdrant
-        for fast candidate retrieval with automatic rescoring.
-        
-        Args:
-            query_embedding: Dense query vector
-            top_k: Number of results
-            qdrant_filter: Metadata filter
-            with_vectors: Whether to return document vectors (for MMR)
-            
-        Returns:
-            Tuple of (results, embeddings). Embeddings is None if with_vectors=False.
-        """
-        search_results = self.client.query_points(
-            collection_name=self.collection_name,
-            query=query_embedding,
-            using="dense",
-            query_filter=qdrant_filter,
-            limit=top_k,
-            with_payload=True,
-            with_vectors=with_vectors,
-        )
-        
-        results = self._convert_query_results(search_results)
-        
-        # Extract embeddings if requested
-        embeddings = None
-        if with_vectors:
-            points = search_results.points if hasattr(search_results, 'points') else search_results
-            embeddings = []
-            for p in points:
-                if hasattr(p, 'vector') and p.vector:
-                    # Handle both direct vector and named vectors
-                    if isinstance(p.vector, dict):
-                        # Named vectors - get 'dense' vector
-                        embeddings.append(p.vector.get('dense', []))
-                    else:
-                        embeddings.append(list(p.vector))
-                else:
-                    embeddings.append([])
-        
-        return results, embeddings
-    
-    async def _hybrid_search(
-        self,
-        query: str,
-        query_embedding: List[float],
-        top_k: int,
-        qdrant_filter: Optional[models.Filter] = None,
-        alpha: float = 0.7,
-        with_vectors: bool = False,
-    ) -> tuple[List[RetrievalResult], Optional[List[List[float]]]]:
-        """
-        Perform hybrid search with RRF fusion.
-        
-        Binary quantization (if enabled) is handled automatically by Qdrant.
-        
-        Args:
-            query: Text query for sparse search
-            query_embedding: Dense embedding
-            top_k: Number of results
-            qdrant_filter: Metadata filter
-            alpha: Dense weight (sparse weight = 1 - alpha)
-            with_vectors: Whether to return document vectors (for MMR)
-            
-        Returns:
-            Tuple of (results, embeddings). Embeddings is None if with_vectors=False.
-        """
-        # Generate sparse vector from query
-        sparse_vector = self._generate_sparse_query_vector(query)
-        
-        # Use Qdrant's built-in hybrid search via prefetch
-        search_results = self.client.query_points(
-            collection_name=self.collection_name,
-            prefetch=[
-                # Dense search
-                models.Prefetch(
-                    query=query_embedding,
-                    using="dense",
-                    limit=top_k * 2,
-                    filter=qdrant_filter,
-                ),
-                # Sparse search
-                models.Prefetch(
-                    query=sparse_vector,
-                    using="sparse",
-                    limit=top_k * 2,
-                    filter=qdrant_filter,
-                ),
-            ],
-            query=models.FusionQuery(
-                fusion=models.Fusion.RRF,  # Reciprocal Rank Fusion
-            ),
-            limit=top_k,
-            with_payload=True,
-            with_vectors=with_vectors,
-        )
-        
-        results = self._convert_query_results(search_results)
-        
-        # Extract embeddings if requested
-        embeddings = None
-        if with_vectors:
-            points = search_results.points if hasattr(search_results, 'points') else search_results
-            embeddings = []
-            for p in points:
-                if hasattr(p, 'vector') and p.vector:
-                    # Handle both direct vector and named vectors
-                    if isinstance(p.vector, dict):
-                        # Named vectors - get 'dense' vector
-                        embeddings.append(p.vector.get('dense', []))
-                    else:
-                        embeddings.append(list(p.vector))
-                else:
-                    embeddings.append([])
-        
-        return results, embeddings
-    
-    def _generate_sparse_query_vector(self, query: str) -> models.SparseVector:
-        """Generate sparse vector for query using deterministic hashing."""
-        import hashlib
-        import re
-        from collections import Counter, defaultdict
-        
-        # Tokenize
-        tokens = re.findall(r'\b\w+\b', query.lower())
-        
-        # Filter stopwords (same list as indexer for consistency)
-        stopwords = {
-            'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for',
-            'of', 'with', 'by', 'from', 'is', 'are', 'was', 'were', 'be', 'been',
-            'being', 'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would',
-            'could', 'should', 'may', 'might', 'must', 'shall', 'can', 'this',
-            'that', 'these', 'those', 'it', 'its', 'as', 'if', 'then', 'than',
-            'what', 'how', 'why', 'when', 'where', 'which', 'who',
-        }
-        tokens = [t for t in tokens if len(t) > 2 and t not in stopwords]
-        
-        # Count and convert using deterministic hash (same as indexer)
-        freq = Counter(tokens)
-        
-        # Aggregate by index to handle hash collisions (REQUIRED for Qdrant)
-        index_weights = defaultdict(float)
-        
-        for token, count in freq.items():
-            # Deterministic hash: MD5 -> int -> modulo (must match indexer!)
-            hash_bytes = hashlib.md5(token.encode()).digest()
-            idx = int.from_bytes(hash_bytes[:4], 'big') % 100000
-            index_weights[idx] += float(count)
-        
-        # Convert to sorted lists (Qdrant requires unique indices)
-        sorted_items = sorted(index_weights.items())
-        indices = [idx for idx, _ in sorted_items]
-        values = [val for _, val in sorted_items]
-        
-        return models.SparseVector(indices=indices, values=values)
-    
-    def _convert_results(self, results: List) -> List[RetrievalResult]:
-        """Convert Qdrant search results to RetrievalResult objects."""
-        converted = []
-        for r in results:
-            # Ensure text is always a string (handle legacy list format)
-            raw_text = r.payload.get("text", "")
-            if isinstance(raw_text, list):
-                text = " ".join(str(t) for t in raw_text)
-            else:
-                text = str(raw_text) if raw_text else ""
-            
-            # Handle parent_text for parent-child chunking
-            # Try new field name first, fall back to legacy
-            raw_parent = r.payload.get("parent_text") or r.payload.get("parent_text_full")
-            if isinstance(raw_parent, list):
-                parent_text = " ".join(str(t) for t in raw_parent)
-            else:
-                parent_text = str(raw_parent) if raw_parent else None
-            
-            converted.append(RetrievalResult(
-                node_id=str(r.id),
-                text=text,
-                score=r.score,
-                metadata={k: v for k, v in r.payload.items() if k != "text"},
-                parent_text=parent_text,
-            ))
-        return converted
-    
-    def _convert_query_results(self, response) -> List[RetrievalResult]:
-        """Convert Qdrant query points results."""
-        # Handle QueryResponse object from query_points
-        points = response.points if hasattr(response, 'points') else response
-        converted = []
-        for p in points:
-            # Ensure text is always a string (handle legacy list format)
-            raw_text = p.payload.get("text", "") if p.payload else ""
-            if isinstance(raw_text, list):
-                text = " ".join(str(t) for t in raw_text)
-            else:
-                text = str(raw_text) if raw_text else ""
-            
-            # Handle parent_text for parent-child chunking
-            raw_parent = p.payload.get("parent_text") or p.payload.get("parent_text_full") if p.payload else None
-            if isinstance(raw_parent, list):
-                parent_text = " ".join(str(t) for t in raw_parent)
-            else:
-                parent_text = str(raw_parent) if raw_parent else None
-            
-            converted.append(RetrievalResult(
-                node_id=str(p.id),
-                text=text,
-                score=p.score if hasattr(p, 'score') else 0.0,
-                metadata={k: v for k, v in (p.payload or {}).items() if k != "text"},
-                parent_text=parent_text,
-            ))
-        return converted
     
     def retrieve_sync(
         self,

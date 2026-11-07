@@ -7,7 +7,9 @@
 | ---- | ----- |
 | 1. Code on branch `rename/evidence-assistant` | Done, not merged. Tests 51 passed / 2 skipped, no new lint findings, frontend type-check clean |
 | 2. GitHub repo rename | Done. `lsempe77/dev_chat` now redirects to `lsempe77/3ie-evidence-assistant` |
-| 3–7. Infrastructure cutover | Not started |
+| 3. Qdrant alias | **Dropped (7 Nov 2026):** Qdrant is being removed. See [SUPABASE_CONSOLIDATION_PLAN.md](SUPABASE_CONSOLIDATION_PLAN.md) |
+| 4. New R2 bucket | On hold until the consolidation plan's Phase 6 decision (R2 → Supabase Storage) |
+| 5–7. Modal, Railway, Vercel/Supabase auth | Not started. Supabase must be restored first (consolidation plan, Phase 0) |
 | 8. Decommission | Not started |
 | 9. Local folder | Not started |
 

@@ -92,63 +92,30 @@ async def classify_study_design(
         return StudyDesign.UNKNOWN, 0.0, f"Classification error: {str(e)}"
 
 
-async def get_document_text_from_qdrant(doc_id: str, project_id: str, max_chars: int = 8000) -> str:
+async def get_document_text_from_chunks(doc_id: str, project_id: str, max_chars: int = 8000) -> str:
     """
-    Fetch document text from Qdrant chunks when abstract is not available.
-    
+    Fetch document text from its stored chunks when no abstract is available.
+
     Args:
-        doc_id: The doc_id to search for in Qdrant
-        project_id: The RAG project ID (used for collection name)
+        doc_id: The document key (doc_id) of the chunks
+        project_id: The RAG project ID
         max_chars: Maximum characters to return
-        
+
     Returns:
-        Concatenated text from the first few chunks
+        Concatenated text from the first chunks, in order
     """
-    from qdrant_client import QdrantClient
-    from qdrant_client.models import Filter, FieldCondition, MatchValue
-    
+    import asyncio
+
+    from src.vectorstore import ChunkStore
+
     try:
-        client = QdrantClient(
-            url=settings.qdrant_url,
-            api_key=settings.qdrant_api_key,
+        rows = await asyncio.to_thread(
+            ChunkStore().list_chunks, project_id, doc_id, ("chunk_index", "content"), 10,
         )
-        
-        # Collection name format: rag_{project_id}
-        collection_name = f"rag_{project_id}"
-        
-        # Search for chunks with this doc_id
-        results = client.scroll(
-            collection_name=collection_name,
-            scroll_filter=Filter(
-                must=[
-                    FieldCondition(
-                        key="doc_id",
-                        match=MatchValue(value=doc_id)
-                    )
-                ]
-            ),
-            limit=10,  # Get first 10 chunks
-            with_payload=True,
-        )
-        
-        points = results[0] if results else []
-        
-        if not points:
-            return ""
-        
-        # Sort by chunk_index if available, concatenate text
-        sorted_points = sorted(points, key=lambda p: p.payload.get("chunk_index", 0))
-        texts = []
-        for point in sorted_points:
-            text = point.payload.get("text", "")
-            if text:
-                texts.append(text)
-        
-        combined = "\n\n".join(texts)
+        combined = "\n\n".join(r["content"] for r in rows if r.get("content"))
         return combined[:max_chars]
-        
     except Exception as e:
-        logger.warning(f"Failed to fetch chunks from Qdrant for {doc_id}: {e}")
+        logger.warning(f"Failed to fetch chunks for {doc_id}: {e}")
         return ""
 
 
@@ -164,7 +131,7 @@ async def classify_and_update_document(
     Args:
         doc_id: Document UUID
         metadata: Current document metadata
-        project_id: RAG project ID (for Qdrant collection lookup)
+        project_id: RAG project ID (for reading the document's chunks)
         dry_run: If True, don't actually update the database
         
     Returns:
@@ -174,14 +141,14 @@ async def classify_and_update_document(
     
     title = metadata.get("title", "")
     abstract = metadata.get("abstract") or ""
-    qdrant_doc_id = metadata.get("doc_id", "")  # doc_id used in Qdrant
+    chunk_doc_id = metadata.get("doc_id", "")  # document key of the chunks
     
-    # If no abstract, fetch text from Qdrant chunks
-    if not abstract and qdrant_doc_id and project_id:
-        logger.info(f"No abstract for {title[:40]}..., fetching from Qdrant")
-        abstract = await get_document_text_from_qdrant(qdrant_doc_id, project_id, max_chars=8000)
+    # If no abstract, fetch text from the document's chunks
+    if not abstract and chunk_doc_id and project_id:
+        logger.info(f"No abstract for {title[:40]}..., reading its chunks")
+        abstract = await get_document_text_from_chunks(chunk_doc_id, project_id, max_chars=8000)
         if abstract:
-            logger.info(f"  → Got {len(abstract)} chars from Qdrant chunks")
+            logger.info(f"  → Got {len(abstract)} chars from stored chunks")
     
     if not title and not abstract:
         logger.warning(f"Document {doc_id} has no title or abstract for classification")
@@ -262,7 +229,7 @@ async def batch_classify_project(
             stats["by_design"][design] = stats["by_design"].get(design, 0) + 1
             continue
         
-        # Classify (pass project_id for Qdrant lookup)
+        # Classify (pass project_id for the chunk lookup)
         updated = await classify_and_update_document(
             doc_id, metadata, project_id=project_id, dry_run=dry_run
         )

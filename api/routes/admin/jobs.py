@@ -41,8 +41,8 @@ async def get_processing_jobs():
     Get list of processing jobs with their status.
     
     Shows:
-    - Pending: Files in R2 input-pdfs/ that are not yet indexed in Qdrant
-    - Completed: Files that have been indexed in Qdrant
+    - Pending: Files in R2 input-pdfs/ that are not yet indexed
+    - Completed: Files that have been indexed
     """
     jobs = []
     documents_cache = get_documents_cache()
@@ -98,13 +98,7 @@ async def get_processing_jobs():
                 count = 0
                 
                 while count < MAX_SCROLL:
-                    results, next_offset = indexer.client.scroll(
-                        collection_name=indexer.collection_name,
-                        limit=100,
-                        offset=next_offset,
-                        with_payload=["doc_id", "pdf_name"],
-                        with_vectors=False,
-                    )
+                    results, next_offset = indexer.scroll(limit=100, offset=next_offset)
                     for point in results:
                         payload = point.payload or {}
                         doc_id = payload.get("doc_id") or payload.get("pdf_name")

@@ -134,7 +134,8 @@ export interface BackendSettings {
     max_tokens: number;
   };
   processing: {
-    qdrant_collection: string;
+    vector_store: string;
+    default_project_id: string | null;
   };
 }
 

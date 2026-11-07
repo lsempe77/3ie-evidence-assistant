@@ -5,156 +5,30 @@ Contains:
 - process_pdf: Main GPU function for processing global input-pdfs
 - process_pdf_rag: GPU function for processing project-specific PDFs
 - sync_to_supabase_rag: Sync metadata to Supabase for RAG projects
-- check_qdrant_indexed: Check if document is already indexed
-- delete_qdrant_chunks: Remove existing chunks for reprocessing
-- ensure_qdrant_indexes: Create payload indexes for fast lookups
+- check_chunks_indexed / delete_doc_chunks: imported from .chunks (Supabase chunk store)
 """
 
 import json
 import os
 from datetime import datetime
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Optional
 
 from .config import (
     app,
     base_image,
     monkeyocr_image,
     r2_secret,
-    qdrant_secret,
     cohere_secret,
     supabase_secret,
     openrouter_secret,
     model_cache,
-    QDRANT_COLLECTION_NAME,
 )
 from .utils import get_r2_client, get_bucket_name, sanitize_text, sanitize_dict
 from .extraction import run_mineru, post_process_content
 from .metadata import resolve_metadata, classify_study_design_llm
 from .embedding import embed_and_index
-
-
-# ============================================================================
-# Qdrant Helper Functions
-# ============================================================================
-
-def check_qdrant_indexed(doc_id: str) -> Tuple[bool, int, Optional[str]]:
-    """
-    Check if a document is already indexed in Qdrant.
-    
-    Returns:
-        tuple: (is_indexed: bool, chunk_count: int, error: Optional[str])
-    """
-    try:
-        from qdrant_client import QdrantClient
-        
-        qdrant = QdrantClient(
-            url=os.environ["QDRANT_URL"],
-            api_key=os.environ["QDRANT_API_KEY"],
-        )
-        
-        # Search for chunks with this doc_id
-        results = qdrant.scroll(
-            collection_name=QDRANT_COLLECTION_NAME,
-            scroll_filter={
-                "must": [{"key": "doc_id", "match": {"value": doc_id}}]
-            },
-            limit=1,
-            with_payload=False,
-        )
-        
-        points, _ = results
-        if points:
-            # Count total chunks
-            count_result = qdrant.count(
-                collection_name=QDRANT_COLLECTION_NAME,
-                count_filter={
-                    "must": [{"key": "doc_id", "match": {"value": doc_id}}]
-                },
-            )
-            return True, count_result.count, None
-        
-        return False, 0, None
-        
-    except Exception as e:
-        return False, 0, str(e)
-
-
-def delete_qdrant_chunks(doc_id: str) -> int:
-    """
-    Delete all chunks for a document from Qdrant.
-    
-    Returns:
-        int: Number of chunks deleted
-    """
-    try:
-        from qdrant_client import QdrantClient
-        from qdrant_client.http.models import FilterSelector, Filter, FieldCondition, MatchValue
-        
-        qdrant = QdrantClient(
-            url=os.environ["QDRANT_URL"],
-            api_key=os.environ["QDRANT_API_KEY"],
-        )
-        
-        # Count before delete
-        count_before = qdrant.count(
-            collection_name=QDRANT_COLLECTION_NAME,
-            count_filter=Filter(
-                must=[FieldCondition(key="doc_id", match=MatchValue(value=doc_id))]
-            ),
-        )
-        
-        # Delete by filter
-        qdrant.delete(
-            collection_name=QDRANT_COLLECTION_NAME,
-            points_selector=FilterSelector(
-                filter=Filter(
-                    must=[FieldCondition(key="doc_id", match=MatchValue(value=doc_id))]
-                )
-            ),
-        )
-        
-        print(f"  Deleted {count_before.count} existing chunks for {doc_id}")
-        return count_before.count
-        
-    except Exception as e:
-        print(f"  Warning: Failed to delete chunks for {doc_id}: {e}")
-        return 0
-
-
-def ensure_qdrant_indexes() -> bool:
-    """
-    Ensure payload indexes exist for fast lookups.
-    
-    Creates indexes on:
-    - doc_id: For document-level operations
-    - source: For legacy compatibility
-    """
-    try:
-        from qdrant_client import QdrantClient
-        from qdrant_client.http.models import PayloadSchemaType
-        
-        qdrant = QdrantClient(
-            url=os.environ["QDRANT_URL"],
-            api_key=os.environ["QDRANT_API_KEY"],
-        )
-        
-        # Create indexes (idempotent)
-        for field in ["doc_id", "source"]:
-            try:
-                qdrant.create_payload_index(
-                    collection_name=QDRANT_COLLECTION_NAME,
-                    field_name=field,
-                    field_schema=PayloadSchemaType.KEYWORD,
-                )
-            except Exception:
-                pass  # Index already exists
-        
-        return True
-        
-    except Exception as e:
-        print(f"  Warning: Failed to create indexes: {e}")
-        return False
+from .chunks import check_chunks_indexed, delete_doc_chunks
 
 
 def sync_to_postgres(
@@ -166,7 +40,7 @@ def sync_to_postgres(
     """
     Sync document metadata to Railway PostgreSQL backend.
     
-    This enables instant admin queries without hitting Qdrant.
+    This enables instant admin queries without scanning chunks.
     """
     import httpx
     
@@ -299,7 +173,7 @@ def sync_to_supabase_rag(
     image=base_image,
     gpu="T4",
     timeout=1800,
-    secrets=[r2_secret, qdrant_secret, cohere_secret, openrouter_secret],
+    secrets=[r2_secret, supabase_secret, cohere_secret, openrouter_secret],
     volumes={"/cache": model_cache},
     retries=0,
 )
@@ -310,7 +184,7 @@ def process_pdf(pdf_key: str, skip_extraction: bool = False, force_reindex: bool
     Args:
         pdf_key: R2 key for the PDF (e.g., "input-pdfs/paper.pdf")
         skip_extraction: Skip MinerU, use existing R2 JSON output
-        force_reindex: Delete existing Qdrant chunks before indexing
+        force_reindex: Delete the document's existing chunks before indexing
         
     Returns:
         dict with processing results
@@ -344,19 +218,17 @@ def process_pdf(pdf_key: str, skip_extraction: bool = False, force_reindex: bool
             print(f"  Warning: Could not create lock: {e}")
 
     try:
-        ensure_qdrant_indexes()
-
         # Check if already indexed
         if not force_reindex:
-            is_indexed, existing_chunks, qdrant_err = check_qdrant_indexed(doc_id)
-            if qdrant_err:
-                print(f"  Warning: Qdrant check failed: {qdrant_err}")
+            is_indexed, existing_chunks, check_err = check_chunks_indexed(doc_id)
+            if check_err:
+                print(f"  Warning: chunk check failed: {check_err}")
             elif is_indexed and not skip_extraction:
                 print(f"  ✓ Already indexed ({existing_chunks} chunks), skipping")
                 return {"success": True, "pdf_key": pdf_key, "doc_id": doc_id, "skipped": True, "reason": "already_indexed"}
         
         if force_reindex:
-            delete_qdrant_chunks(doc_id)
+            delete_doc_chunks(doc_id)
         
         # Mode 1: Use existing R2 output
         if skip_extraction:
@@ -476,7 +348,7 @@ def process_pdf(pdf_key: str, skip_extraction: bool = False, force_reindex: bool
             content_list=result.get("content_list"),
         )
         
-        print(f"  Indexed: {chunk_count} chunks to Qdrant")
+        print(f"  Indexed: {chunk_count} chunks")
         
         # Sync to PostgreSQL
         sync_to_postgres(doc_id, enriched_metadata, chunk_count, result.get("page_count", 0))
@@ -518,7 +390,7 @@ def process_pdf(pdf_key: str, skip_extraction: bool = False, force_reindex: bool
     image=monkeyocr_image,
     gpu="A10G",        # MonkeyOCR VLM needs more VRAM than MinerU's pipeline
     timeout=2400,
-    secrets=[r2_secret, qdrant_secret, cohere_secret, openrouter_secret],
+    secrets=[r2_secret, supabase_secret, cohere_secret, openrouter_secret],
     volumes={"/cache": model_cache},
     retries=0,
 )
@@ -526,6 +398,7 @@ def process_pdf_monkeyocr(
     pdf_key: str,
     force_reprocess: bool = False,
     index_to_qdrant: bool = False,
+    index_project_id: Optional[str] = None,
 ) -> dict:
     """
     Process a single PDF from R2 using MonkeyOCR (alternative to MinerU).
@@ -536,7 +409,9 @@ def process_pdf_monkeyocr(
     Args:
         pdf_key: R2 key for the PDF (e.g., "input-pdfs/paper.pdf")
         force_reprocess: Re-run even if MonkeyOCR output already exists in R2
-        index_to_qdrant: Also embed & index the output (default False for comparison mode)
+        index_to_qdrant: Also embed & index the output (default False for comparison mode).
+            The name is kept for CLI compatibility; chunks go to Supabase.
+        index_project_id: Project to index into (required when index_to_qdrant is True)
 
     Returns:
         dict with processing results and R2 output keys
@@ -639,9 +514,12 @@ def process_pdf_monkeyocr(
     )
     print(f"  Uploaded: {md_key}, {json_key}")
 
-    # Optionally index to Qdrant (separate collection to avoid polluting MinerU data)
+    # Optionally index (into a project of its own, to keep MinerU results separate)
     chunk_count = 0
     if index_to_qdrant:
+        if not index_project_id:
+            raise ValueError("index_project_id is required with index_to_qdrant: "
+                             "create a project for MonkeyOCR comparisons")
         enriched_metadata = resolve_metadata(
             content=result["content"],
             title=result.get("title"),
@@ -669,16 +547,14 @@ def process_pdf_monkeyocr(
                 "study_design_reasoning": study_design_result.get("study_design_reasoning", ""),
             })
 
-        # Use a dedicated MonkeyOCR Qdrant collection to keep parity with MinerU
-        monkeyocr_collection = "devchat_monkeyocr"
         chunk_count = embed_and_index(
             content=result["content"],
             metadata=enriched_metadata,
             doc_id=doc_id,
             content_list=result.get("content_list"),
-            collection_name=monkeyocr_collection,
+            project_id=index_project_id,
         )
-        print(f"  Indexed {chunk_count} chunks to Qdrant ({monkeyocr_collection})")
+        print(f"  Indexed {chunk_count} chunks into project {index_project_id}")
 
     pdf_path.unlink(missing_ok=True)
 
@@ -700,22 +576,21 @@ def process_pdf_monkeyocr(
 
 @app.function(
     image=base_image,
-    secrets=[r2_secret, qdrant_secret, cohere_secret, supabase_secret, openrouter_secret],
+    secrets=[r2_secret, cohere_secret, supabase_secret, openrouter_secret],
     volumes={"/cache": model_cache},
     gpu="T4",
     timeout=1800,
     retries=2,
 )
-def process_pdf_rag(pdf_key: str, project_id: str, qdrant_collection: str) -> dict:
+def process_pdf_rag(pdf_key: str, project_id: str) -> dict:
     """
     Process a single PDF for a RAG project.
     
-    Similar to process_pdf but uses project-specific paths and collection.
+    Similar to process_pdf but uses project-specific paths; chunks go to the project in Supabase.
     
     Args:
         pdf_key: Full R2 key (e.g., rags/{project_id}/input-pdfs/paper.pdf)
         project_id: RAG project UUID for Supabase sync
-        qdrant_collection: Qdrant collection name
     """
     import tempfile
     import httpx
@@ -821,17 +696,17 @@ def process_pdf_rag(pdf_key: str, project_id: str, qdrant_collection: str) -> di
             enriched_metadata["study_design"] = "unknown"
             enriched_metadata["study_design_confidence"] = 0.0
         
-        # Embed to project-specific collection
-        print(f"  Chunking and embedding to {qdrant_collection}...")
+        # Embed into the project's chunks
+        print(f"  Chunking and embedding into project {project_id}...")
         chunk_count = embed_and_index(
             content=result["content"],
             metadata=enriched_metadata,
             doc_id=doc_id,
             content_list=result.get("content_list"),
-            collection_name=qdrant_collection,
+            project_id=project_id,
         )
         
-        print(f"  Indexed {chunk_count} chunks to {qdrant_collection}")
+        print(f"  Indexed {chunk_count} chunks into project {project_id}")
         
         if chunk_count == 0:
             raise Exception("No chunks indexed. Content may be empty or too short.")

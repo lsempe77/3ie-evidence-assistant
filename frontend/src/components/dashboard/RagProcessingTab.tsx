@@ -73,34 +73,31 @@ export function RagProcessingTab({ ragId, accessToken, onProcessingComplete }: R
   const [triggerMessage, setTriggerMessage] = useState<string | null>(null);
   const [lastTriggeredAt, setLastTriggeredAt] = useState<Date | null>(null);
 
-  // Live Qdrant verification
-  const [qdrantInfo, setQdrantInfo] = useState<{
-    collection: string | null;
+  // Live chunk-store verification
+  const [vectorInfo, setVectorInfo] = useState<{
     exists: boolean | null;
     pointsCount: number | null;
     cachedChunks: number;
     message: string | null;
   }>({
-    collection: null,
     exists: null,
     pointsCount: null,
     cachedChunks: 0,
     message: null,
   });
 
-  const fetchQdrantStatus = useCallback(async () => {
+  const fetchVectorStatus = useCallback(async () => {
     try {
       const res = await fetch(`${API_BASE_URL}/rags/${ragId}`, {
         headers: { Authorization: `Bearer ${accessToken}` },
       });
       if (!res.ok) return;
       const data = await res.json();
-      setQdrantInfo({
-        collection: data.qdrant_collection ?? null,
-        exists: data.qdrant_collection_exists ?? null,
-        pointsCount: data.qdrant_points_count ?? null,
+      setVectorInfo({
+        exists: data.chunk_store_reachable ?? null,
+        pointsCount: data.live_chunk_count ?? null,
         cachedChunks: data.chunk_count ?? 0,
-        message: data.qdrant_status_message ?? null,
+        message: data.chunk_status_message ?? null,
       });
     } catch {
       // Silently ignore — banner just won't show
@@ -198,8 +195,8 @@ export function RagProcessingTab({ ragId, accessToken, onProcessingComplete }: R
   useEffect(() => {
     refreshDocuments();
     fetchJobs();
-    fetchQdrantStatus();
-  }, [refreshDocuments, fetchJobs, fetchQdrantStatus]);
+    fetchVectorStatus();
+  }, [refreshDocuments, fetchJobs, fetchVectorStatus]);
 
   // Auto-refresh documents - less frequent when realtime is connected
   useEffect(() => {
@@ -348,33 +345,32 @@ export function RagProcessingTab({ ragId, accessToken, onProcessingComplete }: R
         </div>
       )}
 
-      {/* Qdrant Status Warning - shown when documents are "completed" in Supabase
-          but Qdrant collection is missing or empty (e.g. cluster reset). */}
-      {qdrantInfo.exists !== null &&
-        (qdrantInfo.exists === false ||
-          (qdrantInfo.pointsCount === 0 && qdrantInfo.cachedChunks > 0)) && (
+      {/* Chunk-store warning: documents are "completed" but have no stored chunks,
+          or the chunk store could not be reached. */}
+      {vectorInfo.exists !== null &&
+        (vectorInfo.exists === false ||
+          (vectorInfo.pointsCount === 0 && vectorInfo.cachedChunks > 0)) && (
           <div className="bg-amber-500/10 border border-amber-500/30 text-amber-800 dark:text-amber-300 px-4 py-3 rounded-lg flex items-start gap-3">
             <AlertTriangle className="h-5 w-5 mt-0.5 flex-shrink-0" />
             <div className="flex-1 text-sm space-y-1">
               <p className="font-semibold">
-                Documents marked &ldquo;Completed&rdquo; but vectors are missing in Qdrant
+                Documents marked &ldquo;Completed&rdquo; but their chunks are missing
               </p>
               <p>
-                {qdrantInfo.exists === false ? (
+                {vectorInfo.exists === false ? (
                   <>
-                    Collection <code className="font-mono text-xs">{qdrantInfo.collection}</code>{" "}
-                    does not exist in the Qdrant cluster. Supabase still reports{" "}
-                    <strong>{qdrantInfo.cachedChunks.toLocaleString()}</strong> cached chunks.
+                    The chunk store could not be reached. The project record still reports{" "}
+                    <strong>{vectorInfo.cachedChunks.toLocaleString()}</strong> cached chunks.
                   </>
                 ) : (
                   <>
-                    Qdrant collection is empty (0 points), but Supabase reports{" "}
-                    <strong>{qdrantInfo.cachedChunks.toLocaleString()}</strong> chunks across{" "}
+                    No chunks are stored for this project, but its record reports{" "}
+                    <strong>{vectorInfo.cachedChunks.toLocaleString()}</strong> chunks across{" "}
                     completed documents.
                   </>
                 )}{" "}
                 These documents need to be re-indexed before they can be queried.
-                {qdrantInfo.message ? ` (${qdrantInfo.message})` : ""}
+                {vectorInfo.message ? ` (${vectorInfo.message})` : ""}
               </p>
             </div>
           </div>

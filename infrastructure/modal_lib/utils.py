@@ -116,10 +116,3 @@ def sync_to_postgres(doc_id: str, metadata: dict, chunk_count: int, page_count: 
     except Exception as e:
         print(f"  ⚠ PostgreSQL sync error: {e}")
         return False
-
-
-def ensure_qdrant_indexes():
-    """Ensure Qdrant has proper indexes for efficient queries."""
-    # This is called from processing functions
-    # Left as a stub - actual implementation in embedding.py
-    pass

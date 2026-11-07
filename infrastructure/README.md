@@ -1,6 +1,11 @@
 # Infrastructure Setup Guide
 
-**Last Updated:** February 23, 2026
+**Last Updated:** November 7, 2026
+
+> **Qdrant has been removed (November 2026).** Chunks and embeddings now live in Supabase Postgres
+> (`public.chunks`, pgvector), created by `python scripts/db_migrate.py`. Modal writes them through
+> `src/vectorstore/chunk_store.py`, which is mounted into the image next to `modal_lib`. Sections below that
+> still describe Qdrant collections are historical. See `docs/SUPABASE_CONSOLIDATION_PLAN.md`.
 
 ## Architecture Overview
 
@@ -80,7 +85,7 @@ devchat-pdfs/
 
 ---
 
-## 2. Qdrant Cloud Setup
+## 2. Qdrant Cloud Setup (historical, no longer used)
 
 ### Create Cluster
 
@@ -159,10 +164,11 @@ modal secret create r2-credentials \
     R2_SECRET_ACCESS_KEY=your_secret_key \
     R2_BUCKET_NAME=devchat-pdfs
 
-# Qdrant credentials
-modal secret create qdrant-credentials \
-    QDRANT_URL=https://xxx.qdrant.io \
-    QDRANT_API_KEY=your_api_key
+# Supabase credentials (database, auth and vectors)
+modal secret create SUPABASE \
+    SUPABASE_URL=https://<project-ref>.supabase.co \
+    SUPABASE_SERVICE_ROLE_KEY=sb_secret_... \
+    DEFAULT_PROJECT_ID=<optional project uuid for the global input-pdfs/ pipeline>
 
 # Cohere credentials
 modal secret create cohere-credentials \
@@ -222,9 +228,8 @@ Both parsers write to separate R2 namespaces so outputs can be compared:
 | Secret Name | Variables |
 |-------------|-----------|
 | `r2-credentials` | `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET_NAME` |
-| `qdrant-credentials` | `QDRANT_URL`, `QDRANT_API_KEY` |
 | `cohere-credentials` | `COHERE_API_KEY` |
-| `supabase-credentials` | `SUPABASE_URL`, `SUPABASE_SERVICE_KEY` |
+| `SUPABASE` | `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, optional `DEFAULT_PROJECT_ID` |
 | `openrouter-credentials` | `OPENROUTER_API_KEY` |
 
 ### For FastAPI Backend (.env)

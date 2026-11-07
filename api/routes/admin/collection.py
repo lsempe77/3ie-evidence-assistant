@@ -1,7 +1,7 @@
 """
 Admin Collection Routes
 
-Endpoints for Qdrant collection management, migrations, and indexing.
+Endpoints for chunk-store management (default project), migrations, and indexing.
 """
 
 import asyncio
@@ -37,31 +37,14 @@ router = APIRouter()
 @router.delete("/collection")
 async def reset_collection():
     """
-    Delete and recreate the Qdrant collection.
-    WARNING: This deletes ALL indexed documents!
+    Delete every chunk in the default project (DEFAULT_PROJECT_ID).
+    WARNING: This deletes ALL indexed chunks for that project!
     """
     try:
         indexer = get_indexer()
-        collection_name = indexer.collection_name
-        
-        # Delete the collection
-        try:
-            indexer.client.delete_collection(collection_name)
-            logger.info(f"Deleted collection: {collection_name}")
-        except Exception as e:
-            logger.warning(f"Collection might not exist: {e}")
-        
-        # Recreate it
-        from qdrant_client.models import VectorParams, Distance
-        
-        indexer.client.create_collection(
-            collection_name=collection_name,
-            vectors_config=VectorParams(
-                size=1024,  # Cohere embed-english-v3.0 dimension
-                distance=Distance.COSINE,
-            ),
-        )
-        logger.info(f"Recreated collection: {collection_name}")
+        deleted = await asyncio.to_thread(indexer.delete_collection)
+        collection_name = indexer.project_id
+        logger.info(f"Deleted {deleted} chunks from project {collection_name}")
         
         # Invalidate cache
         invalidate_admin_caches()
@@ -69,7 +52,8 @@ async def reset_collection():
         return {
             "success": True,
             "message": f"Collection '{collection_name}' reset successfully",
-            "action": "deleted_and_recreated",
+            "action": "deleted_chunks",
+            "deleted": deleted,
         }
     except Exception as e:
         logger.error(f"Failed to reset collection: {e}")
@@ -148,8 +132,8 @@ async def get_collection_info():
         if cache["data"]:
             return cache["data"]
         return {
-            "error": "Qdrant connection timeout",
-            "name": settings.qdrant_collection_name,
+            "error": "Chunk store connection timeout",
+            "name": settings.default_project_id or "",
             "points_count": 0,
             "status": "timeout"
         }
@@ -157,7 +141,7 @@ async def get_collection_info():
         logger.error(f"Collection info error: {e}")
         return {
             "error": str(e),
-            "name": settings.qdrant_collection_name,
+            "name": settings.default_project_id or "",
             "points_count": 0,
             "status": "error"
         }
@@ -256,27 +240,20 @@ async def migrate_add_zotero_fields():
 @router.post("/indexes")
 async def ensure_indexes():
     """
-    Create or ensure all required payload indexes exist on the Qdrant collection.
-    This enables efficient filtering by document_id, source, etc.
-    Safe to call multiple times - will skip already existing indexes.
+    Kept for the admin UI. Chunk-store indexes are created by the database migrations
+    (supabase/migrations), so there is nothing to do here.
     """
-    try:
-        indexer = get_indexer()
-        results = indexer.ensure_indexes()
-        return {
-            "success": True,
-            "message": "Payload indexes ensured",
-            "indexes": results,
-        }
-    except Exception as e:
-        logger.error(f"Failed to ensure indexes: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    return {
+        "success": True,
+        "message": "Indexes are managed by database migrations",
+        "indexes": {},
+    }
 
 
 @router.get("/sample-points")
 async def sample_points(limit: int = 5):
     """
-    Sample a few points from Qdrant to inspect payloads.
+    Sample a few chunks from the default project to inspect their metadata.
     Useful for debugging what fields are available for filtering/deletion.
     """
     try:
@@ -300,7 +277,7 @@ async def ingest_documents(request: IngestRequest):
     """
     from src.ingestion.chunking import get_chunker
     from src.ingestion.document_loader import DocumentLoader
-    from src.ingestion.indexer import QdrantIndexer
+    from src.ingestion.indexer import ChunkIndexer
     
     start_time = time.time()
     
@@ -317,9 +294,12 @@ async def ingest_documents(request: IngestRequest):
         nodes = chunker.chunk(documents)
         
         # Index
-        collection_name = request.collection_name or settings.qdrant_collection_name
-        indexer = QdrantIndexer(collection_name=collection_name)
-        indexer.create_collection(recreate=request.recreate)
+        project_id = request.collection_name or settings.default_project_id
+        if not project_id:
+            raise HTTPException(status_code=400, detail="Give a project id or set DEFAULT_PROJECT_ID")
+        indexer = ChunkIndexer(collection_name=project_id)
+        if request.recreate:
+            indexer.delete_collection()
         indexer.index_nodes(nodes)
         
         # Get final info

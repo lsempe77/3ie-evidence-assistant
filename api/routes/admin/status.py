@@ -21,10 +21,6 @@ from src.config.settings import settings
 from src.utils.logging import get_logger
 from src.utils.metrics import get_metrics_tracker
 
-from ..dependencies import (
-    get_collection_info_cache,
-    get_indexer,
-)
 
 logger = get_logger(__name__)
 
@@ -144,7 +140,6 @@ async def get_admin_status():
         file_count=0,
     )
     
-    collection_cache = get_collection_info_cache()
     
     # Check R2 (with timeout)
     async def check_r2():
@@ -205,34 +200,24 @@ async def get_admin_status():
             logger.warning(f"R2 check failed: {e}")
             return "disconnected", str(e)[:50], 0, 0
     
-    # Check Qdrant (use cached collection info)
+    # Check the chunk store (Supabase pgvector)
     async def check_qdrant():
         try:
-            # Use the cached collection info endpoint logic
-            if collection_cache["data"] and collection_cache["data"].get("points_count"):
-                info = collection_cache["data"]
-                return "connected", f"{info['points_count']:,} vectors"
-            
-            # Try fresh check
-            loop = asyncio.get_event_loop()
-            
+            from src.vectorstore import ChunkStore
+
             def _check():
-                indexer = get_indexer()
-                info = indexer.get_collection_info()
-                return info
-            
-            info = await asyncio.wait_for(
-                loop.run_in_executor(None, _check),
-                timeout=3.0
-            )
-            
-            if "error" in info:
-                return "disconnected", info["error"][:50]
-            return "connected", f"{info.get('points_count', 0):,} vectors"
+                store = ChunkStore(timeout=5)
+                try:
+                    return store.total_chunks()
+                finally:
+                    store.close()
+
+            total = await asyncio.wait_for(asyncio.to_thread(_check), timeout=6.0)
+            return "connected", f"{total:,} chunks"
         except asyncio.TimeoutError:
             return "timeout", "Connection timeout"
         except Exception as e:
-            logger.warning(f"Qdrant check failed: {e}")
+            logger.warning(f"Chunk store check failed: {e}")
             return "disconnected", str(e)[:50]
     
     # Check LLM (just verify API key exists)
@@ -273,7 +258,7 @@ async def get_admin_status():
     
     connections = [
         ServiceConnection(name="Cloudflare R2", status=r2_status, details=r2_details),
-        ServiceConnection(name="Qdrant Cloud", status=qdrant_status, details=qdrant_details),
+        ServiceConnection(name="Supabase vectors", status=qdrant_status, details=qdrant_details),
         ServiceConnection(name="LLM Provider", status=llm_status, details=llm_details),
         ServiceConnection(name="Cohere API", status=cohere_status, details=cohere_details),
     ]
@@ -322,6 +307,7 @@ async def get_settings():
             "max_tokens": settings.llm_max_tokens,
         },
         "processing": {
-            "qdrant_collection": settings.qdrant_collection_name,
+            "vector_store": "supabase_pgvector",
+            "default_project_id": settings.default_project_id,
         },
     }
