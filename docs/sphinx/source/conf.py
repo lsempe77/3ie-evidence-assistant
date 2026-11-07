@@ -91,7 +91,6 @@ html_theme_options = {
 # Mock heavy dependencies that aren't needed for docs
 autodoc_mock_imports = [
     'modal',
-    'qdrant_client',
     'cohere',
     'langfuse',
     'supabase',

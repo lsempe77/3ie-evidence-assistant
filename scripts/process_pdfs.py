@@ -2,7 +2,7 @@
 """
 3ie Evidence Assistant - PDF Processing Script
 
-Batch process PDFs from a directory and ingest into Qdrant.
+Batch process PDFs from a directory and ingest them into a project (Supabase chunks).
 
 Usage:
     python scripts/process_pdfs.py --pdf-dir ./pdfs
@@ -13,7 +13,7 @@ Features:
 - Uses MinerU for SOTA PDF extraction
 - Extracts tables, formulas, and figures
 - Chunks and embeds content
-- Stores in Qdrant vector database
+- Stores chunks and embeddings in Supabase (pgvector)
 """
 
 import argparse
@@ -27,8 +27,7 @@ sys.path.insert(0, str(project_root))
 from src.config.settings import settings
 from src.ingestion.pdf_processor import MinerUProcessor, process_pdfs
 from src.ingestion.chunking import MarkdownChunker, ParentChildChunker
-from src.ingestion.embeddings import get_embedding_model
-from src.ingestion.indexer import QdrantIndexer
+from src.ingestion.indexer import ChunkIndexer
 from src.utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -36,7 +35,7 @@ logger = get_logger(__name__)
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Process PDFs and ingest into Qdrant"
+        description="Process PDFs and ingest into a project"
     )
     parser.add_argument(
         "--pdf-dir",
@@ -59,7 +58,7 @@ def main():
     parser.add_argument(
         "--dry-run",
         action="store_true",
-        help="Process PDFs but don't upload to Qdrant"
+        help="Process PDFs but don't index them"
     )
     parser.add_argument(
         "--no-ocr",
@@ -81,7 +80,7 @@ def main():
         "--collection",
         type=str,
         default=None,
-        help="Qdrant collection name (default: from settings)"
+        help="Project id to index into (default: DEFAULT_PROJECT_ID)"
     )
     
     args = parser.parse_args()
@@ -184,11 +183,7 @@ def main():
     # Step 4: Embed and index
     logger.info("\n[4/4] Embedding and indexing...")
     
-    embed_model = get_embedding_model()
-    indexer = QdrantIndexer(
-        collection_name=args.collection or settings.qdrant_collection,
-        embed_model=embed_model,
-    )
+    indexer = ChunkIndexer(collection_name=args.collection or settings.default_project_id)
     
     indexer.index_nodes(nodes)
     
@@ -198,7 +193,7 @@ def main():
     logger.info(f"  PDFs processed: {success_count}")
     logger.info(f"  Documents created: {len(documents)}")
     logger.info(f"  Chunks indexed: {len(nodes)}")
-    logger.info(f"  Collection: {args.collection or settings.qdrant_collection}")
+    logger.info(f"  Project: {args.collection or settings.default_project_id}")
 
 
 if __name__ == "__main__":

@@ -77,8 +77,11 @@ more after Pro's compute credit). Decide once the real chunk count is known.
   smoke test created a project through the API, stored chunks, searched them (vector, keyword and legacy names),
   reset them and deleted the project. `api/routes/health.py` is outside this session's edit permissions, so it
   keeps importing a small shim (`api/qdrant_status.py`) that maps the old names to the new module.
-- **2c, to do:** Modal indexing, scripts, frontend wording, removal of `qdrant-client` and the Qdrant settings.
-  Response fields named `qdrant_*` are kept until the frontend is updated in the same change.
+- **2c, done:** Modal (`modal_lib/chunks.py`; `embed_and_index` writes to Supabase; app renamed
+  `evidence-assistant-mineru`; `src/` mounted into the image), scripts (Qdrant-only maintenance scripts moved to
+  `scripts/archive/`), frontend wording and response fields (`chunk_store_reachable`, `live_chunk_count`,
+  `chunk_status_message`), `qdrant-client` and Qdrant settings removed, and `rag_projects.qdrant_collection`
+  dropped (`20261107000300_drop_qdrant_collection.sql`). Every module imports with `qdrant_client` blocked.
 
 
 Twelve files import the Qdrant client:

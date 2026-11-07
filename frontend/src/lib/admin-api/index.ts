@@ -405,7 +405,7 @@ export async function getAdminStatus(): Promise<AdminStatusResponse> {
 }
 
 /**
- * Get collection info from Qdrant
+ * Get chunk-store info for the default project
  */
 export async function getCollectionInfo(): Promise<{
   name: string;

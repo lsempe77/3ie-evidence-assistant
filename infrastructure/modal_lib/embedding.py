@@ -1,22 +1,19 @@
 """
 Embedding & Indexing Module
 
-Handles chunking, embedding generation, and Qdrant operations.
+Handles chunking, embedding generation, and writing chunks to Supabase (pgvector).
 Includes Contextual Retrieval (Anthropic's 49% improvement technique).
 Includes Embedding Cache (50-80% cost reduction on re-indexing).
 """
 
-import asyncio
 import hashlib
 import json
 import os
-import re
-from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import List, Dict, Optional, Any
 
-from .config import QDRANT_COLLECTION_NAME
+from .chunks import get_store, resolve_project_id
 from .utils import sanitize_text
 
 
@@ -340,56 +337,42 @@ def embed_and_index(
     metadata: dict,
     doc_id: str,
     content_list: Optional[list] = None,
+    project_id: Optional[str] = None,
     collection_name: Optional[str] = None,
     enable_contextual: bool = True,
     enable_parent_child: bool = True,
-    quantization_type: str = "binary",
+    document_uuid: Optional[str] = None,
 ) -> int:
     """
-    Chunk content, generate embeddings, and upsert to Qdrant.
-    
-    Uses named vector 'dense' to match existing collection configuration.
+    Chunk content, generate embeddings, and write the chunks to Supabase.
+
     When content_list is provided (from MinerU), uses page-aware chunking
     to preserve page numbers for each chunk.
-    
+
     With enable_contextual=True, applies Anthropic's Contextual Retrieval:
     - Each chunk gets an LLM-generated context prefix
     - The contextualized text is embedded (improves retrieval by ~49%)
     - Original text is preserved separately for synthesis
-    
+
     With enable_parent_child=True, applies Parent-Child Chunking (PaperQA2):
     - Child chunks (~200 words) are embedded for precise search
     - Parent chunks (~1000 words) provide context for synthesis
     - When a child matches, the full parent is returned to the LLM
-    
+
     Args:
-        quantization_type: 'binary' (32x compression), 'scalar' (int8, 4x), or 'none'
-    
+        project_id: Project the chunks belong to (or pass a legacy 'rag_<hex>'
+            collection_name; with neither, DEFAULT_PROJECT_ID is used)
+        document_uuid: documents.id, when known, so chunks cascade with the document row
+
     Returns:
         Number of chunks indexed
     """
     import cohere
-    from qdrant_client import QdrantClient
-    from qdrant_client.models import PointStruct, VectorParams, Distance, SparseVector
-    
-    # Initialize clients
+
     co = cohere.ClientV2(api_key=os.environ["COHERE_API_KEY"])
-    qdrant = QdrantClient(
-        url=os.environ["QDRANT_URL"],
-        api_key=os.environ["QDRANT_API_KEY"],
-    )
-    
-    # Use provided collection name or default
-    if collection_name is None:
-        collection_name = QDRANT_COLLECTION_NAME
-    vector_name = "dense"
-    
-    # Ensure collection exists with specified quantization
-    _ensure_collection(qdrant, collection_name, vector_name, quantization_type)
-    
-    # Ensure payload indexes
-    _ensure_payload_indexes(qdrant, collection_name)
-    
+    store = get_store()
+    project_id = resolve_project_id(project_id, collection_name)
+
     # Chunk content - choose strategy
     if content_list and enable_parent_child:
         # Parent-Child Chunking (PaperQA2 approach)
@@ -440,8 +423,10 @@ def embed_and_index(
             print("  Warning: Contextual Retrieval disabled (no OPENROUTER_API_KEY)")
         texts_to_embed = [c["text"] for c in chunks_with_pages]
     
-    # Delete existing chunks for this document
-    _delete_existing_chunks(qdrant, collection_name, doc_id)
+    # Replace any existing chunks for this document
+    deleted = store.delete_document(project_id, doc_id)
+    if deleted:
+        print(f"  Cleared {deleted} existing chunks for doc_id={doc_id}")
     
     # Initialize embedding cache
     cache = get_modal_cache()
@@ -486,213 +471,56 @@ def embed_and_index(
         all_embeddings[idx] = new_embeddings[new_emb_idx]
         new_emb_idx += 1
     
-    # Build points with embeddings
-    points = []
-    for chunk_idx, (chunk_data, embed_text, dense_emb) in enumerate(
-        zip(chunks_with_pages, texts_to_embed, all_embeddings)
-    ):
-        point_id = hashlib.md5(f"{doc_id}:{chunk_idx}".encode()).hexdigest()
-        sparse_vec = _generate_sparse_vector(embed_text)
-        
-        # Page info from chunk data
-        page_info = {
+    # Build chunk rows with embeddings
+    rows = []
+    for chunk_idx, (chunk_data, dense_emb) in enumerate(zip(chunks_with_pages, all_embeddings)):
+        row = {
+            "doc_key": doc_id,
+            "chunk_index": chunk_idx,
+            "content": chunk_data["text"],  # Child text (for display/citation)
+            "parent_text": chunk_data.get("parent_text", chunk_data["text"]),  # Parent text (for synthesis)
+            "context_prefix": chunk_data.get("contextual_prefix") or None,
             "page_start": chunk_data.get("page_start"),
             "page_end": chunk_data.get("page_end"),
-            "pages": chunk_data.get("pages", []),
+            "embedding": dense_emb,
+            "metadata": {
+                "parent_id": chunk_data.get("parent_id", ""),
+                "pages": chunk_data.get("pages", []),
+                "doc_id": doc_id,
+                "pdf_name": metadata.get("pdf_name", doc_id),
+                "source": metadata.get("source", ""),
+                "title": metadata.get("title", ""),
+                "authors": metadata.get("authors", []),
+                "year": metadata.get("year"),
+                "doi": metadata.get("doi"),
+                "journal": metadata.get("journal"),
+                "publisher": metadata.get("publisher"),
+                "cited_by_count": metadata.get("cited_by_count"),
+                "is_open_access": metadata.get("is_open_access", False),
+                "countries": metadata.get("countries", []),
+                "sectors": metadata.get("sectors", []),
+                "study_type": metadata.get("study_type"),
+                "study_design": metadata.get("study_design"),
+                "intervention_type": metadata.get("intervention_type"),
+                "sdgs": metadata.get("sdgs", []),
+                "keywords": metadata.get("keywords", []),
+                "metadata_source": metadata.get("metadata_source", "extraction"),
+                "metadata_confidence": metadata.get("metadata_confidence", 0.0),
+                "needs_review": metadata.get("needs_review", True),
+            },
         }
-        
-        # Build payload - store both original and contextualized text
-        # With parent-child chunking, also store parent_text and parent_id
-        payload = {
-            "text": chunk_data["text"],  # Child text (for display/citation)
-            "parent_text": chunk_data.get("parent_text", chunk_data["text"]),  # Parent text (for synthesis)
-            "parent_id": chunk_data.get("parent_id", ""),  # Parent ID (for deduplication)
-            "contextual_prefix": chunk_data.get("contextual_prefix", ""),  # Just the prefix
-            "text_with_context": chunk_data.get("text_with_context", chunk_data["text"]),  # Full contextualized
-            "doc_id": doc_id,
-            "pdf_name": metadata.get("pdf_name", doc_id),
-            "source": metadata.get("source", ""),
-            "chunk_index": chunk_idx,
-            **page_info,
-            "title": metadata.get("title", ""),
-            "authors": metadata.get("authors", []),
-            "year": metadata.get("year"),
-            "doi": metadata.get("doi"),
-            "journal": metadata.get("journal"),
-            "publisher": metadata.get("publisher"),
-            "cited_by_count": metadata.get("cited_by_count"),
-            "is_open_access": metadata.get("is_open_access", False),
-            "countries": metadata.get("countries", []),
-            "sectors": metadata.get("sectors", []),
-            "study_type": metadata.get("study_type"),
-            "study_design": metadata.get("study_design"),
-            "intervention_type": metadata.get("intervention_type"),
-            "sdgs": metadata.get("sdgs", []),
-            "keywords": metadata.get("keywords", []),
-            "metadata_source": metadata.get("metadata_source", "extraction"),
-            "metadata_confidence": metadata.get("metadata_confidence", 0.0),
-            "needs_review": metadata.get("needs_review", True),
-        }
-        
-        # Qdrant automatically handles binary quantization of dense vectors
-        points.append(
-            PointStruct(
-                id=point_id,
-                vector={
-                    vector_name: dense_emb,
-                    "sparse": sparse_vec,
-                },
-                payload=payload,
-            )
-        )
-    
-    qdrant.upsert(collection_name=collection_name, points=points)
-    
+        if document_uuid:
+            row["document_id"] = document_uuid
+        rows.append(row)
+
+    store.upsert_chunks(project_id, rows)
+
     # Print cache stats
     if enable_cache:
         print(f"  {cache.get_stats()}")
     
-    print(f"  Indexed {len(points)} chunks (contextual={enable_contextual}, cache={enable_cache})")
-    return len(points)
-
-
-def _ensure_collection(qdrant, collection_name: str, vector_name: str, quantization_type: str = "binary"):
-    """
-    Ensure Qdrant collection exists with correct config including quantization and HNSW tuning.
-    
-    Args:
-        qdrant: QdrantClient instance
-        collection_name: Name of the collection
-        vector_name: Name of the dense vector field (e.g., 'dense')
-        quantization_type: Quantization strategy - 'binary' (32x compression), 
-                          'scalar' (4x compression, int8), or 'none'
-    """
-    from qdrant_client.models import (
-        VectorParams, 
-        Distance, 
-        SparseVectorParams, 
-        BinaryQuantization, 
-        BinaryQuantizationConfig,
-        ScalarQuantization,
-        ScalarQuantizationConfig,
-        ScalarType,
-        HnswConfigDiff,
-    )
-    
-    try:
-        collection_info = qdrant.get_collection(collection_name)
-        vectors_config = collection_info.config.params.vectors
-        
-        needs_recreate = False
-        if isinstance(vectors_config, dict):
-            if vector_name in vectors_config:
-                if vectors_config[vector_name].size != 1536:
-                    needs_recreate = True
-                    print(f"  Collection has wrong dimensions")
-            else:
-                needs_recreate = True
-                print(f"  Collection missing vector '{vector_name}'")
-            
-            # Check if quantization is enabled (any type)
-            quant_config = collection_info.config.quantization_config
-            if quant_config is None and quantization_type != "none":
-                needs_recreate = True
-                print(f"  Collection missing quantization config (expected: {quantization_type})")
-        else:
-            needs_recreate = True
-            print("  Collection has unnamed vectors, need named 'dense'")
-        
-        if needs_recreate:
-            count = qdrant.count(collection_name).count
-            if count > 0:
-                print(f"  WARNING: Collection has {count} points, will be deleted!")
-            
-            qdrant.delete_collection(collection_name)
-            print(f"  Deleted old collection")
-            raise Exception("Recreate collection")
-            
-    except Exception as e:
-        # Build quantization config based on type
-        quant_config = None
-        quant_name = "no quantization"
-        
-        if quantization_type == "binary":
-            # Binary: ~32x compression, fastest, best for Cohere embed-v4
-            quant_config = BinaryQuantization(
-                binary=BinaryQuantizationConfig(
-                    always_ram=True,  # Keep quantized vectors in RAM for speed
-                )
-            )
-            quant_name = "binary quantization (32x compression)"
-        elif quantization_type == "scalar":
-            # Scalar: ~4x compression, int8 quantization, better precision than binary
-            quant_config = ScalarQuantization(
-                scalar=ScalarQuantizationConfig(
-                    type=ScalarType.INT8,
-                    quantile=0.99,  # Calibration quantile for better precision
-                    always_ram=True,
-                )
-            )
-            quant_name = "scalar quantization (int8, 4x compression)"
-        # else: None = no quantization
-        
-        print(f"  Creating collection with Cohere 1536-dim dense + sparse + {quant_name} + HNSW tuning...")
-        qdrant.create_collection(
-            collection_name=collection_name,
-            vectors_config={
-                vector_name: VectorParams(
-                    size=1536, 
-                    distance=Distance.COSINE,
-                    # HNSW tuning for better recall
-                    # m=16: Number of edges per node (default 16, higher = better recall, more memory)
-                    # ef_construct=200: Search depth during indexing (default 100, higher = better recall)
-                    hnsw_config=HnswConfigDiff(
-                        m=16,
-                        ef_construct=200,
-                    ),
-                ),
-            },
-            sparse_vectors_config={
-                "sparse": SparseVectorParams()
-            },
-            quantization_config=quant_config,
-        )
-        print(f"  Created collection '{collection_name}' with dense + sparse + {quant_name} + HNSW(m=16, ef_construct=200)")
-
-
-def _ensure_payload_indexes(qdrant, collection_name: str):
-    """Ensure payload indexes exist for efficient filtering."""
-    from qdrant_client.models import PayloadSchemaType
-    
-    try:
-        for field in ["doc_id", "pdf_name"]:
-            try:
-                qdrant.create_payload_index(
-                    collection_name=collection_name,
-                    field_name=field,
-                    field_schema=PayloadSchemaType.KEYWORD,
-                )
-                print(f"  Created payload index on '{field}'")
-            except Exception:
-                pass
-    except Exception as e:
-        print(f"  Note: Could not create indexes: {e}")
-
-
-def _delete_existing_chunks(qdrant, collection_name: str, doc_id: str):
-    """Delete existing chunks for a document."""
-    from qdrant_client.models import Filter, FieldCondition, MatchValue
-    
-    try:
-        qdrant.delete(
-            collection_name=collection_name,
-            points_selector=Filter(
-                must=[FieldCondition(key="doc_id", match=MatchValue(value=doc_id))]
-            ),
-        )
-        print(f"  Cleared existing chunks for doc_id={doc_id}")
-    except Exception as e:
-        print(f"  Note: Could not clear existing chunks: {e}")
+    print(f"  Indexed {len(rows)} chunks into project {project_id} (contextual={enable_contextual}, cache={enable_cache})")
+    return len(rows)
 
 
 # ============================================================================
@@ -869,58 +697,3 @@ def chunk_content_with_pages(
             })
     
     return chunks
-
-
-# ============================================================================
-# Sparse Vectors
-# ============================================================================
-
-def _generate_sparse_vector(text: str):
-    """Generate a BM25-style sparse vector for text."""
-    from qdrant_client.models import SparseVector
-    
-    text_clean = re.sub(r'[^\w\s]', ' ', text.lower())
-    words = text_clean.split()
-    
-    stopwords = {
-        'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for',
-        'of', 'with', 'by', 'from', 'as', 'is', 'was', 'are', 'were', 'been',
-        'be', 'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would',
-        'could', 'should', 'may', 'might', 'must', 'shall', 'can', 'need',
-        'this', 'that', 'these', 'those', 'it', 'its', 'they', 'them', 'their',
-        'we', 'our', 'you', 'your', 'he', 'she', 'his', 'her', 'i', 'me', 'my',
-        'which', 'who', 'whom', 'what', 'where', 'when', 'why', 'how',
-        'all', 'each', 'every', 'both', 'few', 'more', 'most', 'other',
-        'some', 'such', 'no', 'nor', 'not', 'only', 'own', 'same', 'so',
-        'than', 'too', 'very', 'just', 'also', 'now', 'here', 'there',
-    }
-    
-    words = [w for w in words if w not in stopwords and len(w) > 2]
-    
-    if not words:
-        return SparseVector(indices=[], values=[])
-    
-    term_counts = Counter(words)
-    
-    # Use a dict to handle hash collisions - aggregate values for same index
-    index_values = {}
-    for term, count in term_counts.items():
-        term_idx = abs(hash(term)) % 1000000
-        # If collision, add the counts together
-        index_values[term_idx] = index_values.get(term_idx, 0.0) + float(count)
-    
-    # Convert to sorted lists (Qdrant requires unique indices)
-    indices = sorted(index_values.keys())
-    values = [index_values[idx] for idx in indices]
-    
-    return SparseVector(indices=indices, values=values)
-
-
-# ============================================================================
-# Qdrant Index Management
-# ============================================================================
-
-def ensure_qdrant_indexes():
-    """Ensure Qdrant has proper indexes - called at processing start."""
-    # This is now handled in _ensure_payload_indexes during embed_and_index
-    pass

@@ -113,7 +113,7 @@ interface StorageStats {
   totalFiles: number;
 }
 
-interface QdrantInfo {
+interface VectorInfo {
   exists: boolean | null;
   pointsCount: number | null;
   message: string | null;
@@ -126,7 +126,6 @@ interface RagSettingsTabProps {
     name: string;
     description: string | null;
     slug: string | null;
-    qdrant_collection: string;
     is_public: boolean;
     document_count: number;
     chunk_count: number;
@@ -173,7 +172,7 @@ export function RagSettingsTab({ ragId, project, onProjectUpdated, onProjectDele
   const [copied, setCopied] = useState(false);
   
   // Danger zone state
-  const [isResettingQdrant, setIsResettingQdrant] = useState(false);
+  const [isResettingVectors, setIsResettingVectors] = useState(false);
   const [isResettingR2, setIsResettingR2] = useState(false);
   const [isResettingDocuments, setIsResettingDocuments] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -216,7 +215,7 @@ export function RagSettingsTab({ ragId, project, onProjectUpdated, onProjectDele
   // Connection status
   const [connections, setConnections] = useState<ConnectionStatus[]>([
     { name: "Backend API", status: "checking", details: "Checking..." },
-    { name: "Qdrant Cloud", status: "checking", details: "Checking..." },
+    { name: "Supabase vectors", status: "checking", details: "Checking..." },
     { name: "Cloudflare R2", status: "checking", details: "Checking..." },
   ]);
   
@@ -227,8 +226,8 @@ export function RagSettingsTab({ ragId, project, onProjectUpdated, onProjectDele
     totalFiles: 0,
   });
 
-  // Live Qdrant verification (separate from cached project.chunk_count)
-  const [qdrantInfo, setQdrantInfo] = useState<QdrantInfo>({
+  // Live chunk-store verification (separate from cached project.chunk_count)
+  const [vectorInfo, setVectorInfo] = useState<VectorInfo>({
     exists: null,
     pointsCount: null,
     message: null,
@@ -268,52 +267,52 @@ export function RagSettingsTab({ ragId, project, onProjectUpdated, onProjectDele
         newConnections.push({ name: "Cloudflare R2", status: "disconnected", details: "Backend unreachable" });
       }
       
-      // Check Qdrant for this project's collection (uses live verification on backend)
+      // Check this project's chunks (live verification on the backend)
       try {
-        const qdrantRes = await fetchWithAuth(`${API_BASE_URL}/rags/${ragId}`);
-        if (qdrantRes.ok) {
-          const data = await qdrantRes.json();
-          const exists = data.qdrant_collection_exists ?? null;
-          const points = data.qdrant_points_count ?? null;
+        const vectorRes = await fetchWithAuth(`${API_BASE_URL}/rags/${ragId}`);
+        if (vectorRes.ok) {
+          const data = await vectorRes.json();
+          const exists = data.chunk_store_reachable ?? null;
+          const points = data.live_chunk_count ?? null;
           const cached = data.chunk_count ?? 0;
-          const message = data.qdrant_status_message ?? null;
+          const message = data.chunk_status_message ?? null;
 
-          setQdrantInfo({ exists, pointsCount: points, message });
+          setVectorInfo({ exists, pointsCount: points, message });
 
           if (exists === false) {
             // Collection missing entirely
             newConnections.push({
-              name: "Qdrant Cloud",
+              name: "Supabase vectors",
               status: "disconnected",
-              details: `Collection "${data.qdrant_collection}" missing — needs re-indexing (Supabase reports ${cached.toLocaleString()} cached chunks)`,
+              details: `Chunk store unreachable — needs checking (project record reports ${cached.toLocaleString()} cached chunks)`,
             });
           } else if (exists === true && points === 0 && cached > 0) {
             // Collection empty but Supabase says it should have data
             newConnections.push({
-              name: "Qdrant Cloud",
+              name: "Supabase vectors",
               status: "disconnected",
               details: `Collection empty — Supabase reports ${cached.toLocaleString()} chunks. Re-index required.`,
             });
           } else if (exists === true) {
             // Healthy or mismatch
             newConnections.push({
-              name: "Qdrant Cloud",
+              name: "Supabase vectors",
               status: "connected",
-              details: `${(points ?? 0).toLocaleString()} vectors in ${data.qdrant_collection}${message && message !== "Healthy" ? ` — ${message}` : ""}`,
+              details: `${(points ?? 0).toLocaleString()} chunks stored${message && message !== "Healthy" ? ` — ${message}` : ""}`,
             });
           } else {
             // Unknown (verification could not run)
             newConnections.push({
-              name: "Qdrant Cloud",
+              name: "Supabase vectors",
               status: "disconnected",
               details: message || "Could not verify collection",
             });
           }
         } else {
-          newConnections.push({ name: "Qdrant Cloud", status: "disconnected", details: "Collection not found" });
+          newConnections.push({ name: "Supabase vectors", status: "disconnected", details: "Collection not found" });
         }
       } catch {
-        newConnections.push({ name: "Qdrant Cloud", status: "disconnected", details: "Connection failed" });
+        newConnections.push({ name: "Supabase vectors", status: "disconnected", details: "Connection failed" });
       }
       
       setConnections(newConnections);
@@ -575,23 +574,23 @@ export function RagSettingsTab({ ragId, project, onProjectUpdated, onProjectDele
   };
   
   // Danger zone actions
-  const resetQdrant = async () => {
-    if (dangerConfirm !== "qdrant") {
-      setDangerConfirm("qdrant");
+  const resetVectors = async () => {
+    if (dangerConfirm !== "vectors") {
+      setDangerConfirm("vectors");
       return;
     }
-    setIsResettingQdrant(true);
+    setIsResettingVectors(true);
     setDangerConfirm(null);
     try {
       const res = await fetchWithAuth(`${API_BASE_URL}/rags/${ragId}/vectors`, { method: "DELETE" });
       if (!res.ok) throw new Error(await res.text());
-      alert("Qdrant vectors reset successfully! Documents will need reprocessing.");
+      alert("Vectors reset successfully! Documents will need reprocessing.");
       await fetchStatus();
       onProjectUpdated();
     } catch (err) {
-      alert(`Failed to reset Qdrant: ${err}`);
+      alert(`Failed to reset vectors: ${err}`);
     } finally {
-      setIsResettingQdrant(false);
+      setIsResettingVectors(false);
     }
   };
   
@@ -721,13 +720,13 @@ export function RagSettingsTab({ ragId, project, onProjectUpdated, onProjectDele
         <CardContent className="space-y-4">
           <div className="p-4 rounded-lg bg-muted/50 space-y-3">
             <div className="flex items-center justify-between">
-              <span className="text-sm text-muted-foreground">Collection</span>
+              <span className="text-sm text-muted-foreground">Project ID</span>
               <div className="flex items-center gap-2">
-                <Badge variant="secondary">{project.qdrant_collection}</Badge>
-                {qdrantInfo.exists === false && (
+                <Badge variant="secondary">{project.id}</Badge>
+                {vectorInfo.exists === false && (
                   <Badge variant="destructive" className="text-xs">Missing</Badge>
                 )}
-                {qdrantInfo.exists === true && qdrantInfo.pointsCount === 0 && project.chunk_count > 0 && (
+                {vectorInfo.exists === true && vectorInfo.pointsCount === 0 && project.chunk_count > 0 && (
                   <Badge variant="destructive" className="text-xs">Empty</Badge>
                 )}
               </div>
@@ -737,17 +736,17 @@ export function RagSettingsTab({ ragId, project, onProjectUpdated, onProjectDele
               <span className="text-sm font-medium">{project.document_count.toLocaleString()}</span>
             </div>
             <div className="flex items-center justify-between">
-              <span className="text-sm text-muted-foreground">Vector Chunks (Qdrant)</span>
+              <span className="text-sm text-muted-foreground">Vector Chunks</span>
               <span className="text-sm font-medium">
-                {qdrantInfo.pointsCount !== null
-                  ? qdrantInfo.pointsCount.toLocaleString()
-                  : qdrantInfo.exists === false
+                {vectorInfo.pointsCount !== null
+                  ? vectorInfo.pointsCount.toLocaleString()
+                  : vectorInfo.exists === false
                     ? "0 (collection missing)"
                     : "—"}
               </span>
             </div>
-            {qdrantInfo.pointsCount !== null &&
-              qdrantInfo.pointsCount !== project.chunk_count && (
+            {vectorInfo.pointsCount !== null &&
+              vectorInfo.pointsCount !== project.chunk_count && (
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-muted-foreground">
                     Cached chunks (Supabase)
@@ -761,9 +760,9 @@ export function RagSettingsTab({ ragId, project, onProjectUpdated, onProjectDele
               <span className="text-sm text-muted-foreground">PDFs in R2</span>
               <span className="text-sm font-medium">{storageStats.inputFiles}</span>
             </div>
-            {qdrantInfo.message && qdrantInfo.message !== "Healthy" && (
+            {vectorInfo.message && vectorInfo.message !== "Healthy" && (
               <div className="pt-2 border-t border-border/40 text-xs text-amber-600">
-                {qdrantInfo.message}
+                {vectorInfo.message}
               </div>
             )}
           </div>
@@ -1354,23 +1353,23 @@ export function RagSettingsTab({ ragId, project, onProjectUpdated, onProjectDele
           <div className="grid gap-4 md:grid-cols-2">
             <div className="p-4 rounded-lg border border-red-200 bg-red-50/50 dark:bg-red-950/20 flex flex-col justify-between min-h-[120px]">
               <div>
-                <h4 className="font-medium text-red-700 dark:text-red-400">Reset Qdrant Vectors</h4>
+                <h4 className="font-medium text-red-700 dark:text-red-400">Reset Vectors</h4>
                 <p className="text-xs text-muted-foreground mt-1">Delete all vector embeddings for this project. Documents will need reprocessing.</p>
               </div>
               <Button 
-                variant={dangerConfirm === "qdrant" ? "destructive" : "outline"}
+                variant={dangerConfirm === "vectors" ? "destructive" : "outline"}
                 size="sm"
-                onClick={resetQdrant}
-                disabled={isResettingQdrant}
-                className={`w-full mt-3 ${dangerConfirm === "qdrant" ? "" : "border-red-300 text-red-600 hover:bg-red-100"}`}
+                onClick={resetVectors}
+                disabled={isResettingVectors}
+                className={`w-full mt-3 ${dangerConfirm === "vectors" ? "" : "border-red-300 text-red-600 hover:bg-red-100"}`}
               >
-                {isResettingQdrant ? (
+                {isResettingVectors ? (
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                 ) : (
                   <Trash2 className="h-4 w-4 mr-2" />
                 )}
                 <span className="min-w-[100px]">
-                  {dangerConfirm === "qdrant" ? "Confirm Reset" : "Reset Vectors"}
+                  {dangerConfirm === "vectors" ? "Confirm Reset" : "Reset Vectors"}
                 </span>
               </Button>
             </div>

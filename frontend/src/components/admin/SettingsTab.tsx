@@ -43,7 +43,7 @@ function formatBytes(bytes: number): string {
 
 export function SettingsTab() {
   const [isLoading, setIsLoading] = useState(true);
-  const [isResettingQdrant, setIsResettingQdrant] = useState(false);
+  const [isResettingVectors, setIsResettingVectors] = useState(false);
   const [isResettingR2, setIsResettingR2] = useState(false);
   const [isResettingDB, setIsResettingDB] = useState(false);
   const [isResettingAll, setIsResettingAll] = useState(false);
@@ -58,7 +58,7 @@ export function SettingsTab() {
   const [backendSettings, setBackendSettings] = useState<BackendSettings | null>(null);
   const [connections, setConnections] = useState<ConnectionStatus[]>([
     { name: "Cloudflare R2", status: "checking", details: "Checking..." },
-    { name: "Qdrant Cloud", status: "checking", details: "Checking..." },
+    { name: "Supabase vectors", status: "checking", details: "Checking..." },
     { name: "Modal", status: "checking", details: "Checking..." },
     { name: "Cohere API", status: "checking", details: "Checking..." },
   ]);
@@ -121,17 +121,17 @@ export function SettingsTab() {
         setBackendSettings(settingsResult.value);
       }
 
-      // Check Qdrant
+      // Check the chunk store
       if (collectionResult.status === "fulfilled") {
         const collection = collectionResult.value;
         newConnections.push({
-          name: "Qdrant Cloud",
+          name: "Supabase vectors",
           status: "connected",
           details: `${collection.points_count.toLocaleString()} vectors indexed`,
         });
       } else {
         newConnections.push({
-          name: "Qdrant Cloud",
+          name: "Supabase vectors",
           status: "disconnected",
           details: "Connection failed",
         });
@@ -167,22 +167,22 @@ export function SettingsTab() {
   // Danger Zone Actions
   const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
-  const resetQdrant = async () => {
-    if (dangerConfirm !== "qdrant") {
-      setDangerConfirm("qdrant");
+  const resetVectors = async () => {
+    if (dangerConfirm !== "vectors") {
+      setDangerConfirm("vectors");
       return;
     }
-    setIsResettingQdrant(true);
+    setIsResettingVectors(true);
     setDangerConfirm(null);
     try {
       const res = await fetch(`${API_BASE_URL}/admin/collection`, { method: "DELETE" });
       if (!res.ok) throw new Error(await res.text());
-      alert("Qdrant collection reset successfully!");
+      alert("Vectors reset successfully!");
       await fetchStatus();
     } catch (err) {
-      alert(`Failed to reset Qdrant: ${err}`);
+      alert(`Failed to reset vectors: ${err}`);
     } finally {
-      setIsResettingQdrant(false);
+      setIsResettingVectors(false);
     }
   };
 
@@ -234,7 +234,7 @@ export function SettingsTab() {
     setDangerConfirm(null);
     setIsResettingAll(true);
     try {
-      // Reset in order: DB -> Qdrant -> R2
+      // Reset in order: DB -> vectors -> R2
       await fetch(`${API_BASE_URL}/admin/database/reset`, { method: "POST" });
       await fetch(`${API_BASE_URL}/admin/collection`, { method: "DELETE" });
       await fetch(`${API_BASE_URL}/admin/r2/clear?confirm=true`, { method: "DELETE" });
@@ -461,23 +461,23 @@ export function SettingsTab() {
           <div className="grid gap-4 md:grid-cols-2">
             <div className="p-4 rounded-lg border border-red-200 bg-red-50/50 dark:bg-red-950/20 flex flex-col justify-between min-h-[120px]">
               <div>
-                <h4 className="font-medium text-red-700 dark:text-red-400">Reset Qdrant Vectors</h4>
+                <h4 className="font-medium text-red-700 dark:text-red-400">Reset Vectors</h4>
                 <p className="text-xs text-muted-foreground mt-1">Delete all vector embeddings. Documents will need reprocessing.</p>
               </div>
               <Button 
-                variant={dangerConfirm === "qdrant" ? "destructive" : "outline"}
+                variant={dangerConfirm === "vectors" ? "destructive" : "outline"}
                 size="sm"
-                onClick={resetQdrant}
-                disabled={isResettingQdrant}
-                className={`w-full mt-3 ${dangerConfirm === "qdrant" ? "" : "border-red-300 text-red-600 hover:bg-red-100"}`}
+                onClick={resetVectors}
+                disabled={isResettingVectors}
+                className={`w-full mt-3 ${dangerConfirm === "vectors" ? "" : "border-red-300 text-red-600 hover:bg-red-100"}`}
               >
-                {isResettingQdrant ? (
+                {isResettingVectors ? (
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                 ) : (
                   <Trash2 className="h-4 w-4 mr-2" />
                 )}
                 <span className="min-w-[100px]">
-                  {dangerConfirm === "qdrant" ? "Confirm Reset" : "Reset Qdrant"}
+                  {dangerConfirm === "vectors" ? "Confirm Reset" : "Reset Vectors"}
                 </span>
               </Button>
             </div>
@@ -537,7 +537,7 @@ export function SettingsTab() {
                 variant={dangerConfirm === "all" ? "destructive" : "outline"}
                 size="sm"
                 onClick={resetAll}
-                disabled={isResettingAll || isResettingDB || isResettingQdrant || isResettingR2}
+                disabled={isResettingAll || isResettingDB || isResettingVectors || isResettingR2}
                 className={`w-full mt-3 ${dangerConfirm === "all" ? "" : "border-red-500 text-red-700 hover:bg-red-200"}`}
               >
                 {isResettingAll ? (

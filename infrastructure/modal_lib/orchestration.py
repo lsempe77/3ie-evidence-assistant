@@ -5,11 +5,10 @@ Contains:
 - orchestrate: Process all PDFs in global input-pdfs folder
 - orchestrate_rag: Process all PDFs for a specific RAG project
 - list_pdfs: List PDFs and processing status
-- check_qdrant: Check Qdrant connection status
+- check_vector_store_status: Check the Supabase chunk store
 """
 
 import os
-from collections import Counter
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
@@ -18,13 +17,12 @@ from .config import (
     app,
     base_image,
     r2_secret,
-    qdrant_secret,
     cohere_secret,
     supabase_secret,
-    QDRANT_COLLECTION_NAME,
 )
 from .utils import get_r2_client, get_bucket_name
-from .processing import process_pdf, process_pdf_rag, check_qdrant_indexed
+from .processing import process_pdf, process_pdf_rag
+from .chunks import check_chunks_indexed, get_store, indexed_doc_keys
 
 
 # ============================================================================
@@ -33,7 +31,7 @@ from .processing import process_pdf, process_pdf_rag, check_qdrant_indexed
 
 @app.function(
     image=base_image,
-    secrets=[r2_secret, qdrant_secret],
+    secrets=[r2_secret, supabase_secret],
     timeout=300,
 )
 def orchestrate(force_reprocess: bool = False, check_qdrant: bool = True, max_documents: int = 0) -> dict:
@@ -42,50 +40,19 @@ def orchestrate(force_reprocess: bool = False, check_qdrant: bool = True, max_do
     
     Smart deduplication:
     1. Checks if JSON output exists in R2 (fast)
-    2. Optionally checks if chunks exist in Qdrant (thorough)
+    2. Optionally checks if chunks exist in the chunk store (thorough)
     3. Can force reprocess with force_reprocess=True
     
     Args:
         force_reprocess: If True, reprocess all PDFs even if outputs exist
-        check_qdrant: If True, also verify Qdrant indexing (slower but thorough)
+        check_qdrant: If True, also verify chunks exist (name kept for API compatibility)
         max_documents: Maximum number of PDFs to queue (0 = unlimited)
         
     Returns:
         dict with counts of queued, skipped, and failed PDFs
     """
-    import boto3
-    from qdrant_client import QdrantClient
     
-    # Safety check for duplicates
-    print("Running Qdrant duplication safety check...")
-    try:
-        qdrant = QdrantClient(
-            url=os.environ["QDRANT_URL"],
-            api_key=os.environ["QDRANT_API_KEY"],
-        )
-        
-        doc_counts = Counter()
-        offset = None
-        sample_count = 0
-        while sample_count < 2000:
-            pts, offset = qdrant.scroll(
-                QDRANT_COLLECTION_NAME, limit=500, offset=offset, with_payload=["doc_id"]
-            )
-            for p in pts:
-                doc_counts[p.payload.get("doc_id")] += 1
-            sample_count += len(pts)
-            if offset is None:
-                break
-        
-        if doc_counts:
-            max_dup = max(doc_counts.values())
-            worst_doc = max(doc_counts, key=doc_counts.get)
-            if max_dup > 10:
-                print(f"⚠️ WARNING: Detected high duplication! {worst_doc} has {max_dup} copies")
-            else:
-                print(f"  ✓ Duplication check passed (max {max_dup}x)")
-    except Exception as e:
-        print(f"  Note: Could not run duplication check: {e}")
+    # Duplicate chunks are impossible: (project, doc_key, chunk_index) is unique in the chunks table.
     
     s3 = get_r2_client()
     bucket = get_bucket_name()
@@ -179,16 +146,16 @@ def orchestrate(force_reprocess: bool = False, check_qdrant: bool = True, max_do
         
         if has_r2_output and not force_reprocess:
             if check_qdrant:
-                is_indexed, chunk_count, qdrant_error = check_qdrant_indexed(pdf_name)
+                is_indexed, chunk_count, qdrant_error = check_chunks_indexed(pdf_name)
                 
                 if qdrant_error:
                     skipped_errors.append({"key": pdf_key, "error": qdrant_error})
-                    print(f"  ❌ Skipping (Qdrant error): {pdf_key}")
+                    print(f"  ❌ Skipping (chunk check error): {pdf_key}")
                     continue
                 
                 if is_indexed:
                     skipped_qdrant.append({"key": pdf_key, "chunks": chunk_count})
-                    print(f"  ✓ Skipping (R2 + Qdrant OK): {pdf_key}")
+                    print(f"  ✓ Skipping (R2 output + chunks OK): {pdf_key}")
                     continue
                 else:
                     if max_documents > 0 and (len(queued) + len(needs_reindex)) >= max_documents:
@@ -232,12 +199,12 @@ def orchestrate(force_reprocess: bool = False, check_qdrant: bool = True, max_do
 
 @app.function(
     image=base_image,
-    secrets=[r2_secret, qdrant_secret, cohere_secret, supabase_secret],
+    secrets=[r2_secret, cohere_secret, supabase_secret],
     timeout=3600,
 )
 def orchestrate_rag(
     project_id: str,
-    qdrant_collection: Optional[str] = None,
+    qdrant_collection: Optional[str] = None,  # ignored; kept for callers of the old signature
     force_reprocess: bool = False,
     max_documents: int = 0,
 ) -> dict:
@@ -248,38 +215,26 @@ def orchestrate_rag(
     
     Args:
         project_id: The RAG project UUID
-        qdrant_collection: Optional override (default: lookup from database)
+        qdrant_collection: Ignored; kept for callers of the old signature
         force_reprocess: If True, reprocess all PDFs
         max_documents: Max docs to process (0 = unlimited)
         
     Returns:
         dict with processing stats
     """
-    import boto3
     from supabase import create_client
-    from qdrant_client import QdrantClient
     
     s3 = get_r2_client()
     bucket = get_bucket_name()
     
     supabase = create_client(os.environ["SUPABASE_URL"], os.environ["SUPABASE_SERVICE_ROLE_KEY"])
     
-    # Get collection name from database if not provided
-    if not qdrant_collection:
-        project_result = supabase.table("rag_projects").select("qdrant_collection").eq("id", project_id).single().execute()
-        if project_result.data and project_result.data.get("qdrant_collection"):
-            collection = project_result.data["qdrant_collection"]
-        else:
-            collection = f"rag_{project_id}"
-    else:
-        collection = qdrant_collection
-    
     input_prefix = f"rags/{project_id}/input-pdfs/"
     output_prefix = f"rags/{project_id}/outputs/"
     
     print(f"Processing RAG project: {project_id}")
     print(f"  Input prefix: {input_prefix}")
-    print(f"  Qdrant collection: {collection}")
+    print(f"  Chunks go to project: {project_id}")
     
     # List input PDFs
     pdf_keys = []
@@ -326,28 +281,13 @@ def orchestrate_rag(
     
     print(f"Found {len(existing_outputs)} existing outputs")
     
-    # Check Qdrant for existing vectors
+    # Documents that already have chunks
     qdrant_indexed = set()
     try:
-        qdrant = QdrantClient(url=os.environ["QDRANT_URL"], api_key=os.environ["QDRANT_API_KEY"])
-        
-        try:
-            qdrant.get_collection(collection)
-            offset = None
-            while True:
-                results, next_offset = qdrant.scroll(collection_name=collection, limit=100, with_payload=["source"], offset=offset)
-                for point in results:
-                    source = point.payload.get("source", "")
-                    if source:
-                        qdrant_indexed.add(source.replace(".pdf", ""))
-                if next_offset is None:
-                    break
-                offset = next_offset
-            print(f"Found {len(qdrant_indexed)} documents in Qdrant")
-        except Exception:
-            print(f"  Collection {collection} doesn't exist yet")
+        qdrant_indexed = indexed_doc_keys(project_id)
+        print(f"Found {len(qdrant_indexed)} documents with chunks")
     except Exception as e:
-        print(f"  Qdrant check failed: {e}")
+        print(f"  Chunk store check failed: {e}")
     
     # Determine what to process
     to_process = []
@@ -364,7 +304,7 @@ def orchestrate_rag(
         if not force_reprocess:
             if has_r2_output and has_qdrant:
                 skipped.append(pdf_key)
-                print(f"  ✓ Skipping (R2 + Qdrant OK): {pdf_name}")
+                print(f"  ✓ Skipping (R2 output + chunks OK): {pdf_name}")
                 continue
             elif has_r2_output and not has_qdrant:
                 if max_documents > 0 and (len(to_process) + len(to_reindex)) >= max_documents:
@@ -386,7 +326,6 @@ def orchestrate_rag(
     if not all_to_process:
         return {
             "project_id": project_id,
-            "qdrant_collection": collection,
             "processed": 0,
             "skipped": len(skipped),
             "total": len(pdf_keys),
@@ -437,7 +376,7 @@ def orchestrate_rag(
     processed_count = 0
     
     for result in process_pdf_rag.starmap(
-        [(pdf_key, project_id, collection) for pdf_key in all_to_process],
+        [(pdf_key, project_id) for pdf_key in all_to_process],
         return_exceptions=True,
     ):
         processed_count += 1
@@ -460,7 +399,6 @@ def orchestrate_rag(
     
     return {
         "project_id": project_id,
-        "qdrant_collection": collection,
         "job_id": job_id,
         "processed": success,
         "failed": failed,
@@ -527,24 +465,13 @@ def list_pdfs() -> dict:
 
 @app.function(
     image=base_image,
-    secrets=[qdrant_secret],
+    secrets=[supabase_secret],
     timeout=30,
 )
-def check_qdrant_status() -> dict:
-    """Check Qdrant connection and collection status."""
-    from qdrant_client import QdrantClient
-    
-    qdrant = QdrantClient(
-        url=os.environ["QDRANT_URL"],
-        api_key=os.environ["QDRANT_API_KEY"],
-    )
-    
+def check_vector_store_status() -> dict:
+    """Check the Supabase chunk store."""
     try:
-        info = qdrant.get_collection(QDRANT_COLLECTION_NAME)
-        return {
-            "status": "connected",
-            "points_count": info.points_count,
-            "vectors_count": info.vectors_count,
-        }
+        total = get_store().total_chunks()
+        return {"status": "connected", "points_count": total, "vectors_count": total}
     except Exception as e:
         return {"status": "error", "message": str(e)}

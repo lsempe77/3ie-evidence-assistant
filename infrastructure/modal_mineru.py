@@ -4,13 +4,14 @@ MinerU PDF Processing on Modal with Cloudflare R2 Storage
 This is the main entry point for Modal deployment. All heavy logic is in modal_lib/.
 
 Architecture:
-    Cloudflare R2 (/input-pdfs/) → Modal (GPU) → R2 (/outputs/) + Qdrant Cloud
+    Cloudflare R2 (/input-pdfs/) → Modal (GPU) → R2 (/outputs/) + Supabase (chunks, pgvector)
 
 Setup:
     1. pip install modal
-    2. modal token new
-    3. Create Modal secrets: r2-credentials, qdrant-credentials, cohere-credentials
-    4. modal deploy infrastructure/modal_mineru.py
+    2. modal token new   (use the lsempe77 profile)
+    3. Modal secrets: r2-credentials, cohere-credentials, openrouter-credentials, and
+       SUPABASE (SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, optional DEFAULT_PROJECT_ID)
+    4. python -m modal deploy infrastructure/modal_mineru.py   (run from the repo root so src/ is found)
 
 Usage:
     # Process all new PDFs in R2 bucket
@@ -34,7 +35,6 @@ from modal_lib import (
     base_image,
     monkeyocr_image,
     r2_secret,
-    qdrant_secret,
     cohere_secret,
     supabase_secret,
     # Processing functions (these are @app.function decorated)
@@ -45,7 +45,7 @@ from modal_lib import (
     orchestrate,
     orchestrate_rag,
     list_pdfs,
-    check_qdrant_status,
+    check_vector_store_status,
 )
 
 
@@ -55,7 +55,7 @@ from modal_lib import (
 
 @app.function(
     image=base_image,
-    secrets=[r2_secret, qdrant_secret, cohere_secret, supabase_secret],
+    secrets=[r2_secret, cohere_secret, supabase_secret],
     timeout=600,
 )
 @modal.fastapi_endpoint(method="POST")
@@ -164,17 +164,18 @@ def main(
     project_id: str = None,
     max_documents: int = 0,
     index: bool = False,
+    index_project_id: str = None,
 ):
     """
     CLI for MinerU / MonkeyOCR processing.
     
     Actions:
-        status       - Show R2 and Qdrant status
+        status       - Show R2 and chunk-store status
         run          - Process all pending PDFs with MinerU
         single       - Process a single PDF with MinerU (requires --pdf-key)
         rag          - Process a RAG project (requires --project-id)
         monkeyocr    - Process a single PDF with MonkeyOCR (requires --pdf-key)
-                       Use --index to also embed & index results to Qdrant.
+                       Use --index --index-project-id <uuid> to also embed & index the results.
     """
     if action == "status":
         print("\n📁 R2 Storage:")
@@ -183,11 +184,11 @@ def main(
         print(f"   Processed: {r2_status['processed']}")
         print(f"   Pending: {r2_status['pending']}")
         
-        print("\n🔍 Qdrant:")
-        qdrant_status = check_qdrant_status.remote()
+        print("\n🔍 Chunk store (Supabase):")
+        qdrant_status = check_vector_store_status.remote()
         print(f"   Status: {qdrant_status['status']}")
         if "points_count" in qdrant_status:
-            print(f"   Vectors: {qdrant_status['points_count']}")
+            print(f"   Chunks: {qdrant_status['points_count']}")
         if "message" in qdrant_status:
             print(f"   Error: {qdrant_status['message']}")
     
@@ -232,11 +233,12 @@ def main(
             print("❌ --pdf-key required for monkeyocr processing")
             return
         print(f"\n🐒 Processing with MonkeyOCR: {pdf_key}")
-        print(f"   index_to_qdrant={index}, force_reprocess={force}")
+        print(f"   index={index}, index_project_id={index_project_id}, force_reprocess={force}")
         result = process_pdf_monkeyocr.remote(
             pdf_key=pdf_key,
             force_reprocess=force,
             index_to_qdrant=index,
+            index_project_id=index_project_id,
         )
         print(f"   Success: {result['success']}")
         if result["success"]:

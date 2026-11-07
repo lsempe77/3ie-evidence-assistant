@@ -400,7 +400,7 @@ export default function LandingPage() {
               <Search className="h-5 w-5 text-muted-foreground" />
               <div>
                 <p className="font-medium">Vector Search</p>
-                <p className="text-sm text-muted-foreground">Qdrant Cloud (dense + sparse vectors)</p>
+                <p className="text-sm text-muted-foreground">Supabase pgvector (vector + keyword search)</p>
               </div>
             </div>
             <div className="flex items-center gap-3 p-4 rounded-lg border bg-card">

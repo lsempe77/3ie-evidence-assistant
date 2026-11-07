@@ -5,7 +5,7 @@
 Ingest documents into the vector database.
 
 Usage:
-    python scripts/ingest_documents.py --source ./data/markdown --collection devchat_v2
+    python scripts/ingest_documents.py --source ./data/markdown --collection <project-uuid>
     python scripts/ingest_documents.py --source ./data/markdown --recreate
 """
 
@@ -21,7 +21,7 @@ from src.config.settings import settings
 from src.ingestion.chunking import get_chunker
 from src.ingestion.document_loader import DocumentLoader
 from src.ingestion.embeddings import EmbeddingGenerator
-from src.ingestion.indexer import QdrantIndexer
+from src.ingestion.indexer import ChunkIndexer
 from src.utils.logging import get_logger, setup_logging
 
 setup_logging()
@@ -50,8 +50,8 @@ def main():
     parser.add_argument(
         "--collection",
         type=str,
-        default=settings.qdrant_collection_name,
-        help="Qdrant collection name",
+        default=settings.default_project_id,
+        help="Project id to index into (default: DEFAULT_PROJECT_ID)",
     )
     
     parser.add_argument(
@@ -65,7 +65,7 @@ def main():
     parser.add_argument(
         "--recreate",
         action="store_true",
-        help="Recreate collection (delete existing)",
+        help="Delete the project's existing chunks first",
     )
     
     parser.add_argument(
@@ -88,7 +88,7 @@ def main():
     logger.info("=" * 60)
     logger.info(f"Source: {args.source}")
     logger.info(f"Metadata: {args.metadata}")
-    logger.info(f"Collection: {args.collection}")
+    logger.info(f"Project: {args.collection}")
     logger.info(f"Chunker: {args.chunker}")
     logger.info(f"Recreate: {args.recreate}")
     logger.info(f"Dry run: {args.dry_run}")
@@ -134,19 +134,19 @@ def main():
     nodes = embedding_gen.embed_nodes(nodes, show_progress=True)
     logger.info(f"✅ Generated embeddings for {len(nodes)} chunks")
     
-    # Step 4: Index in Qdrant
-    logger.info("\n📦 Step 4: Indexing in Qdrant...")
-    indexer = QdrantIndexer(collection_name=args.collection)
+    # Step 4: Index into the project's chunks
+    logger.info("\n📦 Step 4: Indexing into Supabase...")
+    indexer = ChunkIndexer(collection_name=args.collection)
     
-    # Create collection
-    indexer.create_collection(recreate=args.recreate)
+    if args.recreate:
+        indexer.delete_collection()
     
     # Index nodes
     indexer.index_nodes(nodes, batch_size=args.batch_size)
     
     # Get final info
     info = indexer.get_collection_info()
-    logger.info(f"✅ Indexed {info.get('points_count', 'N/A')} points")
+    logger.info(f"✅ Project now holds {info.get('points_count', 'N/A')} chunks")
     
     # Summary
     elapsed = time.time() - start_time
@@ -156,8 +156,8 @@ def main():
     logger.info("=" * 60)
     logger.info(f"Documents processed: {len(documents)}")
     logger.info(f"Chunks created: {len(nodes)}")
-    logger.info(f"Points indexed: {info.get('points_count', 'N/A')}")
-    logger.info(f"Collection: {args.collection}")
+    logger.info(f"Chunks in project: {info.get('points_count', 'N/A')}")
+    logger.info(f"Project: {args.collection}")
     logger.info(f"Time elapsed: {elapsed:.1f} seconds")
     logger.info("=" * 60)
 
