@@ -58,61 +58,23 @@ class ExtractedFilters:
             self.confidence_level,
         ])
     
-    def to_qdrant_filter(self):
-        """Convert to Qdrant filter format.
-        
-        Note: Only applies year filters by default since not all documents
-        have country/sector metadata (e.g., Modal-indexed PDFs).
-        To enable other filters, documents must have consistent metadata.
-        """
-        from qdrant_client.models import Filter, FieldCondition, Range, MatchAny, MatchValue
-        
-        conditions = []
-        
-        # Year filter - most documents have this
-        if self.year_min or self.year_max:
-            year_range = Range(
-                gte=self.year_min,
-                lte=self.year_max,
-            )
-            conditions.append(FieldCondition(key="year", range=year_range))
-        
-        # Sector filter (enabled now that metadata is populated)
-        if self.sectors:
-            conditions.append(FieldCondition(
-                key="sector",
-                match=MatchAny(any=self.sectors),
-            ))
-        
-        # Target population filter
-        if self.target_populations:
-            conditions.append(FieldCondition(
-                key="target_population",
-                match=MatchAny(any=self.target_populations),
-            ))
+    def to_search_params(self) -> dict:
+        """Convert to keyword arguments for ChunkStore.hybrid_search.
 
-        # Enable these when the corpus is fully populated with consistent metadata
-        # if self.countries:
-        #     conditions.append(FieldCondition(
-        #         key="country",
-        #         match=MatchAny(any=self.countries),
-        #     ))
-        #
-        # if self.study_types:
-        #     conditions.append(FieldCondition(
-        #         key="study_type",
-        #         match=MatchAny(any=self.study_types),
-        #     ))
-        #
-        # if self.confidence_level:
-        #     conditions.append(FieldCondition(
-        #         key="confidence_rating",
-        #         match=MatchValue(value=self.confidence_level),
-        #     ))
-        
-        if conditions:
-            return Filter(must=conditions)
-        return None
+        Year, sector and target-population filters are applied. Country, study-type
+        and confidence filters stay off until the corpus metadata is consistently
+        populated, as before the move from Qdrant.
+        """
+        params: dict = {}
+        if self.year_min:
+            params["year_min"] = self.year_min
+        if self.year_max:
+            params["year_max"] = self.year_max
+        if self.sectors:
+            params["sectors"] = list(self.sectors)
+        if self.target_populations:
+            params["target_populations"] = list(self.target_populations)
+        return params
 
 
 @dataclass
