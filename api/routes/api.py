@@ -6,7 +6,9 @@ Endpoints for the Research Workbench frontend (query, compare, suggest, filters)
 
 import re
 from botocore.exceptions import ClientError
-from fastapi import APIRouter, HTTPException
+from typing import Optional
+
+from fastapi import APIRouter, Depends, HTTPException
 
 from api.vector_status import mark_vector_store_healthy
 from api.schemas import (
@@ -29,7 +31,8 @@ from src.utils.cache import get_response_cache
 from src.utils.circuit_breaker import get_circuit_breaker, CircuitOpenError
 from src.utils.logging import get_logger
 
-from .dependencies import get_agent, get_r2_client
+from .dependencies import authorize_project, get_agent, get_r2_client
+from src.auth import AuthenticatedUser, get_optional_user
 from src.config.settings import settings
 
 # UUID pattern for detecting if a string is a UUID
@@ -141,7 +144,7 @@ def _get_project_prompt_config(project_id: str) -> dict | None:
 
 
 @router.post("/query", response_model=QueryResponse)
-async def query_evidence(request: QueryRequest):
+async def query_evidence(request: QueryRequest, user: Optional[AuthenticatedUser] = Depends(get_optional_user)):
     """
     Main query endpoint for the Research Workbench frontend.
     
@@ -157,10 +160,21 @@ async def query_evidence(request: QueryRequest):
     - suggestions: Follow-up query suggestions
     - evidenceHealth: Coverage metrics
     """
+    # Access control: public projects are open, private ones only to their owner.
+    project_ref = request.collection or request.project_id
+    if project_ref:
+        project = authorize_project(project_ref, user)
+        request.collection = str(project["id"])
+        request.project_id = str(project["id"])
+
     try:
-        # Check cache first (production optimization)
+        # Check cache first (production optimization). The key includes the project,
+        # so an answer from one project is never served for another.
         cache = get_response_cache()
-        cache_key_settings = request.settings.model_dump() if request.settings else None
+        cache_key_settings = {
+            **(request.settings.model_dump() if request.settings else {}),
+            "_project": request.collection or "default",
+        }
         cache_key_filters = [f.model_dump() for f in request.filters] if request.filters else None
         
         # Generate query embedding for semantic cache (if enabled)
@@ -495,7 +509,12 @@ async def get_available_filters():
 # =============================================================================
 
 @router.get("/chat-history/{rag_id}")
-async def get_chat_history(rag_id: str, session_id: str = None, limit: int = 50):
+async def get_chat_history(
+    rag_id: str,
+    session_id: str = None,
+    limit: int = 50,
+    user: Optional[AuthenticatedUser] = Depends(get_optional_user),
+):
     """
     Get chat history for a RAG project.
     
@@ -509,19 +528,22 @@ async def get_chat_history(rag_id: str, session_id: str = None, limit: int = 50)
     try:
         supabase = get_supabase_client()
         
-        # Resolve slug to project ID if needed
-        project_id = await _resolve_project_id(rag_id)
-        
-        # Query chat history for this project (include answer for cache)
+        project_id = str(authorize_project(rag_id, user)["id"])
+
+        # Each caller sees only their own history: signed-in users by user id,
+        # anonymous visitors by their browser session id.
         query = supabase.table("chat_history")\
             .select("id, query, study_count, created_at, answer, citations_used, response_data")\
             .eq("rag_project_id", project_id)\
             .order("created_at", desc=True)\
             .limit(limit)
-        
-        # Filter by session if provided (for anonymous users)
-        if session_id:
-            query = query.eq("session_id", session_id)
+
+        if user:
+            query = query.eq("user_id", user.id)
+        elif session_id:
+            query = query.eq("session_id", session_id).is_("user_id", "null")
+        else:
+            return {"history": []}
         
         result = query.execute()
         
@@ -539,6 +561,8 @@ async def get_chat_history(rag_id: str, session_id: str = None, limit: int = 50)
                 for item in result.data
             ]
         }
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to get chat history: {e}")
         # Return empty history on error (graceful degradation)
@@ -546,7 +570,7 @@ async def get_chat_history(rag_id: str, session_id: str = None, limit: int = 50)
 
 
 @router.post("/chat-history/{rag_id}")
-async def add_chat_history(rag_id: str, body: dict):
+async def add_chat_history(rag_id: str, body: dict, user: Optional[AuthenticatedUser] = Depends(get_optional_user)):
     """
     Add a query to chat history.
     
@@ -559,12 +583,11 @@ async def add_chat_history(rag_id: str, body: dict):
     try:
         supabase = get_supabase_client()
         
-        # Resolve slug to project ID if needed
-        project_id = await _resolve_project_id(rag_id)
-        
-        # Build insert data - only include answer/citations if columns exist
+        project_id = str(authorize_project(rag_id, user)["id"])
+
         insert_data = {
             "rag_project_id": project_id,
+            "user_id": user.id if user else None,
             "query": body.get("query", ""),
             "study_count": body.get("studyCount", 0),
             "session_id": body.get("sessionId"),
@@ -595,13 +618,20 @@ async def add_chat_history(rag_id: str, body: dict):
             }
         
         return {"error": "Failed to add history"}
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to add chat history: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.delete("/chat-history/{rag_id}/{history_id}")
-async def delete_chat_history_item(rag_id: str, history_id: str):
+async def delete_chat_history_item(
+    rag_id: str,
+    history_id: str,
+    session_id: str = None,
+    user: Optional[AuthenticatedUser] = Depends(get_optional_user),
+):
     """
     Delete a specific chat history item.
     """
@@ -610,27 +640,37 @@ async def delete_chat_history_item(rag_id: str, history_id: str):
     try:
         supabase = get_supabase_client()
         
-        # Resolve slug to project ID if needed
-        project_id = await _resolve_project_id(rag_id)
-        logger.info(f"Deleting chat history: rag_id={rag_id}, history_id={history_id}, project_id={project_id}")
-        
-        # Delete the history item
-        result = supabase.table("chat_history")\
+        project_id = str(authorize_project(rag_id, user)["id"])
+
+        # Only the item's own user (or anonymous session) may delete it
+        query = supabase.table("chat_history")\
             .delete()\
             .eq("id", history_id)\
-            .eq("rag_project_id", project_id)\
-            .execute()
+            .eq("rag_project_id", project_id)
+        if user:
+            query = query.eq("user_id", user.id)
+        elif session_id:
+            query = query.eq("session_id", session_id).is_("user_id", "null")
+        else:
+            raise HTTPException(status_code=401, detail="Sign in or give the session id")
+        result = query.execute()
         
         logger.info(f"Delete result: {result.data}")
         
         return {"deleted": True, "deleted_count": len(result.data) if result.data else 0}
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to delete chat history: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.delete("/chat-history/{rag_id}")
-async def clear_chat_history(rag_id: str, session_id: str = None):
+async def clear_chat_history(
+    rag_id: str,
+    session_id: str = None,
+    user: Optional[AuthenticatedUser] = Depends(get_optional_user),
+):
     """
     Clear all chat history for a RAG project (or just for a session).
     """
@@ -639,19 +679,24 @@ async def clear_chat_history(rag_id: str, session_id: str = None):
     try:
         supabase = get_supabase_client()
 
-        # Resolve slug to project ID if needed
-        project_id = await _resolve_project_id(rag_id)
+        project_id = str(authorize_project(rag_id, user)["id"])
 
+        # Clears only the caller's own history, never everyone's
         query = supabase.table("chat_history")\
             .delete()\
             .eq("rag_project_id", project_id)
-
-        if session_id:
-            query = query.eq("session_id", session_id)
+        if user:
+            query = query.eq("user_id", user.id)
+        elif session_id:
+            query = query.eq("session_id", session_id).is_("user_id", "null")
+        else:
+            raise HTTPException(status_code=401, detail="Sign in or give the session id")
 
         result = query.execute()
 
         return {"cleared": True}
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to clear chat history: {e}")
         raise HTTPException(status_code=500, detail=str(e))

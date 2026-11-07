@@ -26,7 +26,6 @@ import {
   Trash2,
   Loader2,
   LogOut,
-  ArrowLeft,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 
@@ -191,13 +190,6 @@ export default function DashboardPage() {
         <div className="container mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
-              <Link href="/">
-                <Button variant="ghost" size="sm" className="gap-2">
-                  <ArrowLeft className="h-4 w-4" />
-                  Research Chat
-                </Button>
-              </Link>
-              <div className="h-6 w-px bg-border" />
               <div className="flex items-center gap-2">
                 <Database className="h-5 w-5 text-primary" />
                 <h1 className="text-xl font-semibold">My RAG Projects</h1>

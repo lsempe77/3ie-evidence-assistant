@@ -403,3 +403,44 @@ async def trigger_modal_processing(force_reprocess: bool = False, max_documents:
     except Exception as e:
         logger.error(f"Failed to trigger Modal processing: {e}")
         raise  # Re-raise so caller knows it failed
+
+
+# =============================================================================
+# Project access control (chat, query and chat history)
+# =============================================================================
+
+def resolve_project(project_ref: str) -> Optional[dict]:
+    """
+    Find a project by UUID, legacy 'rag_<hex>' name, or slug.
+
+    Returns the rag_projects row (id, user_id, is_public, name, slug) or None.
+    """
+    from src.auth import get_supabase_client
+    from src.vectorstore import legacy_collection_to_project_id
+
+    client = get_supabase_client()
+    columns = "id, user_id, is_public, name, slug, description"
+    project_id = legacy_collection_to_project_id(project_ref)
+    if project_id:
+        result = client.table("rag_projects").select(columns).eq("id", project_id).execute()
+        if result.data:
+            return result.data[0]
+    result = client.table("rag_projects").select(columns).eq("slug", project_ref).execute()
+    return result.data[0] if result.data else None
+
+
+def authorize_project(project_ref: str, user: Optional[AuthenticatedUser]) -> dict:
+    """
+    Return the project if the caller may read it: public projects are open to
+    everyone, private projects only to their owner. Raises 404 or 403 otherwise.
+    """
+    project = resolve_project(project_ref)
+    if not project:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
+    if project.get("is_public"):
+        return project
+    if user is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Sign in to use this project")
+    if str(project.get("user_id")) != str(user.id):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="This project is private")
+    return project

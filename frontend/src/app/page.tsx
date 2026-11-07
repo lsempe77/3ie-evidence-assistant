@@ -1,6 +1,9 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -23,13 +26,21 @@ import {
 } from "lucide-react";
 
 export default function LandingPage() {
+  const { user, isLoading } = useAuth();
+  const router = useRouter();
+
+  // Signed-in users go straight to their projects; the landing page is for visitors.
+  useEffect(() => {
+    if (!isLoading && user) router.replace("/dashboard");
+  }, [isLoading, user, router]);
+
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
       <header className="border-b bg-card">
         <div className="container mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
-            <h1 className="text-2xl font-bold">RAG Platform</h1>
+            <h1 className="text-2xl font-bold">3ie Evidence Assistant</h1>
             <div className="flex items-center gap-4">
               <Link href="/auth">
                 <Button variant="outline">Sign In</Button>

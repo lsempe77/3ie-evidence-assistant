@@ -17,7 +17,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File,
 from pydantic import BaseModel, Field
 from botocore.exceptions import ClientError
 
-from src.auth import AuthenticatedUser, get_current_user, get_supabase_client, is_multi_tenant_enabled
+from src.auth import AuthenticatedUser, get_current_user, get_optional_user, get_supabase_client, is_multi_tenant_enabled
 from src.utils.logging import get_logger
 from src.ingestion.indexer import ChunkIndexer, doc_key_from
 from src.vectorstore import ChunkStore
@@ -937,12 +937,15 @@ class PublicRAGResponse(BaseModel):
 
 
 @router.get("/{project_id}/public", response_model=PublicRAGResponse)
-async def get_public_rag_project(project_id: str) -> PublicRAGResponse:
+async def get_public_rag_project(
+    project_id: str,
+    user: Optional[AuthenticatedUser] = Depends(get_optional_user),
+) -> PublicRAGResponse:
     """
     Get public info for a RAG project.
     
-    No authentication required, but only works for public projects.
-    Accepts either project ID or slug.
+    Public projects are open to everyone; private projects only to their owner
+    (send the Supabase access token). Accepts a project ID or slug.
     """
     if not is_multi_tenant_enabled():
         raise HTTPException(
@@ -975,16 +978,16 @@ async def get_public_rag_project(project_id: str) -> PublicRAGResponse:
     project = result.data[0]
     
     if not project.get("is_public", False):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="This RAG is private"
-        )
-    
+        if user is None:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Sign in to use this project")
+        if str(project.get("user_id")) != str(user.id):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="This RAG is private")
+
     return PublicRAGResponse(
         id=str(project["id"]),
         name=project["name"],
         description=project.get("description"),
-        is_public=True,
+        is_public=bool(project.get("is_public", False)),
     )
 
 

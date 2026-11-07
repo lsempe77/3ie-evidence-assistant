@@ -1,7 +1,20 @@
 import { QueryResponse, Filter, Study } from "@/types";
 import type { SearchSettings } from "@/components/workbench/SettingsDrawer";
+import { createClient } from "@/lib/supabase/client";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+
+/**
+ * Authorization header for the signed-in user, if any.
+ * Private projects need it; public projects work without it.
+ */
+export async function authHeaders(): Promise<Record<string, string>> {
+  const supabase = createClient();
+  if (!supabase) return {};
+  const { data } = await supabase.auth.getSession();
+  const token = data.session?.access_token;
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
 
 // Production timeout settings (in milliseconds)
 const QUERY_TIMEOUT_MS = 120_000; // 2 minutes for complex queries
@@ -69,6 +82,7 @@ export async function queryEvidence(
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        ...(await authHeaders()),
       },
       body: JSON.stringify(requestBody),
     },
@@ -226,7 +240,9 @@ export async function getChatHistory(
   sessionId?: string
 ): Promise<ChatHistoryItem[]> {
   const params = sessionId ? `?session_id=${sessionId}` : "";
-  const response = await fetch(`${API_BASE_URL}/api/chat-history/${ragId}${params}`);
+  const response = await fetch(`${API_BASE_URL}/api/chat-history/${ragId}${params}`, {
+    headers: await authHeaders(),
+  });
 
   if (!response.ok) {
     console.error("Failed to fetch chat history");
@@ -249,7 +265,7 @@ export async function addChatHistory(
   try {
     const response = await fetch(`${API_BASE_URL}/api/chat-history/${ragId}`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...(await authHeaders()) },
       body: JSON.stringify({ query, studyCount, sessionId, answer, citationsUsed, responseData }),
     });
 
@@ -267,12 +283,14 @@ export async function addChatHistory(
 
 export async function deleteChatHistoryItem(
   ragId: string,
-  historyId: string
+  historyId: string,
+  sessionId?: string
 ): Promise<boolean> {
   try {
+    const params = sessionId ? `?session_id=${sessionId}` : "";
     const response = await fetch(
-      `${API_BASE_URL}/api/chat-history/${ragId}/${historyId}`,
-      { method: "DELETE" }
+      `${API_BASE_URL}/api/chat-history/${ragId}/${historyId}${params}`,
+      { method: "DELETE", headers: await authHeaders() }
     );
     return response.ok;
   } catch (error) {
@@ -289,7 +307,7 @@ export async function clearChatHistory(
     const params = sessionId ? `?session_id=${sessionId}` : "";
     const response = await fetch(
       `${API_BASE_URL}/api/chat-history/${ragId}${params}`,
-      { method: "DELETE" }
+      { method: "DELETE", headers: await authHeaders() }
     );
     return response.ok;
   } catch (error) {
