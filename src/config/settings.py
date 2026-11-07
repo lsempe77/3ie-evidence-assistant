@@ -86,7 +86,7 @@ class Settings(BaseSettings):
         description="Project used when a request names none (legacy single-tenant endpoints); env DEFAULT_PROJECT_ID",
     )
     modal_trigger_url: str = Field(
-        default="https://lsempe77--evidence-assistant-mineru-trigger-processing.modal.run",
+        default="https://lsempe77--evidence-assistant-mineru-trigger-processing.us-east.modal.run",
         description="Modal web endpoint that starts PDF processing (env MODAL_TRIGGER_URL)",
     )
     
