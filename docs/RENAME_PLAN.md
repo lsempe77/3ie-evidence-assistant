@@ -1,6 +1,6 @@
 # Rename plan: DevChat → 3ie Evidence Assistant
 
-**Status (6 November 2026):** steps 1 and 2 done. Steps 3 to 9 not started.
+**Status (7 November 2026):** steps 1, 2, 5 and 7 done; step 3 dropped; 4, 6 (domain) and 8–9 open.
 **Scope agreed:** everything, including infrastructure
 
 | Step | State |
@@ -9,7 +9,9 @@
 | 2. GitHub repo rename | Done. `lsempe77/dev_chat` now redirects to `lsempe77/3ie-evidence-assistant` |
 | 3. Qdrant alias | **Dropped (7 Nov 2026):** Qdrant is being removed. See [SUPABASE_CONSOLIDATION_PLAN.md](SUPABASE_CONSOLIDATION_PLAN.md) |
 | 4. New R2 bucket | On hold until the consolidation plan's Phase 6 decision (R2 → Supabase Storage) |
-| 5–7. Modal, Railway, Vercel/Supabase auth | Not started. Supabase must be restored first (consolidation plan, Phase 0) |
+| 5. New Modal app | Done (7 Nov 2026): `evidence-assistant-mineru` deployed; old `devchat-mineru` still deployed until decommission |
+| 6. Railway | Variables point at the new Supabase project. Service domain `3iechat.up.railway.app` unchanged (not user-facing) |
+| 7. Vercel and Supabase auth | Done (7 Nov 2026): `3ie-evidence-assistant.vercel.app`; old address redirects (308); Supabase auth URLs set |
 | 8. Decommission | Not started |
 | 9. Local folder | Not started |
 

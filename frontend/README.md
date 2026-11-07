@@ -29,7 +29,7 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=your_anon_key
 
 ## Deployment
 
-Deployed on Vercel: https://dev-chat-frontend.vercel.app/
+Deployed on Vercel: https://3ie-evidence-assistant.vercel.app/
 
 ## Stack
 

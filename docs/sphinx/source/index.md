@@ -33,7 +33,7 @@ changelog
 
 ## Quick Links
 
-- **Production:** https://dev-chat-frontend.vercel.app/
+- **Production:** https://3ie-evidence-assistant.vercel.app/
 - **API Health:** https://3iechat.up.railway.app/health
 - **GitHub:** https://github.com/lsempe77/3ie-evidence-assistant
 
