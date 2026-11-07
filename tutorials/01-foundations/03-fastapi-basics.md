@@ -228,7 +228,7 @@ app = FastAPI(
 # Enable CORS for frontend
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["https://dev-chat-frontend.vercel.app"],
+    allow_origins=["https://3ie-evidence-assistant.vercel.app"],
     allow_methods=["*"],
     allow_headers=["*"],
 )

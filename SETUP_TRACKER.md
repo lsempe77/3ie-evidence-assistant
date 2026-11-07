@@ -17,9 +17,9 @@
 
 | Component | Status | Details |
 | --------- | ------ | ------- |
-| Frontend (Vercel) | ⏳ To repoint | <https://dev-chat-frontend.vercel.app/>, still configured for the old Supabase project |
-| Backend (Railway) | ⏳ To repoint | <https://3iechat.up.railway.app>, still configured for the old Supabase project |
-| PDF Processing (Modal) | ⏳ To redeploy | App renamed `evidence-assistant-mineru`; writes chunks to Supabase |
+| Frontend (Vercel) | ✅ Live | <https://3ie-evidence-assistant.vercel.app/> (old dev-chat-frontend address redirects) |
+| Backend (Railway) | ✅ Live | <https://3iechat.up.railway.app>, on the new Supabase project |
+| PDF Processing (Modal) | ✅ Deployed | `evidence-assistant-mineru`; writes chunks to Supabase |
 | Database, auth and vectors (Supabase) | ✅ Schema applied | Postgres 17, pgvector 0.8.2, `chunks` + `hybrid_search()`, RLS on every table; no data yet |
 | Vector DB (Qdrant) | ❌ Removed | Replaced by Supabase pgvector |
 | Storage (R2) | ✅ Working | Cloudflare R2 for PDFs and parser output (graduation corpus outputs kept) |
@@ -488,7 +488,7 @@ LANGFUSE_* (host, public/secret key)
 
 | Resource | URL |
 | -------- | --- |
-| Production | <https://dev-chat-frontend.vercel.app/> |
+| Production | <https://3ie-evidence-assistant.vercel.app/> |
 | API Health | <https://3iechat.up.railway.app/health> |
 | Modal App | <https://modal.com/apps/3ieimpact/main/deployed/devchat-mineru> |
 | Langfuse | <https://cloud.langfuse.com/> |

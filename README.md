@@ -12,7 +12,7 @@
 </p>
 
 <p align="center">
-  <a href="https://dev-chat-frontend.vercel.app/">Live app</a> •
+  <a href="https://3ie-evidence-assistant.vercel.app/">Live app</a> •
   <a href="#status-november-2026">Status</a> •
   <a href="#features">Features</a> •
   <a href="#architecture">Architecture</a> •
