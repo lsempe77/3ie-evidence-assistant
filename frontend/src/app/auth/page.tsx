@@ -230,7 +230,7 @@ export default function AuthPage() {
         <CardFooter className="justify-center">
           <Link href="/">
             <Button variant="link" className="text-sm text-muted-foreground">
-              ← Back to Research Chat
+              ← Back to home
             </Button>
           </Link>
         </CardFooter>

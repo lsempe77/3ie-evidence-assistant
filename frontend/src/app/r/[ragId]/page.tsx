@@ -24,6 +24,7 @@ import {
   getChatHistory, 
   addChatHistory, 
   deleteChatHistoryItem,
+  authHeaders,
   ChatHistoryItem as ApiChatHistoryItem 
 } from "@/lib/api";
 
@@ -149,10 +150,14 @@ export default function RAGChatPage() {
   useEffect(() => {
     const fetchProject = async () => {
       try {
-        const response = await fetch(`${API_BASE_URL}/rags/${ragId}/public`);
+        const response = await fetch(`${API_BASE_URL}/rags/${ragId}/public`, {
+          headers: await authHeaders(),
+        });
         if (!response.ok) {
           if (response.status === 404) {
             setProjectError("RAG not found");
+          } else if (response.status === 401) {
+            setProjectError("Sign in to use this project");
           } else if (response.status === 403) {
             setProjectError("This RAG is private");
           } else {
@@ -218,7 +223,7 @@ export default function RAGChatPage() {
       // Call the API with the specific RAG collection and project ID for model config
       const response = await fetch(`${API_BASE_URL}/api/query`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...(await authHeaders()) },
         body: JSON.stringify({
           query: searchQuery,
           collection: project.id,
@@ -387,14 +392,14 @@ export default function RAGChatPage() {
   const handleDeleteHistoryItem = useCallback(async (id: string) => {
     if (!project) return;
     // Delete from API
-    await deleteChatHistoryItem(project.id, id);
+    await deleteChatHistoryItem(project.id, id, getSessionId());
     
     // Update local state
     setChatHistory(prev => prev.filter(h => h.id !== id));
     if (currentQueryId === id) {
       setCurrentQueryId(undefined);
     }
-  }, [currentQueryId, project]);
+  }, [currentQueryId, project, getSessionId]);
 
   const handleNewChat = useCallback(() => {
     handleReset();
@@ -423,9 +428,14 @@ export default function RAGChatPage() {
           <p className="text-muted-foreground mb-4">
             The requested knowledge base could not be loaded.
           </p>
-          <Button onClick={() => window.location.href = "/"}>
-            Go Home
-          </Button>
+          <div className="flex gap-2 justify-center">
+            {projectError === "Sign in to use this project" && (
+              <Button onClick={() => window.location.href = "/auth"}>Sign in</Button>
+            )}
+            <Button variant="outline" onClick={() => window.location.href = "/dashboard"}>
+              My projects
+            </Button>
+          </div>
         </div>
       </div>
     );
