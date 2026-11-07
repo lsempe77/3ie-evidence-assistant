@@ -5,6 +5,10 @@
 > This document tracks **future features** and priorities.  
 > For current implementation status, see [SETUP_TRACKER.md](../SETUP_TRACKER.md).  
 > For extraction pipeline details, see [extraction_pipeline/README.md](../extraction_pipeline/README.md).
+>
+> **Direction (7 November 2026):** this app will **replace** 3ie's Nouswise-hosted DevChat and aims to be the
+> state-of-the-art evidence RAG for international development. The stage-by-stage plan, benchmark and phases are in
+> [RAG_PIPELINE_PLAN.md](RAG_PIPELINE_PLAN.md), which takes precedence over older items below where they overlap.
 
 ---
 
