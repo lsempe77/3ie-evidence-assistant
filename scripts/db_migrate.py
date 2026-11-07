@@ -32,6 +32,11 @@ ALTER TABLE public._schema_migrations ENABLE ROW LEVEL SECURITY;
 """
 
 
+def file_digest(path: Path) -> str:
+    """SHA-256 of the file with line endings normalised, so a CRLF checkout matches."""
+    return hashlib.sha256(path.read_bytes().replace(b"\r\n", b"\n")).hexdigest()
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--status", action="store_true", help="show applied/pending migrations and exit")
@@ -51,8 +56,7 @@ def main() -> int:
             cur.execute("SELECT filename, sha256 FROM public._schema_migrations")
             applied = dict(cur.fetchall())
 
-        changed = [f.name for f in files if f.name in applied
-                   and applied[f.name] != hashlib.sha256(f.read_bytes()).hexdigest()]
+        changed = [f.name for f in files if f.name in applied and applied[f.name] != file_digest(f)]
         pending = [f for f in files if f.name not in applied]
 
         for f in files:
@@ -70,11 +74,10 @@ def main() -> int:
 
         for f in pending:
             sql = f.read_text(encoding="utf-8")
-            digest = hashlib.sha256(f.read_bytes()).hexdigest()
             with conn, conn.cursor() as cur:  # one transaction per file
                 cur.execute(sql)
                 cur.execute("INSERT INTO public._schema_migrations (filename, sha256) VALUES (%s, %s)",
-                            (f.name, digest))
+                            (f.name, file_digest(f)))
             print(f"  applied                          {f.name}")
         return 0
     except psycopg2.Error as e:
