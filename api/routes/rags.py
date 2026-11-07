@@ -2,9 +2,10 @@
 RAG Project Management API Routes
 
 Allows authenticated users to create, list, update, and delete their RAG projects.
-Each RAG project corresponds to a separate Qdrant collection.
+Each RAG project's chunks live in the shared Supabase `chunks` table, scoped by project id.
 """
 
+import asyncio
 import hashlib
 import os
 import difflib
@@ -18,7 +19,8 @@ from botocore.exceptions import ClientError
 
 from src.auth import AuthenticatedUser, get_current_user, get_supabase_client, is_multi_tenant_enabled
 from src.utils.logging import get_logger
-from src.ingestion.indexer import QdrantIndexer
+from src.ingestion.indexer import ChunkIndexer, doc_key_from
+from src.vectorstore import ChunkStore
 from src.config.settings import settings
 from .dependencies import get_r2_client
 
@@ -156,15 +158,15 @@ class RAGProjectListResponse(BaseModel):
 
 class RAGProjectDetailResponse(RAGProjectResponse):
     """Detailed response for a single RAG project."""
-    # Live Qdrant verification (compare with cached chunk_count from Supabase)
+    # Live chunk-store verification (compare with cached chunk_count). Names kept for the frontend.
     qdrant_collection_exists: Optional[bool] = Field(
-        None, description="Whether the Qdrant collection actually exists in the cluster"
+        None, description="Whether the chunk store answered for this project"
     )
     qdrant_points_count: Optional[int] = Field(
-        None, description="Live point count from Qdrant (None if collection missing or unreachable)"
+        None, description="Live chunk count (None if the chunk store is unreachable)"
     )
     qdrant_status_message: Optional[str] = Field(
-        None, description="Human-readable status of the Qdrant collection"
+        None, description="Human-readable status of the project's chunks"
     )
 
 
@@ -239,7 +241,7 @@ async def create_rag_project(
     
     This will:
     1. Create a database record
-    2. Create a new Qdrant collection for the project
+    2. (Chunks are stored in the shared Supabase chunks table; nothing else to create)
     """
     client = get_supabase_client()
     
@@ -273,26 +275,7 @@ async def create_rag_project(
             )
         
         project = result.data[0]
-        collection_name = project["qdrant_collection"]
-        
-        # Create the Qdrant collection
-        try:
-            indexer = QdrantIndexer(
-                collection_name=collection_name,
-                url=settings.qdrant_url,
-                api_key=settings.qdrant_api_key,
-            )
-            # This will create the collection if it doesn't exist
-            await indexer.ensure_collection_exists()
-            logger.info(f"Created Qdrant collection: {collection_name}")
-        except Exception as e:
-            # Rollback the database record
-            client.table("rag_projects").delete().eq("id", project["id"]).execute()
-            logger.error(f"Failed to create Qdrant collection: {e}")
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Failed to create vector store collection"
-            )
+        # No vector collection to create: chunks share one table, scoped by project id.
         
         return RAGProjectResponse(
             id=str(project["id"]),
@@ -329,59 +312,34 @@ async def get_rag_project(
     """
     Get details of a specific RAG project.
 
-    Includes live Qdrant verification: checks whether the collection actually
-    exists and returns the real point count, so the dashboard can detect
-    stale Supabase metadata (e.g. after a Qdrant cluster reset).
+    Includes live verification of the chunk store: compares the real chunk count
+    with the cached count on the project record. Field names still say "qdrant"
+    for frontend compatibility until the response schema is renamed.
     """
     project = await get_user_project(user, project_id)
 
-    # Live Qdrant verification
-    collection_name = project["qdrant_collection"]
     qdrant_collection_exists: Optional[bool] = None
     qdrant_points_count: Optional[int] = None
     qdrant_status_message: Optional[str] = None
-
     try:
-        from qdrant_client import QdrantClient
-        from qdrant_client.http.exceptions import UnexpectedResponse
-
-        client = QdrantClient(
-            url=settings.qdrant_url,
-            api_key=settings.qdrant_api_key,
-            timeout=10,
-        )
-        try:
-            info = client.get_collection(collection_name)
-            qdrant_collection_exists = True
-            qdrant_points_count = info.points_count or 0
-            cached = project.get("chunk_count", 0) or 0
-            if qdrant_points_count == 0 and cached > 0:
-                qdrant_status_message = (
-                    f"Collection exists but is empty. Supabase metadata reports "
-                    f"{cached:,} chunks — documents need to be re-indexed."
-                )
-            elif qdrant_points_count != cached:
-                qdrant_status_message = (
-                    f"Mismatch: Qdrant has {qdrant_points_count:,} points but "
-                    f"Supabase reports {cached:,} chunks."
-                )
-            else:
-                qdrant_status_message = "Healthy"
-        except UnexpectedResponse as exc:
-            if getattr(exc, "status_code", None) == 404:
-                qdrant_collection_exists = False
-                qdrant_points_count = 0
-                cached = project.get("chunk_count", 0) or 0
-                qdrant_status_message = (
-                    f"Collection '{collection_name}' does not exist in Qdrant. "
-                    f"Supabase metadata reports {cached:,} chunks — documents "
-                    f"need to be re-indexed (Qdrant cluster was likely reset)."
-                )
-            else:
-                qdrant_status_message = f"Qdrant error: {exc}"
+        stats = await asyncio.to_thread(ChunkStore().stats, project_id)
+        qdrant_collection_exists = True
+        qdrant_points_count = stats["chunk_count"]
+        cached = project.get("chunk_count", 0) or 0
+        if qdrant_points_count == 0 and cached > 0:
+            qdrant_status_message = (
+                f"No chunks stored, but the project record reports {cached:,} chunks: "
+                f"documents need to be re-indexed."
+            )
+        elif qdrant_points_count != cached:
+            qdrant_status_message = (
+                f"Mismatch: {qdrant_points_count:,} chunks stored but the project record reports {cached:,}."
+            )
+        else:
+            qdrant_status_message = "Healthy"
     except Exception as exc:  # noqa: BLE001 - surface any connection issue
-        logger.warning(f"Qdrant verification failed for project {project_id}: {exc}")
-        qdrant_status_message = f"Could not reach Qdrant: {exc}"
+        logger.warning(f"Chunk store check failed for project {project_id}: {exc}")
+        qdrant_status_message = f"Could not reach the chunk store: {exc}"
 
     return RAGProjectDetailResponse(
         id=str(project["id"]),
@@ -940,27 +898,11 @@ async def delete_rag_project(
     Delete a RAG project.
     
     This will:
-    1. Delete the Qdrant collection
-    2. Delete all associated documents from R2
-    3. Delete the database record
+    1. Delete all associated documents from R2
+    2. Delete the database record (chunks, documents and jobs go with it via ON DELETE CASCADE)
     """
-    project = await get_user_project(user, project_id)
-    collection_name = project["qdrant_collection"]
-    
+    await get_user_project(user, project_id)  # ownership check
     client = get_supabase_client()
-    
-    # Delete Qdrant collection
-    try:
-        indexer = QdrantIndexer(
-            collection_name=collection_name,
-            url=settings.qdrant_url,
-            api_key=settings.qdrant_api_key,
-        )
-        await indexer.delete_collection()
-        logger.info(f"Deleted Qdrant collection: {collection_name}")
-    except Exception as e:
-        logger.warning(f"Failed to delete Qdrant collection {collection_name}: {e}")
-        # Continue anyway - collection might not exist
     
     # Delete R2 files for this project
     try:
@@ -1804,7 +1746,7 @@ async def trigger_processing(
     1. Finds all PDFs in rags/{project_id}/input-pdfs/
     2. Processes each with MinerU (text extraction)
     3. Enriches metadata from CrossRef/OpenAlex
-    4. Embeds chunks to Qdrant (project-specific collection)
+    4. Embeds chunks into the Supabase chunks table (scoped by project id)
     5. Syncs metadata back to Supabase documents table
     
     Args:
@@ -1841,7 +1783,7 @@ async def trigger_processing(
     # Trigger Modal function
     # Modal needs to know:
     # 1. The R2 prefix to scan: rags/{project_id}/input-pdfs/
-    # 2. The Qdrant collection: rag_{project_id}
+    # 2. Chunks are written to the Supabase chunks table under this project id
     # 3. The project_id for syncing back to Supabase
     
     modal_webhook_url = os.environ.get("MODAL_WEBHOOK_URL")
@@ -1885,7 +1827,6 @@ async def trigger_processing(
     
     # If no Modal webhook or it failed, return instructions for manual trigger
     r2_prefix = f"rags/{project_id}/input-pdfs/"
-    qdrant_collection = project.get("qdrant_collection") if isinstance(project, dict) else project.qdrant_collection
     
     return ProcessResponse(
         message=f"Documents marked as queued. Run Modal manually: modal run infrastructure/modal_mineru.py::orchestrate_rag --project-id {project_id}",
@@ -2296,9 +2237,9 @@ async def update_document_metadata(
 ) -> MetadataDetail:
     """
     Update metadata for a document.
-    Also syncs the metadata to Qdrant vectors for search.
+    Also syncs the metadata to the document's chunks for search.
     """
-    project = await get_user_project(user, project_id)
+    await get_user_project(user, project_id)  # ownership check
     client = get_supabase_client()
     
     # Get current document
@@ -2325,46 +2266,32 @@ async def update_document_metadata(
         "updated_at": datetime.utcnow().isoformat(),
     }).eq("id", doc_id).execute()
     
-    # Sync to Qdrant vectors
+    # Sync to the document's chunks so search filters and citations see the change
     try:
-        indexer = QdrantIndexer(collection_name=project["qdrant_collection"])
-        
-        # Build Qdrant payload update
-        qdrant_update = {}
+        chunk_update = {}
         if update.title:
-            qdrant_update["title"] = update.title
+            chunk_update["title"] = update.title
         if update.authors:
-            qdrant_update["authors"] = ", ".join(update.authors)
+            chunk_update["authors"] = ", ".join(update.authors)
         if update.year:
-            qdrant_update["year"] = update.year
+            chunk_update["year"] = update.year
         if update.doi:
-            qdrant_update["doi"] = update.doi
+            chunk_update["doi"] = update.doi
         if update.countries:
-            qdrant_update["country"] = update.countries[0] if update.countries else None
-            qdrant_update["countries"] = update.countries
+            chunk_update["country"] = update.countries[0]
+            chunk_update["countries"] = update.countries
         if update.sectors:
-            qdrant_update["sector"] = update.sectors[0] if update.sectors else None
-            qdrant_update["sectors"] = update.sectors
+            chunk_update["sector"] = update.sectors[0]
+            chunk_update["sectors"] = update.sectors
         if update.study_type:
-            qdrant_update["study_type"] = update.study_type
-        
-        if qdrant_update:
-            # Update all vectors for this document
-            indexer.client.set_payload(
-                collection_name=project["qdrant_collection"],
-                payload=qdrant_update,
-                points=indexer.client.scroll(
-                    collection_name=project["qdrant_collection"],
-                    scroll_filter={
-                        "must": [{"key": "doc_id", "match": {"value": doc_id}}]
-                    },
-                    limit=1000,
-                    with_payload=False,
-                )[0],
-            )
-            logger.info(f"Synced metadata to Qdrant for doc {doc_id}")
+            chunk_update["study_type"] = update.study_type
+
+        if chunk_update:
+            doc_key = doc_key_from(result.data.get("filename") or doc_id)
+            updated = await asyncio.to_thread(ChunkStore().merge_metadata, project_id, doc_key, chunk_update)
+            logger.info(f"Synced metadata to {updated} chunks for doc {doc_id}")
     except Exception as e:
-        logger.warning(f"Failed to sync metadata to Qdrant: {e}")
+        logger.warning(f"Failed to sync metadata to chunks: {e}")
     
     # Return updated metadata
     return await get_document_metadata(project_id, doc_id, user)
@@ -2984,23 +2911,14 @@ async def reset_project_vectors(
     user: AuthenticatedUser = Depends(get_current_user),
 ):
     """
-    Delete all vector embeddings for this project from Qdrant.
+    Delete all chunks and embeddings for this project.
     Documents will need to be reprocessed.
     """
-    from qdrant_client import models
-    
-    project = await get_user_project(user, project_id)
+    await get_user_project(user, project_id)  # ownership check
     
     try:
-        indexer = QdrantIndexer(collection_name=project["qdrant_collection"])
-        
-        # Delete all points in the collection using FilterSelector
-        indexer.client.delete(
-            collection_name=project["qdrant_collection"],
-            points_selector=models.FilterSelector(
-                filter=models.Filter()  # Empty filter = match all
-            ),
-        )
+        deleted = await asyncio.to_thread(ChunkIndexer(project_id=project_id).delete_collection)
+        logger.info(f"Deleted {deleted} chunks for project {project_id}")
         
         # Update chunk counts in documents
         client = get_supabase_client()
@@ -3010,7 +2928,7 @@ async def reset_project_vectors(
         }).eq("rag_project_id", project_id).execute()
         
         logger.info(f"Reset vectors for project {project_id}")
-        return {"message": "Vectors reset successfully", "collection": project["qdrant_collection"]}
+        return {"message": "Vectors reset successfully", "project_id": project_id}
         
     except Exception as e:
         logger.error(f"Failed to reset vectors: {e}")
@@ -3141,7 +3059,7 @@ async def reset_project_documents(
 ):
     """
     Delete all document records from the database for this project.
-    Does not delete files from R2 or vectors from Qdrant.
+    Does not delete files from R2 or chunks.
     """
     project = await get_user_project(user, project_id)
     client = get_supabase_client()
@@ -3173,52 +3091,27 @@ async def delete_single_document(
 ):
     """
     Delete a single document from the project.
-    Also deletes associated vectors from Qdrant and files from R2.
+    Also deletes the document's chunks and its files in R2.
     """
-    project = await get_user_project(user, project_id)
+    await get_user_project(user, project_id)  # ownership check
     client = get_supabase_client()
     
     try:
         # Get document info first
-        doc_result = client.table("documents").select("filename, r2_key").eq("id", document_id).eq("rag_project_id", project_id).execute()
+        doc_result = client.table("documents").select("filename, r2_input_key").eq("id", document_id).eq("rag_project_id", project_id).execute()
         if not doc_result.data:
             raise HTTPException(status_code=404, detail="Document not found")
         
         doc = doc_result.data[0]
         filename = doc.get("filename", "")
-        r2_key = doc.get("r2_key", "")
+        r2_key = doc.get("r2_input_key") or ""
         
-        # Delete vectors from Qdrant
+        # Delete chunks (rows linked by document_id also go with the documents row via CASCADE)
         try:
-            from qdrant_client import QdrantClient
-            from qdrant_client.http.models import Filter, FieldCondition, MatchValue
-            import os
-            
-            qdrant_url = os.environ.get("QDRANT_URL", "")
-            qdrant_api_key = os.environ.get("QDRANT_API_KEY", "")
-            
-            if qdrant_url:
-                qdrant = QdrantClient(url=qdrant_url, api_key=qdrant_api_key)
-                collection_name = f"rag_{project_id}"
-                
-                # Check if collection exists
-                collections = qdrant.get_collections().collections
-                if any(c.name == collection_name for c in collections):
-                    # Delete by document_id filter
-                    qdrant.delete(
-                        collection_name=collection_name,
-                        points_selector=Filter(
-                            must=[
-                                FieldCondition(
-                                    key="document_id",
-                                    match=MatchValue(value=document_id)
-                                )
-                            ]
-                        )
-                    )
-                    logger.info(f"Deleted vectors for document {document_id} from Qdrant")
+            deleted = await asyncio.to_thread(ChunkStore().delete_document, project_id, doc_key_from(filename))
+            logger.info(f"Deleted {deleted} chunks for document {document_id}")
         except Exception as e:
-            logger.warning(f"Failed to delete vectors from Qdrant: {e}")
+            logger.warning(f"Failed to delete chunks for document {document_id}: {e}")
         
         # Delete files from R2
         try:

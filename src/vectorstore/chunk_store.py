@@ -47,8 +47,12 @@ def _settings_value(name: str) -> str:
 
 
 def legacy_collection_to_project_id(collection_name: Optional[str]) -> Optional[str]:
-    """Map a legacy Qdrant collection name 'rag_<32 hex>' back to the project UUID."""
-    if not collection_name or not collection_name.startswith("rag_"):
+    """Map a legacy Qdrant collection name 'rag_<32 hex>' (or a plain project UUID) to the project UUID."""
+    if not collection_name:
+        return None
+    if len(collection_name) == 36 and collection_name.count("-") == 4:
+        return collection_name.lower()
+    if not collection_name.startswith("rag_"):
         return None
     raw = collection_name[4:]
     if len(raw) != 32 or any(ch not in "0123456789abcdef" for ch in raw.lower()):
@@ -162,6 +166,18 @@ class ChunkStore:
                              {"p_project_id": project_id, "p_doc_key": doc_key, "patch": patch}))
 
     # -------------------------------------------------------------------- reads
+
+    def ping(self) -> bool:
+        """Cheap connectivity check: one indexed read of the chunks table."""
+        self._check(self._client.get("/chunks", params={"select": "id", "limit": "1"}))
+        return True
+
+    def total_chunks(self) -> int:
+        """Chunks across all projects (planner estimate; cheap on large tables)."""
+        response = self._check(self._client.get(
+            "/chunks", params={"select": "id", "limit": "1"}, headers={"Prefer": "count=estimated"},
+        ))
+        return self._count_from(response)
 
     def count(self, project_id: str, doc_key: Optional[str] = None) -> int:
         params = {"rag_project_id": f"eq.{project_id}", "select": "id", "limit": "1"}

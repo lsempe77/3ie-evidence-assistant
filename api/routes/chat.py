@@ -7,7 +7,7 @@ Core chat endpoints for the RAG pipeline.
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 
-from api.qdrant_status import mark_qdrant_healthy
+from api.vector_status import mark_vector_store_healthy
 from api.schemas import (
     ChatRequest,
     ChatResponse,
@@ -44,7 +44,7 @@ async def chat(request: ChatRequest):
             session_id=request.session_id,
         )
 
-        await mark_qdrant_healthy()
+        await mark_vector_store_healthy()
 
         # Convert to API response
         return ChatResponse(

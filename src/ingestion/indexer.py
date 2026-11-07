@@ -9,6 +9,7 @@ builds the full-text vector from each chunk's text when the row is written.
 from __future__ import annotations
 
 import asyncio
+from types import SimpleNamespace
 from typing import Any, Dict, List, Optional
 
 from src.ingestion.embeddings import EmbeddingGenerator
@@ -126,6 +127,50 @@ class ChunkIndexer:
         except Exception as e:
             logger.error(f"Failed to get chunk stats: {e}")
             return {"error": str(e)}
+
+    # ------------------------------------------------------------ reading back
+
+    @staticmethod
+    def _record(row: Dict[str, Any]) -> SimpleNamespace:
+        """A chunk as (id, payload), with payload keys matching the old Qdrant payload."""
+        payload = dict(row.get("metadata") or {})
+        payload.setdefault("doc_id", row.get("doc_key"))
+        payload.setdefault("pdf_name", row.get("doc_key"))
+        for key in ("chunk_index", "page_start", "page_end"):
+            if row.get(key) is not None:
+                payload.setdefault(key, row[key])
+        if row.get("page_start") is not None:
+            payload.setdefault("page", row["page_start"])
+        if "content" in row:
+            payload.setdefault("text", row["content"])
+        return SimpleNamespace(id=row["id"], payload=payload)
+
+    def scroll(self, limit: int = 100, offset: Optional[int] = None, doc_key: Optional[str] = None,
+               with_text: bool = False):
+        """
+        Page through chunks ordered by (doc_key, chunk_index).
+
+        Returns (records, next_offset); next_offset is None after the last page,
+        so loops written for Qdrant's scroll keep working.
+        """
+        columns = ["id", "doc_key", "chunk_index", "page_start", "page_end", "metadata"]
+        if with_text:
+            columns.append("content")
+        start = offset or 0
+        rows = self.store.list_chunks(self.project_id, doc_key=doc_key, columns=columns,
+                                      limit=limit, offset=start)
+        next_offset = start + len(rows) if len(rows) == limit else None
+        return [self._record(r) for r in rows], next_offset
+
+    def count(self, doc_key: Optional[str] = None) -> int:
+        return self.store.count(self.project_id, doc_key=doc_key)
+
+    def doc_keys(self) -> List[str]:
+        return self.store.doc_keys(self.project_id)
+
+    def merge_metadata(self, doc_key: str, patch: Dict[str, Any]) -> int:
+        """Merge `patch` into the metadata of every chunk of one document."""
+        return self.store.merge_metadata(self.project_id, doc_key, patch)
 
     def sample_points(self, limit: int = 5) -> List[Dict[str, Any]]:
         """A few chunks, to inspect their metadata."""

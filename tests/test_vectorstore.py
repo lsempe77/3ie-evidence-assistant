@@ -75,6 +75,9 @@ class TestHelpers:
     def test_legacy_collection_maps_to_uuid(self):
         assert legacy_collection_to_project_id("rag_" + PROJECT.replace("-", "")) == PROJECT
 
+    def test_plain_uuid_passes_through(self):
+        assert legacy_collection_to_project_id(PROJECT.upper()) == PROJECT
+
     def test_legacy_collection_rejects_other_names(self):
         assert legacy_collection_to_project_id("devchat_v2_contextual") is None
         assert legacy_collection_to_project_id(None) is None

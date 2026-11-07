@@ -20,7 +20,7 @@ from fastapi.security import APIKeyHeader
 
 from src.agents.evidence_assistant_agent import EvidenceAssistantAgent
 from src.config.settings import settings
-from src.ingestion.indexer import QdrantIndexer
+from src.ingestion.indexer import ChunkIndexer
 from src.retrieval.hybrid_retriever import HybridRetriever
 from src.utils.logging import get_logger
 
@@ -198,23 +198,22 @@ async def get_current_user_or_legacy(
     )
 
 
-def get_indexer_for_user(user: Optional[AuthenticatedUser], rag_project_id: Optional[str] = None) -> QdrantIndexer:
+def get_indexer_for_user(user: Optional[AuthenticatedUser], rag_project_id: Optional[str] = None) -> ChunkIndexer:
     """
     Get an indexer for the user's context.
     
     In multi-tenant mode:
-        - Requires rag_project_id to determine which collection to use
-        - Validates user owns the project
+        - Requires rag_project_id and validates that the user owns the project
         
     In legacy mode:
-        - Uses the default collection from settings
+        - Uses the default project (DEFAULT_PROJECT_ID)
     """
     if user and rag_project_id and is_multi_tenant_enabled():
         # Multi-tenant: get collection from database
         from src.auth import get_supabase_client
         client = get_supabase_client()
         
-        result = client.table("rag_projects").select("qdrant_collection").eq("id", rag_project_id).eq("user_id", user.id).single().execute()
+        result = client.table("rag_projects").select("id").eq("id", rag_project_id).eq("user_id", user.id).single().execute()
         
         if not result.data:
             raise HTTPException(
@@ -222,8 +221,7 @@ def get_indexer_for_user(user: Optional[AuthenticatedUser], rag_project_id: Opti
                 detail="RAG project not found"
             )
         
-        collection_name = result.data["qdrant_collection"]
-        return QdrantIndexer(collection_name=collection_name)
+        return ChunkIndexer(project_id=result.data["id"])
     
     # Legacy mode: use default collection
     return get_indexer()
@@ -234,7 +232,7 @@ def get_indexer_for_user(user: Optional[AuthenticatedUser], rag_project_id: Opti
 # =============================================================================
 
 _agent: Optional[EvidenceAssistantAgent] = None
-_indexer: Optional[QdrantIndexer] = None
+_indexer: Optional[ChunkIndexer] = None
 _collection_agents: dict[str, EvidenceAssistantAgent] = {}
 
 
@@ -242,8 +240,8 @@ def get_agent(collection_name: Optional[str] = None) -> EvidenceAssistantAgent:
     """Get or create the agent instance.
     
     Args:
-        collection_name: Optional Qdrant collection name for multi-tenant RAGs.
-                        If None, uses the default collection.
+        collection_name: Project id, or the project's legacy 'rag_<hex>' name, for
+                        multi-tenant RAGs. If None, uses the default project.
     """
     global _agent, _collection_agents
     
@@ -262,11 +260,16 @@ def get_agent(collection_name: Optional[str] = None) -> EvidenceAssistantAgent:
     return _agent
 
 
-def get_indexer() -> QdrantIndexer:
-    """Get or create the global indexer instance (avoids repeated Qdrant connections)."""
+def get_indexer() -> ChunkIndexer:
+    """Get or create the indexer for the default project (DEFAULT_PROJECT_ID)."""
     global _indexer
     if _indexer is None:
-        _indexer = QdrantIndexer()
+        if not settings.default_project_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="No project given and DEFAULT_PROJECT_ID is not configured",
+            )
+        _indexer = ChunkIndexer(project_id=settings.default_project_id)
     return _indexer
 
 

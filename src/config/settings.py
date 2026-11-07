@@ -83,6 +83,10 @@ class Settings(BaseSettings):
     # Infrastructure names (single source; override per environment)
     # =========================================================================
     r2_bucket_name: str = Field(default="devchat-pdfs", description="Cloudflare R2 bucket for PDFs and parser output (env R2_BUCKET_NAME)")
+    default_project_id: Optional[str] = Field(
+        default=None,
+        description="Project used when a request names none (legacy single-tenant endpoints); env DEFAULT_PROJECT_ID",
+    )
     modal_trigger_url: str = Field(
         default="https://lsempe77--devchat-mineru-trigger-processing.modal.run",
         description="Modal web endpoint that starts PDF processing (env MODAL_TRIGGER_URL)",

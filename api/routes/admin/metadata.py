@@ -8,7 +8,6 @@ import asyncio
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Query
-from qdrant_client.models import Filter, FieldCondition, MatchValue
 
 from api.schemas import (
     DocumentMetadataDetail,
@@ -44,7 +43,7 @@ async def get_metadata_for_review(
     Get documents with metadata that needs review.
     
     Uses PostgreSQL for instant queries if available,
-    falls back to Qdrant scroll if not.
+    falls back to reading the chunk store if not.
     """
     from ..dependencies import is_postgres_available, get_db_session
     
@@ -133,18 +132,18 @@ async def get_metadata_for_review(
                         low_confidence_count=stats["low_confidence"],
                     )
         except Exception as e:
-            logger.warning(f"PostgreSQL query failed, falling back to Qdrant: {e}")
+            logger.warning(f"PostgreSQL query failed, falling back to the chunk store: {e}")
     
-    # Fallback to Qdrant (slow but works without Postgres)
-    return await _get_metadata_for_review_from_qdrant(filter_type, limit, offset)
+    # Fallback to the chunk store (works without the legacy Postgres)
+    return await _get_metadata_for_review_from_chunks(filter_type, limit, offset)
 
 
-async def _get_metadata_for_review_from_qdrant(
+async def _get_metadata_for_review_from_chunks(
     filter_type: Optional[str],
     limit: int,
     offset: int,
 ) -> MetadataReviewResponse:
-    """Legacy Qdrant-based metadata review (slow but works without Postgres)."""
+    """Metadata review built from the default project's chunks."""
     metadata_cache = get_metadata_cache()
     
     try:
@@ -167,10 +166,7 @@ async def _get_metadata_for_review_from_qdrant(
         MAX_SCROLL_POINTS = 15000  # Scan 15K points (~30 seconds max)
         MAX_DOCS = 200  # Max unique documents to return
         
-        # NOTE: Qdrant requires payload indexes for filtering.
-        # Since needs_review may not be indexed, we scroll without filter
-        # and do client-side filtering to avoid "Index required" errors.
-        scroll_filter = None
+        # Filtering is done client-side below (needs_review, low confidence).
         
         # Client-side filter functions
         def needs_review_check(payload):
@@ -196,24 +192,9 @@ async def _get_metadata_for_review_from_qdrant(
         next_offset = None
         points_processed = 0
         
-        # Only fetch necessary payload fields to reduce bandwidth
-        payload_fields = [
-            "doc_id", "pdf_name", "source", "title", "authors", "year", "doi", 
-            "journal", "publisher", "cited_by_count", "is_open_access", 
-            "countries", "sectors", "study_type", "intervention_type", 
-            "sdgs", "keywords", "metadata_source", "metadata_confidence", 
-            "needs_review"
-        ]
         
         while points_processed < MAX_SCROLL_POINTS and len(doc_map) < MAX_DOCS:
-            results, next_offset = indexer.client.scroll(
-                collection_name=indexer.collection_name,
-                scroll_filter=scroll_filter,
-                limit=100,
-                offset=next_offset,
-                with_payload=payload_fields,
-                with_vectors=False,
-            )
+            results, next_offset = indexer.scroll(limit=100, offset=next_offset)
             
             if not results:
                 break
@@ -346,17 +327,7 @@ async def get_document_metadata(document_id: str):
         if doc_id.endswith(".pdf"):
             doc_id = doc_id[:-4]
         
-        results = indexer.client.scroll(
-            collection_name=indexer.collection_name,
-            scroll_filter=Filter(
-                must=[
-                    FieldCondition(key="doc_id", match=MatchValue(value=doc_id))
-                ]
-            ),
-            limit=1,
-            with_payload=True,
-            with_vectors=False,
-        )[0]
+        results = indexer.scroll(limit=1, doc_key=doc_id, with_text=True)[0]
         
         if not results:
             raise HTTPException(status_code=404, detail=f"Document not found: {doc_id}")
@@ -364,14 +335,7 @@ async def get_document_metadata(document_id: str):
         payload = results[0].payload or {}
         
         # Count total chunks
-        count_result = indexer.client.count(
-            collection_name=indexer.collection_name,
-            count_filter=Filter(
-                must=[
-                    FieldCondition(key="doc_id", match=MatchValue(value=doc_id))
-                ]
-            ),
-        )
+        count_result = indexer.count(doc_key=doc_id)
         
         authors = payload.get("authors", [])
         if isinstance(authors, str):
@@ -430,7 +394,7 @@ async def get_document_metadata(document_id: str):
             metadata_source=payload.get("metadata_source", "extraction"),
             metadata_confidence=payload.get("metadata_confidence", 0.0),
             needs_review=payload.get("needs_review", True),
-            chunk_count=count_result.count,
+            chunk_count=count_result,
             page_count=payload.get("page_count", 0),
             extra=payload.get("extra"),
         )
@@ -447,7 +411,7 @@ async def update_document_metadata(document_id: str, update: MetadataUpdateReque
     """
     Update metadata for a document.
     
-    Updates PostgreSQL (primary) and Qdrant (vector payloads).
+    Updates PostgreSQL (primary) and the chunk metadata.
     """
     from ..dependencies import is_postgres_available, get_db_session
     
@@ -566,32 +530,11 @@ async def update_document_metadata(document_id: str, update: MetadataUpdateReque
             except Exception as e:
                 logger.warning(f"PostgreSQL update failed: {e}")
         
-        # Also update Qdrant payloads for consistency
+        # Also update the document's chunk metadata for consistency
         try:
             indexer = get_indexer()
             
-            # Get all points for this document
-            all_points = []
-            next_offset = None
-            
-            while True:
-                results, next_offset = indexer.client.scroll(
-                    collection_name=indexer.collection_name,
-                    scroll_filter=Filter(
-                        must=[
-                            FieldCondition(key="doc_id", match=MatchValue(value=doc_id))
-                        ]
-                    ),
-                    limit=100,
-                    offset=next_offset,
-                    with_payload=False,
-                    with_vectors=False,
-                )
-                all_points.extend(results)
-                if next_offset is None or len(results) == 0:
-                    break
-            
-            if all_points:
+            if indexer.count(doc_key=doc_id):
                 # Prepare payload update with all Zotero fields
                 payload_update = {}
                 # Core
@@ -675,18 +618,10 @@ async def update_document_metadata(document_id: str, update: MetadataUpdateReque
                 payload_update["metadata_confidence"] = 1.0
                 
                 # Update all points
-                point_ids = [str(p.id) for p in all_points]
-                
-                indexer.client.set_payload(
-                    collection_name=indexer.collection_name,
-                    payload=payload_update,
-                    points=point_ids,
-                )
-                
-                updated_chunks = len(point_ids)
-                logger.info(f"Updated Qdrant metadata for {doc_id}: {len(point_ids)} chunks")
+                updated_chunks = indexer.merge_metadata(doc_id, payload_update)
+                logger.info(f"Updated chunk metadata for {doc_id}: {updated_chunks} chunks")
         except Exception as e:
-            logger.warning(f"Qdrant update failed: {e}")
+            logger.warning(f"Chunk metadata update failed: {e}")
         
         if updated_chunks == 0:
             raise HTTPException(status_code=404, detail=f"Document not found: {doc_id}")

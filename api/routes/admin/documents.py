@@ -47,7 +47,7 @@ async def get_documents(
     Get list of indexed documents.
     
     Uses PostgreSQL for instant queries if available,
-    falls back to Qdrant scroll if not.
+    falls back to reading the chunk store if not.
     """
     from ..dependencies import is_postgres_available, get_db_session
     
@@ -92,19 +92,19 @@ async def get_documents(
                         total_pages=stats["total_pages"],
                     )
         except Exception as e:
-            logger.warning(f"PostgreSQL query failed, falling back to Qdrant: {e}")
+            logger.warning(f"PostgreSQL query failed, falling back to the chunk store: {e}")
     
-    # Fallback to Qdrant (slow but works without Postgres)
-    return await _get_documents_from_qdrant(search, status, limit, offset)
+    # Fallback to the chunk store (works without the legacy Postgres)
+    return await _get_documents_from_chunks(search, status, limit, offset)
 
 
-async def _get_documents_from_qdrant(
+async def _get_documents_from_chunks(
     search: Optional[str],
     status: Optional[str],
     limit: int,
     offset: int,
 ) -> DocumentsResponse:
-    """Legacy Qdrant-based document listing (slow but works without Postgres)."""
+    """Document listing built from the default project's chunks."""
     documents_cache = get_documents_cache()
     
     try:
@@ -132,13 +132,7 @@ async def _get_documents_from_qdrant(
             max_points = 15000
             
             while len(all_points) < max_points:
-                results, next_offset = indexer.client.scroll(
-                    collection_name=indexer.collection_name,
-                    limit=1000,  # Larger batches = fewer round trips
-                    offset=next_offset,
-                    with_payload=["doc_id", "pdf_name", "source", "title", "authors", "year", "page"],
-                    with_vectors=False,
-                )
+                results, next_offset = indexer.scroll(limit=1000, offset=next_offset)
                 all_points.extend(results)
                 if next_offset is None or len(results) == 0:
                     break
@@ -233,10 +227,9 @@ async def _get_documents_from_qdrant(
         total_count = len(documents)
         documents = documents[offset:offset + limit]
         
-        # Get total chunks from Qdrant count() - instant, no scanning
+        # Total chunks in the project (exact count)
         try:
-            count_result = indexer.client.count(collection_name=indexer.collection_name)
-            total_chunks = count_result.count
+            total_chunks = indexer.count()
         except Exception:
             total_chunks = sum(d.chunk_count for d in documents)
         
@@ -285,7 +278,7 @@ async def delete_document(document_id: str):
         document_id: The universal doc_id (e.g., "a1b2c3d4_filename") or full path
     
     Deletes:
-    - Vectors from Qdrant (by doc_id)
+    - Chunks from the chunk store (by doc_id)
     - Original PDF from R2 (input-pdfs/{doc_id}.pdf)
     - Processed outputs from R2 (outputs/json/{doc_id}.json, outputs/md/{doc_id}.md)
     """
@@ -302,14 +295,14 @@ async def delete_document(document_id: str):
     logger.info(f"Deleting document with doc_id: {doc_id} (from input: {document_id})")
     
     try:
-        # 1. Delete from Qdrant
+        # 1. Delete chunks
         try:
             indexer = get_indexer()
             deleted_vectors = indexer.delete_by_document_id(doc_id)
             logger.info(f"Deleted {deleted_vectors} vectors for doc_id: {doc_id}")
         except Exception as e:
-            errors.append(f"Qdrant delete failed: {str(e)}")
-            logger.error(f"Failed to delete from Qdrant: {e}")
+            errors.append(f"Chunk delete failed: {str(e)}")
+            logger.error(f"Failed to delete chunks: {e}")
         
         # 2. Delete from R2 using consistent doc_id
         try:
@@ -397,7 +390,7 @@ async def sync_document(request: DocumentSyncRequest):
     """
     Sync a document from Modal to PostgreSQL.
     
-    Called by Modal after successful Qdrant indexing to keep
+    Called by Modal after successful chunk indexing to keep
     Postgres metadata store in sync.
     
     This endpoint is idempotent - can be called multiple times
@@ -501,9 +494,9 @@ async def sync_document(request: DocumentSyncRequest):
 @router.post("/documents/cleanup-orphans")
 async def cleanup_orphan_documents():
     """
-    Remove documents from PostgreSQL that don't exist in Qdrant.
+    Remove documents from PostgreSQL that have no chunks.
     
-    This fixes discrepancies where documents were deleted from Qdrant
+    This fixes discrepancies where documents were deleted from the chunk store
     but not from PostgreSQL.
     """
     from ..dependencies import is_postgres_available, get_db_session
@@ -512,19 +505,13 @@ async def cleanup_orphan_documents():
         return {"success": False, "message": "PostgreSQL not available", "deleted": 0}
     
     try:
-        # Get all doc_ids from Qdrant
+        # Get all doc_ids from the chunk store
         indexer = get_indexer()
         qdrant_doc_ids = set()
         offset = None
         
         while True:
-            results, offset = indexer.client.scroll(
-                collection_name=indexer.collection_name,
-                limit=500,
-                offset=offset,
-                with_payload=["doc_id"],
-                with_vectors=False,
-            )
+            results, offset = indexer.scroll(limit=500, offset=offset)
             for point in results:
                 doc_id = point.payload.get("doc_id")
                 if doc_id:
@@ -532,7 +519,7 @@ async def cleanup_orphan_documents():
             if offset is None or len(results) == 0:
                 break
         
-        logger.info(f"Found {len(qdrant_doc_ids)} documents in Qdrant")
+        logger.info(f"Found {len(qdrant_doc_ids)} documents in the chunk store")
         
         # Get all doc_ids from PostgreSQL
         db = await get_db_session()
@@ -549,7 +536,7 @@ async def cleanup_orphan_documents():
             
             logger.info(f"Found {len(postgres_ids)} documents in PostgreSQL")
             
-            # Find orphans (in Postgres but not in Qdrant)
+            # Find orphans (in Postgres but not in the chunk store)
             orphans = postgres_ids - qdrant_doc_ids
             
             if not orphans:

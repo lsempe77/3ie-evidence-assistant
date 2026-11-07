@@ -68,6 +68,19 @@ more after Pro's compute credit). Decide once the real chunk count is known.
 
 ## Phase 2. Code
 
+**Progress (7 November 2026), branch `feat/supabase-fresh-start`:**
+
+- **2a, done:** `src/vectorstore/chunk_store.py`, `HybridRetriever` and `ChunkIndexer` on Supabase; search
+  functions with filters (`20261107000200_chunk_functions.sql`).
+- **2b, done:** API routes (`rags.py`, admin collection, documents, metadata, jobs, storage, status),
+  `api/vector_status.py`, and a `DEFAULT_PROJECT_ID` setting for the legacy single-project endpoints. A live
+  smoke test created a project through the API, stored chunks, searched them (vector, keyword and legacy names),
+  reset them and deleted the project. `api/routes/health.py` is outside this session's edit permissions, so it
+  keeps importing a small shim (`api/qdrant_status.py`) that maps the old names to the new module.
+- **2c, to do:** Modal indexing, scripts, frontend wording, removal of `qdrant-client` and the Qdrant settings.
+  Response fields named `qdrant_*` are kept until the frontend is updated in the same change.
+
+
 Twelve files import the Qdrant client:
 
 | Area | Files |

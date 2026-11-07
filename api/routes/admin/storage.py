@@ -394,10 +394,10 @@ async def find_duplicates():
 @router.post("/duplicates/cleanup")
 async def cleanup_duplicates(dry_run: bool = Query(True, description="If true, only report what would be deleted")):
     """
-    Clean up duplicate PDFs, keeping only the one that's indexed in Qdrant.
+    Clean up duplicate PDFs, keeping only the one that is indexed.
     
     For each duplicate group:
-    1. Check which version is indexed in Qdrant
+    1. Check which version is indexed
     2. Keep the indexed version, delete the others
     3. If none indexed, keep the most recent one
     """
@@ -415,18 +415,12 @@ async def cleanup_duplicates(dry_run: bool = Query(True, description="If true, o
         if not duplicates:
             return {"message": "No duplicates found", "deleted": 0}
         
-        # Get indexed doc_ids from Qdrant
+        # Get indexed doc_ids from the chunk store
         indexed_doc_ids = set()
         try:
             next_offset = None
             while True:
-                results, next_offset = indexer.client.scroll(
-                    collection_name=indexer.collection_name,
-                    limit=1000,
-                    offset=next_offset,
-                    with_payload=["doc_id", "pdf_name"],
-                    with_vectors=False,
-                )
+                results, next_offset = indexer.scroll(limit=1000, offset=next_offset)
                 for point in results:
                     payload = point.payload or {}
                     doc_id = payload.get("doc_id") or payload.get("pdf_name")
