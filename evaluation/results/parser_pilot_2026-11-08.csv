@@ -1,0 +1,11 @@
+doc_id,parser,pages,decimal_recall,any_number_recall,text_ratio,tables,seconds_per_page,error
+df0fbf4860be_PDFs_of_included_programs_Bangladesh_-_all_BRAC_programs_BRAC_programs_(40)_Ara_(2016),mineru,16,0.729,0.666,0.85,7,,
+df0fbf4860be_PDFs_of_included_programs_Bangladesh_-_all_BRAC_programs_BRAC_programs_(40)_Ara_(2016),docling,16,0.943,0.898,1.08,9,1.9,
+fa42c26c3414_PDFs_of_included_programs_Bangladesh_-_all_BRAC_programs_BRAC_programs_(40)_Selim_(2020),mineru,62,0.011,0.107,0.43,0,,
+fa42c26c3414_PDFs_of_included_programs_Bangladesh_-_all_BRAC_programs_BRAC_programs_(40)_Selim_(2020),docling,62,1.0,0.994,1.56,26,3.4,
+63bcc2c07899_PDFs_of_included_programs_121305126,mineru,66,0.018,0.13,0.48,0,,
+63bcc2c07899_PDFs_of_included_programs_121305126,docling,66,0.999,0.966,1.31,8,2.0,
+ef2ea60a11c5_PDFs_of_included_programs_121058357,mineru,19,0.852,0.671,0.85,16,,
+ef2ea60a11c5_PDFs_of_included_programs_121058357,docling,19,1.0,0.967,1.18,17,3.8,
+70eedd447e8e_PDFs_of_included_programs_121295095,mineru,24,0.902,0.939,1.51,12,,
+70eedd447e8e_PDFs_of_included_programs_121295095,docling,24,0.996,0.996,2.37,11,7.4,

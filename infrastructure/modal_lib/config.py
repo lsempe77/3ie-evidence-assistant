@@ -67,7 +67,7 @@ docling_image = (
 )
 
 # Parser used when a caller does not choose one ("mineru" or "docling")
-DEFAULT_PDF_PARSER = "mineru"
+DEFAULT_PDF_PARSER = "docling"  # chosen by the 8 Nov 2026 pilot (evaluation/results/parser_pilot_2026-11-08.md)
 
 monkeyocr_image = (
     modal.Image.from_registry(
