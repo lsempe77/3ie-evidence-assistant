@@ -9,6 +9,7 @@ Includes Embedding Cache (50-80% cost reduction on re-indexing).
 import hashlib
 import json
 import os
+import re
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import List, Dict, Optional, Any
@@ -527,6 +528,25 @@ def embed_and_index(
 # Chunking
 # ============================================================================
 
+def content_item_text(item: dict) -> str:
+    """
+    Text of one parser content item, including tables.
+
+    MinerU puts table cells in `table_body` (HTML) with no `text`, so tables used to be
+    left out of chunks entirely. Docling items already carry Markdown in `text`.
+    """
+    text = item.get("text", "") or item.get("content", "") or ""
+    if text or item.get("type") != "table":
+        return text
+    caption = " ".join(item.get("table_caption") or [])
+    body = item.get("table_body", "") or ""
+    body = re.sub(r"</t[dh]>", " | ", body)
+    body = re.sub(r"</tr>", "\n", body)
+    body = re.sub(r"<[^>]+>", "", body)
+    footnote = " ".join(item.get("table_footnote") or [])
+    return "\n".join(part for part in (caption, body.strip(), footnote) if part)
+
+
 def chunk_content(text: str, chunk_size: int = 256, overlap: int = 50) -> List[str]:
     """Split text into overlapping chunks (legacy - no page info)."""
     words = text.split()
@@ -573,7 +593,7 @@ def chunk_content_parent_child(
     for item in content_list:
         if not isinstance(item, dict):
             continue
-        text = item.get("text", "") or item.get("content", "") or ""
+        text = content_item_text(item)
         if not text.strip():
             continue
         page_idx = item.get("page_idx", 0)
@@ -660,7 +680,7 @@ def chunk_content_with_pages(
         if not isinstance(item, dict):
             continue
             
-        text = item.get("text", "") or item.get("content", "") or ""
+        text = content_item_text(item)
         if not text.strip():
             continue
             

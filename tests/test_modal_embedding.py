@@ -77,3 +77,21 @@ def test_legacy_collection_name_resolves_to_project(fake_env):
         collection_name="rag_" + PROJECT.replace("-", ""), enable_contextual=False,
     )
     assert fake_env.upserts[0][0] == PROJECT
+
+
+def test_tables_reach_the_chunks():
+    """MinerU table items carry HTML in table_body and no text; they must still be chunked."""
+    items = [
+        {"type": "text", "text": "Introduction words " * 30, "page_idx": 0},
+        {"type": "table", "table_caption": ["Table 2: Effects on income"],
+         "table_body": "<table><tr><td>Income</td><td>0.25**</td></tr></table>", "page_idx": 4},
+    ]
+    chunks = modal_embedding.chunk_content_parent_child(items, child_size=50, parent_size=200, child_overlap=10)
+    text = " ".join(c["text"] for c in chunks)
+    assert "Table 2: Effects on income" in text and "0.25**" in text
+    assert any(c["page_end"] == 5 for c in chunks)  # page numbers are 1-based in chunks
+
+
+def test_docling_style_table_items_use_their_text():
+    item = {"type": "table", "text": "Table 1. Package\n\n| Component | Months |", "page_idx": 2}
+    assert modal_embedding.content_item_text(item).startswith("Table 1. Package")

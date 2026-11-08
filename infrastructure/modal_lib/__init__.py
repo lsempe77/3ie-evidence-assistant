@@ -17,12 +17,14 @@ Modules:
 from .config import (
     app,
     base_image,
+    docling_image,
     monkeyocr_image,
     model_cache,
     r2_secret,
     cohere_secret,
     openrouter_secret,
     supabase_secret,
+    DEFAULT_PDF_PARSER,
 )
 
 from .utils import (
@@ -34,6 +36,7 @@ from .utils import (
 
 from .extraction import (
     run_mineru,
+    run_docling,
     run_monkeyocr,
     post_process_content,
     extract_title,
@@ -55,6 +58,9 @@ from .processing import (
     process_pdf,
     process_pdf_monkeyocr,
     process_pdf_rag,
+    process_pdf_rag_docling,
+    parse_pdf_docling,
+    process_rag_document,
     sync_to_postgres,
     sync_to_supabase_rag,
 )
@@ -75,6 +81,7 @@ __all__ = [
     # Config
     "app",
     "base_image",
+    "docling_image",
     "monkeyocr_image",
     "model_cache",
     "r2_secret",
@@ -88,6 +95,7 @@ __all__ = [
     "sanitize_dict",
     # Extraction
     "run_mineru",
+    "run_docling",
     "run_monkeyocr",
     "post_process_content",
     "extract_title",
@@ -103,6 +111,9 @@ __all__ = [
     "process_pdf",
     "process_pdf_monkeyocr",
     "process_pdf_rag",
+    "process_pdf_rag_docling",
+    "parse_pdf_docling",
+    "process_rag_document",
     "check_chunks_indexed",
     "delete_doc_chunks",
     "sync_to_postgres",
