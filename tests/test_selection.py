@@ -71,7 +71,8 @@ class TestMetadataReachesCitations:
             assert c["sector"] == "social protection"
             assert c["study_design"] == "cluster_rct"
 
-    def test_untrusted_countries_are_withheld(self):
+    def test_untrusted_countries_are_withheld(self, monkeypatch):
+        monkeypatch.setattr("src.retrieval.context_builder.TRUST_COUNTRY_METADATA", False)
         result = RetrievalResult(node_id="n1", text="x", score=0.6,
                                  metadata={"doc_id": "d", "title": "T", "countries": ["US"]})
         assert ContextBuilder().build([result]).citations[0]["country"] == ""
