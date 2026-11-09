@@ -91,7 +91,7 @@ These are foundational problems. Without solving them, every other "improvement"
 
 ### 🔁 TVET Transfer (November 2026) ⬅️ **Start here**
 
-> **Source:** `Desktop/TVET/`, outside this repo: a parser bake-off and outcome inventory on 78 TVET
+> **Source:** `pipelines/TVET/`, outside this repo: a parser bake-off and outcome inventory on 78 TVET
 > apprenticeship studies, October–November 2026. The document of record is
 > `TVET/pipeline/BAKEOFF_AND_INVENTORY_REPORT.md`. Read `TVET/PROCESS_REPORT.md` before quoting any
 > number, because several were corrected during that work.

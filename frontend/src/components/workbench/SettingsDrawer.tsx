@@ -4,7 +4,6 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
-import { Switch } from "@/components/ui/switch";
 import {
   Dialog,
   DialogContent,
@@ -58,7 +57,6 @@ export function SettingsDrawer({ settings, onSettingsChange }: SettingsDrawerPro
   };
 
   const handleApply = () => {
-    console.log("[Settings] Applying settings:", localSettings);
     onSettingsChange(localSettings);
     setIsOpen(false);
   };
@@ -73,22 +71,19 @@ export function SettingsDrawer({ settings, onSettingsChange }: SettingsDrawerPro
   const handleSelectChange = <T extends string>(key: keyof SearchSettings) =>
     (value: T) => handleChange(key, value as SearchSettings[typeof key]);
   
-  const handleSwitchChange = (key: "useReranking" | "includeOlderStudies") =>
-    (checked: boolean) => handleChange(key, checked);
 
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
       <DialogTrigger asChild>
-        <Button variant="outline" size="sm" className="gap-1">
-          <Settings className="h-4 w-4" />
-          Search Settings
+        <Button variant="ghost" size="icon" aria-label="Answer settings">
+          <Settings aria-hidden="true" />
         </Button>
       </DialogTrigger>
       <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Search Settings</DialogTitle>
+          <DialogTitle>Answer settings</DialogTitle>
           <DialogDescription>
-            Configure how evidence is retrieved and answers are generated.
+            Choose how many studies an answer draws on and how it is written.
           </DialogDescription>
         </DialogHeader>
 
@@ -96,12 +91,13 @@ export function SettingsDrawer({ settings, onSettingsChange }: SettingsDrawerPro
           {/* Relevance Threshold */}
           <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <Label>Relevance Threshold</Label>
-              <span className="text-sm text-muted-foreground font-mono">
+              <Label htmlFor="setting-relevance">Minimum relevance</Label>
+              <span className="tabular text-sm text-muted-foreground">
                 {(localSettings.relevanceThreshold * 100).toFixed(0)}%
               </span>
             </div>
             <Slider
+              id="setting-relevance"
               value={[localSettings.relevanceThreshold * 100]}
               onValueChange={handleSliderChange("relevanceThreshold", 100)}
               min={0}
@@ -110,19 +106,20 @@ export function SettingsDrawer({ settings, onSettingsChange }: SettingsDrawerPro
               className="w-full"
             />
             <p className="text-xs text-muted-foreground">
-              Only include studies with relevance score above this threshold.
+              Studies that match the question less closely than this are left out.
             </p>
           </div>
 
           {/* Max Studies */}
           <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <Label>Max Studies to Retrieve</Label>
-              <span className="text-sm text-muted-foreground font-mono">
+              <Label htmlFor="setting-max-studies">Most studies to use</Label>
+              <span className="tabular text-sm text-muted-foreground">
                 {localSettings.maxStudies}
               </span>
             </div>
             <Slider
+              id="setting-max-studies"
               value={[localSettings.maxStudies]}
               onValueChange={handleSliderChange("maxStudies")}
               min={3}
@@ -134,35 +131,21 @@ export function SettingsDrawer({ settings, onSettingsChange }: SettingsDrawerPro
 
           {/* Answer Style */}
           <div className="space-y-2">
-            <Label>Answer Style</Label>
+            <Label htmlFor="setting-style">Answer style</Label>
             <Select
               value={localSettings.answerStyle}
               onValueChange={handleSelectChange<AnswerStyle>("answerStyle")}
             >
-              <SelectTrigger>
+              <SelectTrigger id="setting-style">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="executive">Executive Summary</SelectItem>
-                <SelectItem value="research">Detailed Research</SelectItem>
-                <SelectItem value="policy">Policy Brief</SelectItem>
-                <SelectItem value="citations">Citations Only</SelectItem>
+                <SelectItem value="executive">Executive summary</SelectItem>
+                <SelectItem value="research">Detailed research</SelectItem>
+                <SelectItem value="policy">Policy brief</SelectItem>
+                <SelectItem value="citations">Sources only</SelectItem>
               </SelectContent>
             </Select>
-          </div>
-
-          {/* Reranking Toggle */}
-          <div className="flex items-center justify-between">
-            <div className="space-y-0.5">
-              <Label>Use Reranking</Label>
-              <p className="text-xs text-muted-foreground">
-                Apply AI reranking for better relevance
-              </p>
-            </div>
-            <Switch
-              checked={localSettings.useReranking}
-              onCheckedChange={handleSwitchChange("useReranking")}
-            />
           </div>
         </div>
 
@@ -172,7 +155,7 @@ export function SettingsDrawer({ settings, onSettingsChange }: SettingsDrawerPro
             Reset
           </Button>
           <Button onClick={handleApply}>
-            Apply Settings
+            Apply settings
           </Button>
         </DialogFooter>
       </DialogContent>

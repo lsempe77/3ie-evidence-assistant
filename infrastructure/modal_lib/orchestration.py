@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Optional
 
 from .config import (
+    DEFAULT_PDF_PARSER,
     app,
     base_image,
     r2_secret,
@@ -21,7 +22,7 @@ from .config import (
     supabase_secret,
 )
 from .utils import get_r2_client, get_bucket_name
-from .processing import process_pdf, process_pdf_rag
+from .processing import process_pdf, process_pdf_rag, process_pdf_rag_docling
 from .chunks import check_chunks_indexed, get_store, indexed_doc_keys
 
 
@@ -207,9 +208,12 @@ def orchestrate_rag(
     qdrant_collection: Optional[str] = None,  # ignored; kept for callers of the old signature
     force_reprocess: bool = False,
     max_documents: int = 0,
+    parser: Optional[str] = None,
 ) -> dict:
     """
     Process all documents for a specific RAG project.
+
+    parser: "docling" (CPU) or "mineru" (GPU); defaults to DEFAULT_PDF_PARSER.
     
     Called from the backend API when user clicks "Process Documents".
     
@@ -375,7 +379,10 @@ def orchestrate_rag(
     failed = 0
     processed_count = 0
     
-    for result in process_pdf_rag.starmap(
+    parser = parser or DEFAULT_PDF_PARSER
+    worker = process_pdf_rag_docling if parser == "docling" else process_pdf_rag
+    print(f"Parser: {parser}")
+    for result in worker.starmap(
         [(pdf_key, project_id) for pdf_key in all_to_process],
         return_exceptions=True,
     ):
@@ -384,6 +391,11 @@ def orchestrate_rag(
             print(f"  ✗ Error: {result}")
             failed += 1
             results.append({"error": str(result)})
+        elif isinstance(result, dict) and result.get("success") is False:
+            # The worker catches its own errors and returns them, so count them here.
+            print(f"  ✗ Failed: {result.get('doc_id', 'unknown')}: {result.get('error')}")
+            failed += 1
+            results.append(result)
         else:
             print(f"  ✓ Completed: {result.get('pdf_name', result.get('doc_id', 'unknown'))}")
             success += 1

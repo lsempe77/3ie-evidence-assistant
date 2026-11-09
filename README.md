@@ -54,7 +54,9 @@ A separate extraction pipeline reads the results tables in each study and pulls 
 
 ### Ingestion
 
-- **MinerU parsing on a Modal T4 GPU**: text, tables (as HTML), figures and equations
+- **Docling parsing on Modal (CPU)**: text, tables (as Markdown) and page numbers. Docling replaced MinerU
+  in November 2026 after a pilot on this corpus (decimal recall 0.988 against 0.502, see
+  `evaluation/results/parser_pilot_2026-11-08.md`). MinerU on a T4 GPU remains available with `--parser mineru`
 - **Eight-step table post-processing**: removes empty tables, figures and text fragments misread as tables, merges
   tables split across pages, grafts orphan headers, and repairs captions from the List of Tables
 - **Contextual retrieval**: each chunk is prefixed with an LLM-written summary of its place in the document
@@ -119,7 +121,7 @@ graph LR
     end
 
     subgraph Processing["Processing (Modal)"]
-        E[MinerU on T4 GPU]
+        E[Docling on CPU]
     end
 
     subgraph Extraction["Extraction pipeline"]
@@ -159,7 +161,7 @@ graph LR
 | Embeddings | Cohere `embed-v4.0`, 1,536 dimensions |
 | Reranking | Cohere `rerank-v3.5` |
 | LLMs | OpenRouter. Defaults `openai/gpt-4o-mini` (fast) and `openai/gpt-4o` (reasoning) |
-| PDF processing | MinerU 2.6+ on Modal (T4 GPU) |
+| PDF processing | Docling 2.141 on Modal (8 CPU, 16 GB). MinerU on a T4 GPU as a fallback |
 | Storage | Cloudflare R2 |
 | Observability | Langfuse |
 

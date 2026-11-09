@@ -199,10 +199,11 @@ export function StudyDesignBadge({
 }: StudyDesignBadgeProps) {
   const info = STUDY_DESIGN_INFO[design] || STUDY_DESIGN_INFO.unknown;
   
+  // Neutral on purpose: study designs are named in text, not colour-coded (DESIGN.md, Semantic).
   const badge = (
-    <Badge 
-      variant="outline" 
-      className={`${info.color} font-medium ${size === "sm" ? "text-xs py-0" : "text-sm"}`}
+    <Badge
+      variant="outline"
+      className={`rounded-sm border-hairline bg-surface-1 font-medium text-ink-muted ${size === "sm" ? "text-xs py-0" : "text-sm"}`}
     >
       {info.label}
     </Badge>
@@ -221,9 +222,8 @@ export function StudyDesignBadge({
         <TooltipContent side="top" className="max-w-xs">
           <div className="text-xs space-y-1">
             <p className="font-semibold">{info.category}</p>
-            <p>Evidence Weight: {(info.evidenceWeight * 100).toFixed(0)}%</p>
             {confidence !== undefined && (
-              <p>Classification Confidence: {(confidence * 100).toFixed(0)}%</p>
+              <p className="tabular">Classified automatically, confidence {(confidence * 100).toFixed(0)}%</p>
             )}
           </div>
         </TooltipContent>

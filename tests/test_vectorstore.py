@@ -110,6 +110,44 @@ class TestChunkStore:
         assert posts[0].url.params["on_conflict"] == "rag_project_id,doc_key,chunk_index"
         assert "resolution=merge-duplicates" in posts[0].headers["prefer"]
 
+    def test_upsert_retries_statement_timeout_then_succeeds(self, monkeypatch):
+        monkeypatch.setattr("src.vectorstore.chunk_store.time.sleep", lambda s: None)
+        calls = {"n": 0}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            calls["n"] += 1
+            if calls["n"] == 1:
+                return httpx.Response(500, json={"code": "57014", "message": "statement timeout"})
+            if calls["n"] == 2:
+                raise httpx.ReadTimeout("The read operation timed out", request=request)
+            return httpx.Response(201)
+
+        store = ChunkStore(url="https://example.supabase.co", secret_key="k",
+                           transport=httpx.MockTransport(handler))
+        rows = [{"doc_key": "d", "chunk_index": 0, "content": "x", "embedding": [0.1]}]
+        assert store.upsert_chunks(PROJECT, rows) == 1
+        assert calls["n"] == 3
+
+    def test_chunk_row_strips_nul_characters(self):
+        row = to_chunk_row(PROJECT, {"doc_key": "d", "chunk_index": 0, "content": "a\x00b",
+                                     "metadata": {"title": "T\x00", "authors": ["X\x00Y"]}})
+        assert row["content"] == "ab"
+        assert row["metadata"] == {"title": "T", "authors": ["XY"]}
+
+    def test_upsert_does_not_retry_client_errors(self, monkeypatch):
+        monkeypatch.setattr("src.vectorstore.chunk_store.time.sleep", lambda s: None)
+        calls = {"n": 0}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            calls["n"] += 1
+            return httpx.Response(400, json={"message": "bad row"})
+
+        store = ChunkStore(url="https://example.supabase.co", secret_key="k",
+                           transport=httpx.MockTransport(handler))
+        with pytest.raises(Exception, match="400"):
+            store.upsert_chunks(PROJECT, [{"doc_key": "d", "chunk_index": 0, "content": "x"}])
+        assert calls["n"] == 1
+
     def test_hybrid_search_sends_filters_and_parses_embeddings(self):
         fake = FakeSupabase()
         fake.search_rows = [_row(0, 0.03, embedding=[1, 0, 0])]

@@ -17,6 +17,7 @@ from typing import Optional
 from .config import (
     app,
     base_image,
+    docling_image,
     monkeyocr_image,
     r2_secret,
     cohere_secret,
@@ -25,7 +26,7 @@ from .config import (
     model_cache,
 )
 from .utils import get_r2_client, get_bucket_name, sanitize_text, sanitize_dict
-from .extraction import run_mineru, post_process_content
+from .extraction import run_docling, run_mineru, post_process_content
 from .metadata import resolve_metadata, classify_study_design_llm
 from .embedding import embed_and_index
 from .chunks import check_chunks_indexed, delete_doc_chunks
@@ -163,6 +164,42 @@ def sync_to_supabase_rag(
     except Exception as e:
         print(f"  ⚠ Supabase sync error: {e}")
         return False
+
+
+def _supabase_client():
+    from supabase import create_client
+
+    url = os.environ.get("SUPABASE_URL")
+    key = os.environ.get("SUPABASE_SERVICE_KEY") or os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
+    return create_client(url, key) if url and key else None
+
+
+def find_document_uuid(project_id: str, doc_id: str) -> Optional[str]:
+    """documents.id of the row whose filename is doc_id, so chunks link to it."""
+    try:
+        client = _supabase_client()
+        if client is None:
+            return None
+        rows = (client.table("documents").select("id")
+                .eq("rag_project_id", project_id).eq("filename", doc_id).limit(1).execute().data)
+        return rows[0]["id"] if rows else None
+    except Exception as e:
+        print(f"  ⚠ Could not look up document row: {e}")
+        return None
+
+
+def mark_document_failed(project_id: str, doc_id: str, error: str) -> None:
+    """Record a failure on the document row itself, so it does not stay 'pending'."""
+    try:
+        client = _supabase_client()
+        if client is None:
+            return
+        (client.table("documents")
+         .update({"status": "failed", "error_message": error[:1000],
+                  "updated_at": datetime.now().isoformat()})
+         .eq("rag_project_id", project_id).eq("filename", doc_id).execute())
+    except Exception as e:
+        print(f"  ⚠ Could not mark document failed: {e}")
 
 
 # ============================================================================
@@ -583,19 +620,69 @@ def process_pdf_monkeyocr(
     retries=2,
 )
 def process_pdf_rag(pdf_key: str, project_id: str) -> dict:
+    """Process one project PDF with MinerU (T4 GPU). See process_rag_document."""
+    return process_rag_document(pdf_key, project_id, parser="mineru")
+
+
+@app.function(
+    image=docling_image,
+    secrets=[r2_secret, cohere_secret, supabase_secret, openrouter_secret],
+    volumes={"/cache": model_cache},
+    cpu=8.0,
+    memory=16384,
+    timeout=3600,
+    retries=1,
+    # Bounded so chunk writes do not pile up on the HNSW index (see ChunkStore._post_with_retry).
+    max_containers=10,
+)
+def process_pdf_rag_docling(pdf_key: str, project_id: str) -> dict:
+    """Process one project PDF with Docling (CPU only). See process_rag_document."""
+    return process_rag_document(pdf_key, project_id, parser="docling")
+
+
+@app.function(
+    image=docling_image,
+    secrets=[r2_secret],
+    volumes={"/cache": model_cache},
+    cpu=8.0,
+    memory=16384,
+    timeout=3600,
+)
+def parse_pdf_docling(pdf_key: str) -> dict:
     """
-    Process a single PDF for a RAG project.
-    
-    Similar to process_pdf but uses project-specific paths; chunks go to the project in Supabase.
-    
+    Parse one PDF with Docling and return the result without indexing or saving.
+
+    Used by evaluation/parser_pilot.py to compare parsers on the same papers.
+    """
+    import tempfile
+
+    s3 = get_r2_client()
+    with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
+        s3.download_file(get_bucket_name(), pdf_key, tmp.name)
+        pdf_path = Path(tmp.name)
+    result = run_docling(pdf_path)
+    pdf_path.unlink(missing_ok=True)
+    result.pop("docling_document", None)  # large; not needed for the comparison
+    return result
+
+
+def process_rag_document(pdf_key: str, project_id: str, parser: str = "mineru") -> dict:
+    """
+    Process a single PDF for a RAG project: parse, save outputs, enrich metadata,
+    classify study design, chunk, embed and index.
+
+    The full parser output, including the page-tagged content list, is saved to R2,
+    so the document can be re-chunked or re-embedded later without parsing again.
+
     Args:
         pdf_key: Full R2 key (e.g., rags/{project_id}/input-pdfs/paper.pdf)
         project_id: RAG project UUID for Supabase sync
+        parser: "mineru" (GPU) or "docling" (CPU)
     """
+    import gzip
     import tempfile
-    import httpx
     import asyncio
-    
+
     s3 = get_r2_client()
     bucket = get_bucket_name()
     
@@ -614,13 +701,18 @@ def process_pdf_rag(pdf_key: str, project_id: str) -> dict:
         
         print(f"  Downloaded: {pdf_path}")
         
-        # Process with MinerU
-        result = run_mineru(pdf_path)
-        
+        # Parse
+        if parser == "docling":
+            result = run_docling(pdf_path)
+        elif parser == "mineru":
+            result = run_mineru(pdf_path)
+        else:
+            raise ValueError(f"Unknown parser: {parser}")
+
         if not result.get("success"):
-            raise Exception(result.get("error", "MinerU processing failed"))
-        
-        print(f"  MinerU: {result.get('page_count', 0)} pages, {len(result.get('content', ''))} chars")
+            raise Exception(result.get("error", f"{parser} processing failed"))
+
+        print(f"  {parser}: {result.get('page_count', 0)} pages, {len(result.get('content', ''))} chars")
         
         # Post-process content
         result["content"] = post_process_content(
@@ -653,10 +745,20 @@ def process_pdf_rag(pdf_key: str, project_id: str) -> dict:
             "tables": result.get("tables", []),
             "formulas": result.get("formulas", []),
             "page_count": result.get("page_count", 0),
+            "parser": parser,
+            "extraction_config": result.get("extraction_config"),
+            # Page-tagged items: enough to re-chunk with page numbers, no re-parsing
+            "content_list": result.get("content_list"),
         }
         output_data = sanitize_dict(output_data)
         s3.put_object(Bucket=bucket, Key=json_key, Body=json.dumps(output_data, indent=2, ensure_ascii=False).encode("utf-8"), ContentType="application/json")
-        
+
+        if result.get("docling_document"):
+            raw_key = f"{output_prefix}/docling/{doc_id}.json.gz"
+            raw = gzip.compress(json.dumps(result["docling_document"], ensure_ascii=False).encode("utf-8"))
+            s3.put_object(Bucket=bucket, Key=raw_key, Body=raw, ContentType="application/gzip")
+            print(f"  Saved native Docling document: {raw_key}")
+
         print(f"  Uploaded: {md_key}")
         
         # Resolve metadata
@@ -704,6 +806,7 @@ def process_pdf_rag(pdf_key: str, project_id: str) -> dict:
             doc_id=doc_id,
             content_list=result.get("content_list"),
             project_id=project_id,
+            document_uuid=find_document_uuid(project_id, doc_id),
         )
         
         print(f"  Indexed {chunk_count} chunks into project {project_id}")
@@ -729,16 +832,12 @@ def process_pdf_rag(pdf_key: str, project_id: str) -> dict:
             "project_id": project_id,
             "chunks": chunk_count,
             "pages": result.get("page_count", 0),
+            "parser": parser,
             "metadata_source": enriched_metadata.get("metadata_source"),
         }
         
     except Exception as e:
-        print(f"  ❌ Error: {e}")
-        try:
-            backend_url = os.environ.get("BACKEND_URL", "https://3iechat.up.railway.app")
-            with httpx.Client(timeout=10.0) as client:
-                client.patch(f"{backend_url}/rags/{project_id}/documents/{doc_id}/status", json={"status": "failed", "error": str(e)})
-        except:
-            pass
-        
-        return {"success": False, "doc_id": doc_id, "project_id": project_id, "error": str(e)}
+        error = f"{type(e).__name__}: {e}"
+        print(f"  ❌ Error: {error}")
+        mark_document_failed(project_id, doc_id, error)
+        return {"success": False, "doc_id": doc_id, "project_id": project_id, "parser": parser, "error": error}

@@ -95,6 +95,7 @@ def trigger_processing(request: dict = None) -> dict:
     force_reprocess = request.get("force_reprocess", False)
     check_qdrant = request.get("check_qdrant", True)
     max_documents = request.get("max_documents", 0)
+    parser = request.get("parser")  # optional: "docling" or "mineru"
     
     # Safety check for force_reprocess
     if force_reprocess and not request.get("confirm_force", False):
@@ -121,7 +122,8 @@ def trigger_processing(request: dict = None) -> dict:
             function_call = orchestrate_rag.spawn(
                 project_id=project_id,
                 force_reprocess=force_reprocess,
-                max_documents=max_documents
+                max_documents=max_documents,
+                parser=parser,
             )
             
             return {
@@ -165,6 +167,7 @@ def main(
     max_documents: int = 0,
     index: bool = False,
     index_project_id: str = None,
+    parser: str = None,
 ):
     """
     CLI for MinerU / MonkeyOCR processing.
@@ -173,7 +176,7 @@ def main(
         status       - Show R2 and chunk-store status
         run          - Process all pending PDFs with MinerU
         single       - Process a single PDF with MinerU (requires --pdf-key)
-        rag          - Process a RAG project (requires --project-id)
+        rag          - Process a RAG project (requires --project-id; --parser docling|mineru)
         monkeyocr    - Process a single PDF with MonkeyOCR (requires --pdf-key)
                        Use --index --index-project-id <uuid> to also embed & index the results.
     """
@@ -221,7 +224,8 @@ def main(
         result = orchestrate_rag.remote(
             project_id=project_id,
             force_reprocess=force,
-            max_documents=max_documents
+            max_documents=max_documents,
+            parser=parser,
         )
         print(f"   Processed: {result.get('processed', 0)}")
         print(f"   Failed: {result.get('failed', 0)}")

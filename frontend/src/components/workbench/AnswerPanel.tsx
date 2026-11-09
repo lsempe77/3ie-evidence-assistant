@@ -2,13 +2,10 @@
 
 import React, { useState } from "react";
 import ReactMarkdown from "react-markdown";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Citation, EvidenceHealth, AnswerStyle } from "@/types";
-import { AlertTriangle, Info, Lightbulb, Copy, Check } from "lucide-react";
+import { AlertTriangle, Info, Copy, Check, BookOpen } from "lucide-react";
 
 interface AnswerPanelProps {
   answer: string;
@@ -19,6 +16,8 @@ interface AnswerPanelProps {
   isLoading?: boolean;
   onCitationClick: (citationId: number) => void;
   onSuggestionClick: (suggestion: string) => void;
+  /** Shown on narrow screens, where sources sit in their own tab. */
+  onShowSources?: () => void;
 }
 
 export function AnswerPanel({
@@ -29,6 +28,7 @@ export function AnswerPanel({
   isLoading = false,
   onCitationClick,
   onSuggestionClick,
+  onShowSources,
 }: AnswerPanelProps) {
   const [copied, setCopied] = useState(false);
 
@@ -68,19 +68,21 @@ export function AnswerPanel({
       return (
         <button
           key={key}
+          type="button"
           onClick={(e) => {
             e.preventDefault();
             e.stopPropagation();
             onCitationClick(citationId);
           }}
-          className="inline-flex items-center justify-center min-w-[1.25rem] h-5 px-1 text-xs font-mono bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300 rounded hover:bg-blue-200 dark:hover:bg-blue-800 transition-colors mx-0.5"
+          aria-label={`Source ${citationId}`}
+          className="tabular mx-0.5 inline-flex h-5 min-w-5 items-center justify-center rounded-sm bg-primary-tint px-1 align-baseline text-caption font-medium text-primary transition-colors hover:bg-highlight focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           {citationId}
         </button>
       );
     } else {
       return (
-        <span key={key} className="text-orange-500" title="Citation not found">
+        <span key={key} className="text-ink-subtle" title="This source number is not in the list">
           [{citationId}]
         </span>
       );
@@ -120,7 +122,7 @@ export function AnswerPanel({
   const processNode = (node: React.ReactNode): React.ReactNode => {
     // Handle strings - this is where citations like [1] appear
     if (typeof node === "string") {
-      if (/\[\d+\]/.test(node)) {
+      if (/\[\d+(?:\s*,\s*\d+)*\]/.test(node)) {
         return renderCitationLinks(node);
       }
       return node;
@@ -153,223 +155,197 @@ export function AnswerPanel({
     return node;
   };
 
+  const hasHealth =
+    evidenceHealth.studyCount > 0 || evidenceHealth.gaps.length > 0 || !!evidenceHealth.coverageWarning;
+
+  if (isLoading) {
+    return (
+      <div className="w-full max-w-[760px]" aria-busy="true">
+        <p className="mb-4 text-body text-ink-muted" role="status" aria-live="polite">
+          Searching the collection and writing the answer…
+        </p>
+        <div className="animate-pulse space-y-3" aria-hidden="true">
+          <div className="h-4 w-full rounded-sm bg-surface-2" />
+          <div className="h-4 w-11/12 rounded-sm bg-surface-2" />
+          <div className="h-4 w-4/6 rounded-sm bg-surface-2" />
+          <div className="h-4" />
+          <div className="h-4 w-full rounded-sm bg-surface-2" />
+          <div className="h-4 w-5/6 rounded-sm bg-surface-2" />
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="h-full flex flex-col">
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="text-lg font-semibold flex items-center gap-2">
-          💬 Answer
-        </h2>
-        {answer && (
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={handleCopy}
-            className="gap-1.5"
-          >
-            {copied ? (
-              <>
-                <Check className="h-4 w-4 text-green-600" />
-                Copied!
-              </>
-            ) : (
-              <>
-                <Copy className="h-4 w-4" />
-                Copy
-              </>
-            )}
-          </Button>
-        )}
+    <article className="w-full max-w-[760px]" aria-label="Answer">
+      <div className="text-body-lg break-words text-ink">
+        <ReactMarkdown
+          components={{
+            // Override paragraph to handle citation links
+            p: ({ children }) => (
+              <p className="mb-4">
+                {processNode(children)}
+              </p>
+            ),
+            // Style headings - but hide "References" heading since we have our own
+            h2: ({ children }) => {
+              const text = String(children);
+              if (text.toLowerCase() === "references") {
+                return null; // Hide the LLM's References heading
+              }
+              return (
+                <h2 className="mt-6 mb-2 text-heading text-ink">
+                  {children}
+                </h2>
+              );
+            },
+            h3: ({ children }) => (
+              <h3 className="mt-4 mb-1 text-body-lg font-semibold text-ink">
+                {processNode(children)}
+              </h3>
+            ),
+            // Style bold text
+            strong: ({ children }) => (
+              <strong className="font-semibold text-ink">
+                {processNode(children)}
+              </strong>
+            ),
+            // Style italic text
+            em: ({ children }) => (
+              <em className="italic">{processNode(children)}</em>
+            ),
+            // Style lists - but hide reference lists
+            ul: ({ children }) => {
+              // Check if this is a reference list (children are citations)
+              const childArray = Array.isArray(children) ? children : [children];
+              const isReferenceList = childArray.some((child: React.ReactNode) => {
+                if (child && typeof child === 'object' && 'props' in child) {
+                  const props = (child as React.ReactElement).props as { children?: React.ReactNode };
+                  const text = String(props?.children || '');
+                  return text.includes('(2023)') || text.includes('(2022)') || text.includes('(2021)');
+                }
+                return false;
+              });
+              if (isReferenceList) {
+                return null; // Hide reference lists from LLM
+              }
+              return (
+                <ul className="mb-4 list-disc space-y-1 pl-5">
+                  {children}
+                </ul>
+              );
+            },
+            li: ({ children }) => (
+              <li>{processNode(children)}</li>
+            ),
+            // Style horizontal rules
+            hr: () => <Separator className="my-6" />,
+          }}
+        >
+          {answer}
+        </ReactMarkdown>
       </div>
 
-      <ScrollArea className="flex-1">
-        <div className="space-y-4 pr-4">
-          {/* Main Answer */}
-          <div className="prose prose-sm dark:prose-invert max-w-none">
-            {isLoading ? (
-              <div className="animate-pulse space-y-2">
-                <div className="h-4 bg-muted rounded w-full"></div>
-                <div className="h-4 bg-muted rounded w-5/6"></div>
-                <div className="h-4 bg-muted rounded w-4/6"></div>
-              </div>
-            ) : (
-              <>
-              <ReactMarkdown
-                components={{
-                  // Override paragraph to handle citation links
-                  p: ({ children }) => (
-                    <p className="mb-3 leading-relaxed">
-                      {processNode(children)}
-                    </p>
-                  ),
-                  // Style headings - but hide "References" heading since we have our own
-                  h2: ({ children }) => {
-                    const text = String(children);
-                    if (text.toLowerCase() === "references") {
-                      return null; // Hide the LLM's References heading
-                    }
-                    return (
-                      <h2 className="text-base font-semibold mt-4 mb-2 text-foreground">
-                        {children}
-                      </h2>
-                    );
-                  },
-                  h3: ({ children }) => (
-                    <h3 className="text-sm font-semibold mt-3 mb-1 text-foreground">
-                      {processNode(children)}
-                    </h3>
-                  ),
-                  // Style bold text
-                  strong: ({ children }) => (
-                    <strong className="font-semibold text-foreground">
-                      {processNode(children)}
-                    </strong>
-                  ),
-                  // Style italic text
-                  em: ({ children }) => (
-                    <em className="italic">{processNode(children)}</em>
-                  ),
-                  // Style lists - but hide reference lists
-                  ul: ({ children }) => {
-                    // Check if this is a reference list (children are citations)
-                    const childArray = Array.isArray(children) ? children : [children];
-                    const isReferenceList = childArray.some((child: React.ReactNode) => {
-                      if (child && typeof child === 'object' && 'props' in child) {
-                        const props = (child as React.ReactElement).props as { children?: React.ReactNode };
-                        const text = String(props?.children || '');
-                        return text.includes('(2023)') || text.includes('(2022)') || text.includes('(2021)');
-                      }
-                      return false;
-                    });
-                    if (isReferenceList) {
-                      return null; // Hide reference lists from LLM
-                    }
-                    return (
-                      <ul className="list-disc list-inside mb-3 space-y-1">
-                        {children}
-                      </ul>
-                    );
-                  },
-                  li: ({ children }) => (
-                    <li className="text-sm">{processNode(children)}</li>
-                  ),
-                  // Style horizontal rules
-                  hr: () => <Separator className="my-4" />,
-                }}
-              >
-                {answer}
-              </ReactMarkdown>
-
-              {/* Citations Reference - right after the answer */}
-              {citations.length > 0 && (
-                <div className="mt-4 pt-4 border-t">
-                  <h3 className="text-sm font-medium mb-3">References</h3>
-                  <div className="space-y-2">
-                    {citations.map((citation) => (
-                      <button
-                        key={citation.id}
-                        onClick={() => onCitationClick(citation.id)}
-                        className="flex items-start gap-2 w-full text-left hover:bg-muted/50 rounded-lg p-2 -ml-2 transition-colors"
-                      >
-                        <span className="inline-flex items-center justify-center min-w-[1.5rem] h-6 px-1.5 text-xs font-mono bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300 rounded shrink-0">
-                          {citation.id}
-                        </span>
-                        <span className="text-sm text-muted-foreground">
-                          {citation.study.authors} ({citation.study.year}).{" "}
-                          <em>{citation.study.title}</em>
-                        </span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-              </>
-            )}
-          </div>
-
-          <Separator />
-
-          {/* Evidence Health */}
-          {(evidenceHealth.studyCount > 0 || evidenceHealth.gaps.length > 0) && (
-            <Card className="bg-muted/50">
-              <CardContent className="pt-4">
-                <h3 className="text-sm font-medium mb-3 flex items-center gap-2">
-                  <Info className="h-4 w-4" />
-                  Evidence Quality
-                </h3>
-                <div className="space-y-2 text-sm">
-                  {evidenceHealth.studyCount > 0 && (
-                    <div className="flex items-center gap-2">
-                      <Badge variant={evidenceHealth.studyCount >= 5 ? "default" : "secondary"}>
-                        {evidenceHealth.studyCount} studies
-                      </Badge>
-                      {evidenceHealth.dateRange && (
-                        <span className="text-muted-foreground">
-                          {evidenceHealth.dateRange}
-                        </span>
-                      )}
-                    </div>
-                  )}
-                  {evidenceHealth.gaps.length > 0 && (
-                    <div className="mt-2 pt-2 border-t border-muted">
-                      <p className="text-xs font-medium text-muted-foreground mb-1">Gaps identified:</p>
-                      {evidenceHealth.gaps.map((gap, i) => (
-                        <p key={i} className="flex items-start gap-1.5 text-yellow-600 dark:text-yellow-400 text-xs">
-                          <AlertTriangle className="h-3 w-3 mt-0.5 shrink-0" />
-                          <span>{gap}</span>
-                        </p>
-                      ))}
-                    </div>
-                  )}
-                  {evidenceHealth.coverageWarning && (
-                    <p className="text-yellow-600 dark:text-yellow-400 text-xs mt-2">
-                      ⚠️ {evidenceHealth.coverageWarning}
-                    </p>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
+      {/* Quiet footer row (DESIGN.md, Answer block) */}
+      {answer && (
+        <div className="mt-2 flex flex-wrap items-center gap-1 text-ink-muted">
+          <Button variant="ghost" size="sm" onClick={handleCopy}>
+            {copied ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />}
+            <span aria-live="polite">{copied ? "Copied" : "Copy answer"}</span>
+          </Button>
+          {onShowSources && citations.length > 0 && (
+            <Button variant="ghost" size="sm" onClick={onShowSources} className="xl:hidden">
+              <BookOpen aria-hidden="true" />
+              Show sources
+            </Button>
           )}
-
-          {/* Query Coaching - show loading skeleton or suggestions */}
-          {isLoading ? (
-            <Card className="bg-muted/50">
-              <CardContent className="pt-4">
-                <h3 className="text-sm font-medium mb-2 flex items-center gap-2">
-                  <Lightbulb className="h-4 w-4" />
-                  Try next
-                </h3>
-                <div className="space-y-2">
-                  <div className="h-4 bg-muted rounded w-3/4 animate-pulse"></div>
-                  <div className="h-4 bg-muted rounded w-2/3 animate-pulse"></div>
-                  <div className="h-4 bg-muted rounded w-4/5 animate-pulse"></div>
-                </div>
-              </CardContent>
-            </Card>
-          ) : suggestions.length > 0 ? (
-            <Card className="bg-muted/50">
-              <CardContent className="pt-4">
-                <h3 className="text-sm font-medium mb-2 flex items-center gap-2">
-                  <Lightbulb className="h-4 w-4" />
-                  Try next
-                </h3>
-                <div className="space-y-1">
-                  {suggestions.map((suggestion, i) => (
-                    <button
-                      key={i}
-                      onClick={() => onSuggestionClick(suggestion)}
-                      className="block w-full text-left text-sm text-blue-600 dark:text-blue-400 hover:underline"
-                    >
-                      • {suggestion}
-                    </button>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          ) : null}
-
-
         </div>
-      </ScrollArea>
-    </div>
+      )}
+
+      {/* Numbered list of what the answer cites */}
+      {citations.length > 0 && (
+        <section aria-labelledby="answer-references" className="mt-6 border-t border-hairline pt-4">
+          <h2 id="answer-references" className="mb-2 text-body font-semibold text-ink">
+            References
+          </h2>
+          <ol className="space-y-1">
+            {citations.map((citation) => (
+              <li key={citation.id}>
+                <button
+                  type="button"
+                  onClick={() => onCitationClick(citation.id)}
+                  className="-mx-2 flex w-full items-start gap-2 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  <span className="tabular inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded-sm bg-primary-tint px-1 text-caption font-medium text-primary">
+                    {citation.id}
+                  </span>
+                  <span className="min-w-0 break-words text-body text-ink-muted">
+                    {citation.study.authors} ({citation.study.year}).{" "}
+                    <span className="text-ink">{citation.study.title}</span>
+                    {citation.page ? <span className="tabular text-ink-subtle">, page {citation.page}</span> : null}
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ol>
+        </section>
+      )}
+
+      {/* How much evidence the answer rests on: a neutral block, words not colours */}
+      {hasHealth && (
+        <section aria-labelledby="answer-evidence" className="mt-6 rounded-md bg-surface-1 p-4">
+          <h2 id="answer-evidence" className="mb-2 flex items-center gap-2 text-body font-semibold text-ink">
+            <Info className="size-4 text-info" aria-hidden="true" />
+            Evidence base
+          </h2>
+          {evidenceHealth.studyCount > 0 && (
+            <p className="tabular text-body text-ink-muted">
+              {evidenceHealth.studyCount} {evidenceHealth.studyCount === 1 ? "study" : "studies"}
+              {evidenceHealth.dateRange ? `, published ${evidenceHealth.dateRange}` : ""}
+            </p>
+          )}
+          {evidenceHealth.gaps.length > 0 && (
+            <div className="mt-3">
+              <p className="mb-1 text-caption font-medium text-ink-muted">Gaps</p>
+              <ul className="space-y-1">
+                {evidenceHealth.gaps.map((gap, i) => (
+                  <li key={i} className="flex items-start gap-1.5 text-body text-ink-muted">
+                    <AlertTriangle className="mt-0.5 size-3.5 shrink-0 text-warning" aria-hidden="true" />
+                    <span>{gap}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {evidenceHealth.coverageWarning && (
+            <p className="mt-3 flex items-start gap-1.5 text-body text-ink-muted">
+              <AlertTriangle className="mt-0.5 size-3.5 shrink-0 text-warning" aria-hidden="true" />
+              <span>{evidenceHealth.coverageWarning}</span>
+            </p>
+          )}
+        </section>
+      )}
+
+      {suggestions.length > 0 && (
+        <section aria-labelledby="answer-related" className="mt-6">
+          <h2 id="answer-related" className="mb-2 text-body font-semibold text-ink">
+            Related questions
+          </h2>
+          <div className="flex flex-wrap gap-2">
+            {suggestions.map((suggestion, i) => (
+              <Button
+                key={i}
+                variant="outline"
+                size="sm"
+                className="h-auto min-h-8 py-1.5 text-left whitespace-normal"
+                onClick={() => onSuggestionClick(suggestion)}
+              >
+                {suggestion}
+              </Button>
+            ))}
+          </div>
+        </section>
+      )}
+    </article>
   );
 }

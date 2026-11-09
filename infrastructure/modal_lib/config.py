@@ -47,6 +47,28 @@ base_image = (
 # GPU-accelerated VLM inference without manual wheel management.
 # Model: echo-miao/MonkeyOCR (HuggingFace)
 # Outputs markdown comparable to MinerU, enabling side-by-side comparison.
+# Docling (CPU) image: default parser candidate after the TVET bake-off.
+# Pinned to the version validated locally (docling 2.141.0). Model weights download from
+# Hugging Face on first use and are cached in the shared model volume.
+docling_image = (
+    modal.Image.debian_slim(python_version="3.11")
+    .apt_install("libgl1", "libglib2.0-0")
+    .pip_install(
+        "docling==2.141.0",
+        "boto3",
+        "cohere>=5.0.0",
+        "httpx",
+        "pydantic>=2.0.0",
+        "pydantic-settings>=2.0.0",
+        "supabase>=2.0.0",
+    )
+    .env({"HF_HOME": "/cache/huggingface", "OMP_NUM_THREADS": "8"})
+    .add_local_python_source("modal_lib", "src")
+)
+
+# Parser used when a caller does not choose one ("mineru" or "docling")
+DEFAULT_PDF_PARSER = "docling"  # chosen by the 8 Nov 2026 pilot (evaluation/results/parser_pilot_2026-11-08.md)
+
 monkeyocr_image = (
     modal.Image.from_registry(
         # runtime is sufficient — flash-attn installed via pre-built wheel below

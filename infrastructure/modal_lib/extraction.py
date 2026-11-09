@@ -651,3 +651,128 @@ def post_process_content(
             content = header + content
     
     return content.strip()
+
+
+# ============================================================================
+# Docling Extraction
+# ============================================================================
+#
+# Why Docling: in the TVET parser bake-off (pipelines/TVET, October 2026; six economics
+# papers scored against a human table key) Docling matched MinerU on table recall
+# (0.94 vs 0.94) and kept more numbers intact (decimal recall 0.997 vs 0.965), on CPU
+# and under the MIT licence. See docs/RAG_PIPELINE_PLAN.md and roadmap item T4.
+
+# Docling element labels that are page furniture, not content
+_DOCLING_SKIP_LABELS = {"page_header", "page_footer"}
+
+
+def _docling_label(item) -> str:
+    label = getattr(item, "label", "")
+    return str(getattr(label, "value", label))
+
+
+def run_docling(pdf_path: Path, do_ocr: bool = True) -> dict:
+    """
+    Run Docling on a PDF and return the same shape as run_mineru.
+
+    content_list items carry `type`, `text` and a 0-based `page_idx`, so the existing
+    page-aware chunkers work unchanged. Tables are rendered as Markdown inside `text`,
+    with their caption, so they are chunked and searchable. Captions that belong to a
+    table or figure are not repeated as separate items, and consecutive duplicate
+    passages are dropped (the bake-off found Docling inflates text by about 1.5x).
+
+    Returns run_mineru's keys plus `docling_document` (Docling's full JSON export,
+    for re-chunking later without parsing again) and `parser`.
+    """
+    print(f"  Running Docling on {pdf_path.name} (ocr={do_ocr})...")
+    started = datetime.now()
+    try:
+        from docling.datamodel.base_models import InputFormat
+        from docling.datamodel.pipeline_options import PdfPipelineOptions
+        from docling.document_converter import DocumentConverter, PdfFormatOption
+
+        options = PdfPipelineOptions()
+        options.do_ocr = do_ocr
+        options.do_table_structure = True
+        options.table_structure_options.do_cell_matching = True
+        converter = DocumentConverter(
+            format_options={InputFormat.PDF: PdfFormatOption(pipeline_options=options)}
+        )
+        doc = converter.convert(str(pdf_path)).document
+
+        # Captions attached to tables and figures: rendered with their parent, not twice
+        caption_refs = set()
+        for item, _level in doc.iterate_items():
+            for ref in getattr(item, "captions", []) or []:
+                caption_refs.add(getattr(ref, "cref", None))
+
+        content_list: List[dict] = []
+        tables: List[dict] = []
+        formulas: List[dict] = []
+        title: Optional[str] = None
+        last_text = None
+
+        for item, _level in doc.iterate_items():
+            label = _docling_label(item)
+            if label in _DOCLING_SKIP_LABELS or getattr(item, "self_ref", None) in caption_refs:
+                continue
+            prov = getattr(item, "prov", None) or []
+            page_idx = (prov[0].page_no - 1) if prov else 0
+
+            if label == "table":
+                caption = item.caption_text(doc) if hasattr(item, "caption_text") else ""
+                body = item.export_to_markdown(doc=doc)
+                # Docling usually puts the caption above the table already; add it only if missing
+                text = body if (not caption or caption in body) else f"{caption}\n\n{body}"
+                entry = {"type": "table", "text": text, "page_idx": page_idx,
+                         "table_caption": [caption] if caption else [], "table_body": body}
+                content_list.append(entry)
+                tables.append(entry)
+                last_text = None
+                continue
+
+            if label == "picture":
+                caption = item.caption_text(doc) if hasattr(item, "caption_text") else ""
+                if caption:
+                    content_list.append({"type": "image", "text": caption, "page_idx": page_idx})
+                continue
+
+            text = (getattr(item, "text", "") or "").strip()
+            if not text or text == last_text:
+                continue
+            last_text = text
+            kind = {"title": "title", "section_header": "title", "formula": "equation",
+                    "list_item": "text", "caption": "text", "footnote": "text"}.get(label, "text")
+            entry = {"type": kind, "text": text, "page_idx": page_idx}
+            if title is None and (label == "title" or (label == "section_header" and page_idx == 0)):
+                title = text
+            if kind == "equation":
+                formulas.append(entry)
+            content_list.append(entry)
+
+        md_content = doc.export_to_markdown(image_placeholder="")
+        page_count = doc.num_pages() if hasattr(doc, "num_pages") else len(getattr(doc, "pages", {}) or {})
+        seconds = (datetime.now() - started).total_seconds()
+        print(f"    Docling: {page_count} pages, {len(tables)} tables, {len(content_list)} items, {seconds:.0f}s")
+
+        return {
+            "success": True,
+            "parser": "docling",
+            "content": md_content,
+            "content_list": content_list,
+            "tables": tables,
+            "figures_detected": [],
+            "artifacts_filtered": [],
+            "formulas": formulas,
+            "page_count": page_count,
+            "title": title or extract_title(md_content),
+            "authors": extract_authors_from_text(md_content),
+            "year": extract_year_from_text(md_content),
+            "abstract": extract_abstract(md_content),
+            "docling_document": doc.export_to_dict(),
+            "seconds": seconds,
+            "extraction_config": {"backend": "docling", "do_ocr": do_ocr, "table_cell_matching": True},
+        }
+    except Exception as e:
+        print(f"  Docling failed: {e}\n{traceback.format_exc()}")
+        return {"success": False, "error": str(e), "parser": "docling"}

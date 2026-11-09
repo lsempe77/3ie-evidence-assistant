@@ -1,10 +1,8 @@
 "use client";
 
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
 import { StudyCard } from "./StudyCard";
 import { Study, Citation } from "@/types";
-import { Download } from "lucide-react";
 
 interface EvidencePanelProps {
   studies: Study[];
@@ -124,59 +122,40 @@ export function EvidencePanel({
   };
 
   return (
-    <div className="h-full flex flex-col">
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="text-lg font-semibold flex items-center gap-2">
-          📚 Evidence
-          <span className="text-sm font-normal text-muted-foreground">
-            ({studies.length} studies)
+    <section aria-labelledby="sources-heading" className="flex flex-col">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <h2 id="sources-heading" className="text-heading text-ink">
+          Sources{" "}
+          <span className="tabular font-sans text-body font-normal text-ink-muted">
+            {studies.length} {studies.length === 1 ? "study" : "studies"}
           </span>
         </h2>
-        <div className="flex items-center gap-2">
-          {selectedStudies.length > 0 ? (
-            <span className="text-sm text-purple-600 dark:text-purple-400">
-              {selectedStudies.length} selected
-            </span>
-          ) : studies.length > 1 ? (
-            <span className="text-xs text-muted-foreground italic">
-              Select 2+ to compare
-            </span>
-          ) : null}
-          {studies.length > 0 && (
-            <div className="flex gap-1">
-              <Button variant="outline" size="sm" onClick={handleExportCSV} title="Download as CSV">
-                <Download className="h-3 w-3 mr-1" />
-                CSV
-              </Button>
-              <Button variant="outline" size="sm" onClick={handleExportJSON} title="Download as JSON">
-                <Download className="h-3 w-3 mr-1" />
-                JSON
-              </Button>
-              <Button variant="outline" size="sm" onClick={handleExportBibTeX} title="Download as BibTeX">
-                <Download className="h-3 w-3 mr-1" />
-                BibTeX
-              </Button>
-            </div>
-          )}
-        </div>
+        {studies.length > 0 && (
+          <div className="flex items-center gap-1" role="group" aria-label="Download sources">
+            <span className="mr-1 text-caption text-ink-subtle">Download</span>
+            <Button variant="ghost" size="sm" onClick={handleExportCSV}>CSV</Button>
+            <Button variant="ghost" size="sm" onClick={handleExportBibTeX}>BibTeX</Button>
+            <Button variant="ghost" size="sm" onClick={handleExportJSON}>JSON</Button>
+          </div>
+        )}
       </div>
 
-      <ScrollArea className="flex-1">
-        <div className="space-y-3 pr-4">
-          {studies.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-12 text-center">
-              <div className="text-4xl mb-4">🔍</div>
-              <h3 className="text-lg font-medium text-muted-foreground mb-2">
-                No studies found
-              </h3>
-              <p className="text-sm text-muted-foreground max-w-xs">
-                Try adjusting your search terms or filters to find relevant evidence.
-              </p>
-            </div>
-          ) : (
-            studies.map((study) => (
+      {studies.length > 1 && selectedStudies.length === 0 && (
+        <p className="mb-3 text-caption text-ink-subtle">Select two or more studies to compare them.</p>
+      )}
+
+      {studies.length === 0 ? (
+        <div className="rounded-md border border-dashed border-hairline px-4 py-10 text-center">
+          <h3 className="font-sans text-body font-semibold text-ink">No studies match this question</h3>
+          <p className="mx-auto mt-1 max-w-xs text-body text-ink-muted">
+            Try wording the question differently, or lower the minimum relevance in answer settings.
+          </p>
+        </div>
+      ) : (
+        <ul className="space-y-3">
+          {studies.map((study) => (
+            <li key={study.id}>
               <StudyCard
-                key={study.id}
                 study={study}
                 citationNumber={getCitationNumber(study.id)}
                 isHighlighted={isHighlighted(study)}
@@ -185,10 +164,10 @@ export function EvidencePanel({
                 onExclude={onExcludeStudy}
                 onOpenPdf={onOpenPdf}
               />
-            ))
-          )}
-        </div>
-      </ScrollArea>
-    </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
   );
 }
