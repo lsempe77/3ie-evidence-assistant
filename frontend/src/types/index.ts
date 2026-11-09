@@ -29,6 +29,7 @@ export type StudyDesign =
   | "case_control"
   | "cross_sectional"
   | "panel"
+  | "observational"
   | "descriptive"
   // Qualitative
   | "qualitative"

@@ -34,7 +34,7 @@ export interface SearchSettings {
 }
 
 const defaultSettings: SearchSettings = {
-  relevanceThreshold: 0.5,
+  relevanceThreshold: 0.2, // rerank scores rarely exceed 0.7; see src/retrieval/selection.py
   maxStudies: 10,
   answerStyle: "executive",
   useReranking: true,

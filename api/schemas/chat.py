@@ -23,7 +23,8 @@ class FilterInput(BaseModel):
 
 class SearchSettings(BaseModel):
     """Search settings from the frontend SettingsDrawer."""
-    relevanceThreshold: float = Field(default=0.5, ge=0, le=1)
+    # Minimum rerank score per passage; see src/retrieval/selection.py for why it is low.
+    relevanceThreshold: float = Field(default=0.2, ge=0, le=1)
     maxStudies: int = Field(default=10, ge=3, le=25)
     answerStyle: Literal["executive", "research", "policy", "citations"] = "executive"
     useReranking: bool = True
@@ -50,6 +51,8 @@ class StudyResponse(BaseModel):
     country: str = ""
     sector: str = ""
     studyType: str = ""
+    studyDesign: Optional[str] = None  # classifier label, e.g. "rct", "difference_in_differences"
+    studyDesignConfidence: Optional[float] = None
     confidence: Literal["high", "medium", "low"] = "medium"
     snippet: str = ""
     score: float = 0.0

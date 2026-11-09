@@ -24,6 +24,7 @@ from src.retrieval.hybrid_retriever import HybridRetriever, RetrievalResult
 from src.retrieval.hyde import HyDEEnhancer
 from src.retrieval.query_processor import QueryClassification, QueryProcessor
 from src.retrieval.reranker import CohereReranker, Reranker, get_reranker
+from src.retrieval.selection import DEFAULT_MIN_SCORE, select_by_study
 from src.database.memory import get_conversation_memory
 from src.utils.cache import get_response_cache
 from src.utils.logging import get_logger
@@ -36,7 +37,9 @@ logger = get_logger(__name__)
 @dataclass
 class SearchSettings:
     """Settings passed from frontend to control search behavior."""
-    relevance_threshold: float = 0.5  # Default threshold - user can adjust
+    # Minimum rerank score for a passage. Cohere scores are not calibrated, so keep this
+    # low and let max_studies do the narrowing (see src/retrieval/selection.py).
+    relevance_threshold: float = DEFAULT_MIN_SCORE
     max_studies: int = 10
     answer_style: str = "executive"
     use_reranking: bool = True
@@ -51,7 +54,7 @@ class SearchSettings:
         if not data:
             return cls()
         return cls(
-            relevance_threshold=data.get("relevanceThreshold", 0.5),
+            relevance_threshold=data.get("relevanceThreshold", DEFAULT_MIN_SCORE),
             max_studies=data.get("maxStudies", 10),
             answer_style=data.get("answerStyle", "executive"),
             use_reranking=data.get("useReranking", True),
@@ -242,8 +245,9 @@ class EvidenceAssistantAgent:
         if active_filters:
             logger.info(f"Applying filters: {active_filters}")
         
-        # Use maxStudies from settings for top_k (retrieve more, then filter)
-        retrieval_top_k = min(user_settings.max_studies * 3, settings.retrieval_top_k)
+        # Retrieve a wide pool (150 passages reached 55 of 97 studies in testing, against
+        # 23 for the old 30), then rerank and narrow to max_studies studies.
+        retrieval_top_k = settings.retrieval_top_k
         
         # Apply HyDE enhancement if enabled
         retrieval_query = processed_query.primary_query
@@ -340,47 +344,41 @@ class EvidenceAssistantAgent:
         
         logger.info(f"Retrieved {retrieval_count} results (settings.maxStudies={user_settings.max_studies})")
         
-        # Step 3: Reranking (optional based on settings)
+        # Step 3: Reranking, then choose passages by study (optional reranking)
         rerank_start = time.time()
-        if user_settings.use_reranking and self.reranker:
-            # Rerank to user's maxStudies count
-            rerank_top_n = min(user_settings.max_studies, settings.rerank_top_n)
-            reranked_results = await self.reranker.rerank(
-                query=processed_query.original_query,
-                results=results,
-                top_n=rerank_top_n,
-            )
-            logger.info(f"Reranked to {len(reranked_results)} results")
-        else:
-            # Skip reranking, just take top N
-            reranked_results = results[:user_settings.max_studies]
-            logger.info(f"Skipped reranking (useReranking=False), took top {len(reranked_results)}")
-        
-        # Apply relevance threshold filter - strictly respect user's choice
         threshold_filtered_all = False
         threshold_max_score = 0.0
-        
-        if user_settings.relevance_threshold > 0 and reranked_results:
-            original_count = len(reranked_results)
-            threshold_max_score = max((r.score for r in reranked_results), default=0)
-            
-            filtered_results = [
-                r for r in reranked_results 
-                if r.score >= user_settings.relevance_threshold
-            ]
-            
-            if filtered_results:
-                reranked_results = filtered_results
-                logger.info(f"Applied relevance threshold {user_settings.relevance_threshold}, kept {len(reranked_results)}/{original_count}")
-            else:
-                # Threshold filtered out ALL results
-                logger.warning(
-                    f"Relevance threshold {user_settings.relevance_threshold} filtered out all {original_count} results. "
-                    f"Max score was {threshold_max_score:.3f}"
-                )
-                reranked_results = []
+        if user_settings.use_reranking and self.reranker:
+            # Score the whole pool. Taking only max_studies passages here let one paper
+            # fill every slot, so answers rested on two or three studies.
+            reranked_pool = await self.reranker.rerank(
+                query=processed_query.original_query,
+                results=results,
+                top_n=len(results),
+            )
+            threshold_max_score = max((r.score for r in reranked_pool), default=0.0)
+            min_score = user_settings.relevance_threshold if user_settings.relevance_threshold > 0 else None
+            reranked_results = select_by_study(
+                reranked_pool,
+                max_studies=user_settings.max_studies,
+                min_score=min_score,
+            )
+            if reranked_pool and not reranked_results:
                 threshold_filtered_all = True
-        
+                logger.warning(
+                    f"Relevance threshold {user_settings.relevance_threshold} filtered out all "
+                    f"{len(reranked_pool)} results. Max score was {threshold_max_score:.3f}"
+                )
+            logger.info(
+                f"Reranked {len(reranked_pool)} passages, kept {len(reranked_results)} from "
+                f"{len({r.study_id for r in reranked_results})} studies "
+                f"(threshold {user_settings.relevance_threshold}, max_studies {user_settings.max_studies})"
+            )
+        else:
+            # Retrieval scores are not on the reranker's scale, so no threshold here.
+            reranked_results = select_by_study(results, max_studies=user_settings.max_studies)
+            logger.info(f"Skipped reranking, kept {len(reranked_results)} passages by study")
+
         rerank_time = (time.time() - rerank_start) * 1000
         reranked_count = len(reranked_results)
         
@@ -746,10 +744,13 @@ class EvidenceAssistantAgent:
                 filters=processed_query.filters if processed_query.filters.has_filters() else None,
             )
         
-        reranked_results = await self.reranker.rerank(
+        reranked_pool = await self.reranker.rerank(
             query=processed_query.original_query,
             results=results,
-            top_n=settings.rerank_top_n,
+            top_n=len(results),
+        )
+        reranked_results = select_by_study(
+            reranked_pool, max_studies=SearchSettings().max_studies, min_score=DEFAULT_MIN_SCORE
         )
         
         # Build context
