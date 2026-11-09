@@ -79,7 +79,7 @@ def openrouter_usage(key: str) -> float | None:
         return None
 
 
-async def judge(item: dict, answer: str, key: str) -> dict:
+async def judge(item: dict, answer: str, key: str, model: str = JUDGE_MODEL) -> dict:
     refusal_rule = (
         "This is an evidence-gap question: refusal_ok is true only if the answer says the evidence is "
         "limited or absent and does not present unsupported findings as established."
@@ -96,7 +96,7 @@ async def judge(item: dict, answer: str, key: str) -> dict:
         r = await client.post(
             "https://openrouter.ai/api/v1/chat/completions",
             headers={"Authorization": f"Bearer {key}"},
-            json={"model": JUDGE_MODEL, "temperature": 0, "max_tokens": 1500,
+            json={"model": model, "temperature": 0, "max_tokens": 1500,
                   "messages": [{"role": "user", "content": prompt}]},
         )
         r.raise_for_status()
@@ -125,16 +125,103 @@ def project_model_config(project_id: str) -> dict | None:
     return (row or {}).get("model_config")
 
 
+def claim_score(verdict: dict, kinds: list | None = None, only: str | None = None) -> float | None:
+    """Share of gold claims supported (partly = 0.5). With `only`, score just the claims of that kind."""
+    claims = verdict.get("claims", [])
+    if only and kinds:
+        claims = [c for i, c in enumerate(claims) if i < len(kinds) and kinds[i] == only]
+    if not claims:
+        return None
+    return sum({"supported": 1, "partly": 0.5}.get(c.get("verdict"), 0) for c in claims) / len(claims)
+
+
+async def score_item(item: dict, answer: str, cited: list, seconds: float, model: str | None,
+                     error: str | None, included: list, key: str, judges: list, extra: dict) -> dict:
+    gold = gold_studies(item, included)
+    recall = None
+    if gold:
+        hit = len(gold & set(cited))
+        recall = {"gold": len(gold), "found": hit, "recall": round(hit / len(gold), 3)}
+    verdicts = {}
+    for jm in judges:
+        try:
+            verdicts[jm] = await judge(item, answer, key, jm)
+        except Exception as e:
+            verdicts[jm] = {"error": f"{type(e).__name__}: {e}"}
+    by_judge = {jm: claim_score(v) for jm, v in verdicts.items()}
+    kinds = item.get("claim_kinds") or ["study"] * len(item.get("gold_claims", []))
+    study_scores = [x for x in (claim_score(v, kinds, "study") for v in verdicts.values()) if x is not None]
+    scores = [v for v in by_judge.values() if v is not None]
+    primary = verdicts[judges[0]]
+    claims = primary.get("claims", [])
+    return {
+        "id": item["id"], "type": item["type"], "question": item["question"], "seconds": seconds,
+        "model_used": model, "error": error, "answer": answer, "cited_studies": cited,
+        "n_studies": len(cited), "recall": recall, "judge": primary, "judges": verdicts,
+        "claim_score": round(sum(scores) / len(scores), 3) if scores else None,
+        "claim_score_by_judge": {jm: (round(v, 3) if v is not None else None) for jm, v in by_judge.items()},
+        "study_claim_score": round(sum(study_scores) / len(study_scores), 3) if study_scores else None,
+        "contradicted": sum(1 for c in claims if c.get("verdict") == "contradicted"),
+        "must_not_violations": len([v for v in primary.get("must_not_violations", []) if v]),
+        "refusal_ok": primary.get("refusal_ok"),
+        **extra,
+    }
+
+
+def write_results(label: str, bench_path: str, project_id: str, results: list, extra_summary: dict,
+                  judges: list, spend: float | None) -> dict:
+    scored = [r for r in results if r["claim_score"] is not None]
+
+    def judge_mean(jm):
+        vals = [r["claim_score_by_judge"].get(jm) for r in results if r["claim_score_by_judge"].get(jm) is not None]
+        return round(sum(vals) / len(vals), 3) if vals else None
+
+    summary = {
+        "benchmark": Path(bench_path).name, "label": label, "date": date.today().isoformat(),
+        "project_id": project_id, **extra_summary, "judge_models": judges,
+        "items": len(results), "errors": sum(1 for r in results if r["error"]),
+        "mean_claim_score": round(sum(r["claim_score"] for r in scored) / len(scored), 3) if scored else None,
+        "mean_claim_score_by_judge": {jm: judge_mean(jm) for jm in judges},
+        "mean_study_claim_score": round(sum(r["study_claim_score"] for r in results if r.get("study_claim_score") is not None)
+                                        / max(1, sum(1 for r in results if r.get("study_claim_score") is not None)), 3),
+        "contradicted_claims": sum(r["contradicted"] for r in results),
+        "must_not_violations": sum(r["must_not_violations"] for r in results),
+        "refusal_ok": f"{sum(1 for r in results if r['refusal_ok'] is True)}/{sum(1 for r in results if r['refusal_ok'] is not None)}",
+        "mean_studies_cited": round(sum(r["n_studies"] for r in results) / len(results), 1) if results else None,
+        "mean_seconds": round(sum(r["seconds"] for r in results) / len(results), 1) if results else None,
+        "openrouter_spend_usd": spend,
+    }
+    safe_label = label.replace(".", "-")  # dots would be read as a file suffix
+    out = ROOT / "evaluation/results" / f"benchmark_{Path(bench_path).stem}_{safe_label}_{date.today().isoformat()}"
+    out.with_suffix(".json").write_text(json.dumps({"summary": summary, "results": results}, indent=2, ensure_ascii=False), encoding="utf-8")
+    lines = [f"# Benchmark {summary['benchmark']}: {label} ({summary['date']})", "", "| Metric | Value |", "| --- | --- |"]
+    lines += [f"| {k} | {v} |" for k, v in summary.items() if k != "model_config"]
+    lines += ["", "| Item | Type | Claim score | Contradicted | Studies | Recall | Refusal ok | Seconds |",
+              "| --- | --- | --- | --- | --- | --- | --- | --- |"]
+    for r in results:
+        rec = f"{r['recall']['found']}/{r['recall']['gold']}" if r["recall"] else "-"
+        lines.append(f"| {r['id']} | {r['type']} | {r['claim_score']} | {r['contradicted']} | {r['n_studies']} | {rec} | {r['refusal_ok']} | {r['seconds']} |")
+    out.with_suffix(".md").write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return summary
+
+
+def spend_since(key: str, before: float | None) -> float | None:
+    after = openrouter_usage(key)
+    return round(after - before, 4) if before is not None and after is not None else None
+
+
 async def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("benchmark")
     ap.add_argument("--project-id", required=True)
     ap.add_argument("--only", help="comma-separated item ids")
     ap.add_argument("--label", default="baseline")
+    ap.add_argument("--pipeline", choices=["agent", "studies"], default="agent")
+    ap.add_argument("--answer-models", default="anthropic/claude-sonnet-5.5",
+                    help="studies pipeline: comma-separated answer models sharing one reading pass")
+    ap.add_argument("--reader-model", default="anthropic/claude-haiku-5.5")
+    ap.add_argument("--judges", default=JUDGE_MODEL, help="comma-separated judge models; the first is primary")
     args = ap.parse_args()
-
-    from src.agents.evidence_assistant_agent import EvidenceAssistantAgent, SearchSettings
-    from src.retrieval.hybrid_retriever import HybridRetriever
 
     bench = yaml.safe_load(open(args.benchmark, encoding="utf-8"))
     items = bench["items"]
@@ -142,77 +229,81 @@ async def main() -> None:
         wanted = set(args.only.split(","))
         items = [i for i in items if i["id"] in wanted]
     included = list(csv.DictReader(open(ROOT / "evaluation/benchmark/graduation_included_studies.csv", encoding="utf-8")))
-
+    judges = args.judges.split(",")
     key = os.environ["OPENROUTER_API_KEY"]
-    spend_before = openrouter_usage(key)
-    model_config = project_model_config(args.project_id)
-    agent = EvidenceAssistantAgent(retriever=HybridRetriever(project_id=args.project_id))
 
-    results = []
+    if args.pipeline == "agent":
+        from src.agents.evidence_assistant_agent import EvidenceAssistantAgent, SearchSettings
+        from src.retrieval.hybrid_retriever import HybridRetriever
+
+        before = openrouter_usage(key)
+        model_config = project_model_config(args.project_id)
+        agent = EvidenceAssistantAgent(retriever=HybridRetriever(project_id=args.project_id))
+        results = []
+        for item in items:
+            print(f"[{item['id']}] {item['question'][:80]}", flush=True)
+            t0 = time.time()
+            try:
+                resp = await agent.chat(query=item["question"], include_citations=True,
+                                        search_settings=SearchSettings(), model_config=model_config)
+                answer, citations, model, error = resp.answer, resp.citations or [], resp.model_used, None
+            except Exception as e:
+                answer, citations, model, error = "", [], None, f"{type(e).__name__}: {e}"
+            cited = sorted({c.get("study_id") for c in citations if c.get("study_id")})
+            r = await score_item(item, answer, cited, round(time.time() - t0, 1), model, error, included, key, judges, {})
+            results.append(r)
+            print(f"    {r['seconds']}s, {r['n_studies']} studies, claim score {r['claim_score']}, "
+                  f"recall {r['recall']['recall'] if r['recall'] else '-'}", flush=True)
+        summary = write_results(args.label, args.benchmark, args.project_id, results,
+                                {"pipeline": "agent", "model_config": model_config}, judges, spend_since(key, before))
+        print(json.dumps(summary, indent=2))
+        return
+
+    # Studies pipeline: read once per question, then answer with each model
+    from src.agents.study_synthesis import StudySynthesisPipeline
+
+    answer_models = args.answer_models.split(",")
+    pipe = StudySynthesisPipeline(args.project_id, reader_model=args.reader_model, answer_model=answer_models[0])
+    before = openrouter_usage(key)
+    readings_by_item, read_meta = {}, {}
     for item in items:
-        print(f"[{item['id']}] {item['question'][:80]}", flush=True)
-        t0 = time.time()
-        try:
-            resp = await agent.chat(query=item["question"], include_citations=True,
-                                    search_settings=SearchSettings(), model_config=model_config)
-            answer, citations, model = resp.answer, resp.citations or [], resp.model_used
-            error = None
-        except Exception as e:  # record and continue
-            answer, citations, model, error = "", [], None, f"{type(e).__name__}: {e}"
-        seconds = round(time.time() - t0, 1)
-        cited = sorted({c.get("study_id") for c in citations if c.get("study_id")})
+        print(f"[{item['id']}] reading: {item['question'][:70]}", flush=True)
+        readings, timing = await pipe.read_studies(item["question"])
+        readings_by_item[item["id"]], read_meta[item["id"]] = readings, timing
+        print(f"    {timing} relevant={sum(1 for r in readings if r.relevant)}", flush=True)
+    read_spend = spend_since(key, before)
+    read_seconds = {k: v["retrieve_s"] + v["rerank_s"] + v["read_s"] for k, v in read_meta.items()}
 
-        gold = gold_studies(item, included)
-        recall = None
-        if gold:
-            recall = {"gold": len(gold), "found": len(gold & set(cited)), "recall": round(len(gold & set(cited)) / len(gold), 3)}
+    summaries = {}
+    for model in answer_models:
+        pipe.answer_model = model
+        short = model.split("/")[-1]
+        before = openrouter_usage(key)
+        sem = asyncio.Semaphore(4)  # items answered and judged in parallel
 
-        try:
-            verdict = await judge(item, answer, key)
-        except Exception as e:
-            verdict = {"error": f"{type(e).__name__}: {e}"}
+        async def run_one(item):
+            async with sem:
+                readings = readings_by_item[item["id"]]
+                t0 = time.time()
+                try:
+                    res = await pipe.answer(item["question"], readings)
+                    answer, cited, error = res.answer, sorted({c["study_id"] for c in res.citations}), None
+                except Exception as e:
+                    answer, cited, error = "", [], f"{type(e).__name__}: {e}"
+                seconds = round(read_seconds[item["id"]] + (time.time() - t0), 1)
+                extra = {"studies_read": len(readings), "studies_relevant": sum(1 for r in readings if r.relevant),
+                         "read_timing": read_meta[item["id"]]}
+                r = await score_item(item, answer, cited, seconds, model, error, included, key, judges, extra)
+                print(f"[{short}] {item['id']} {r['seconds']}s, read {extra['studies_read']}, relevant "
+                      f"{extra['studies_relevant']}, cited {r['n_studies']}, claim score {r['claim_score']}", flush=True)
+                return r
 
-        claims = verdict.get("claims", [])
-        score = (sum({"supported": 1, "partly": 0.5}.get(c.get("verdict"), 0) for c in claims) / len(claims)) if claims else None
-        results.append({
-            "id": item["id"], "type": item["type"], "question": item["question"], "seconds": seconds,
-            "model_used": model, "error": error, "answer": answer, "cited_studies": cited,
-            "n_studies": len(cited), "recall": recall, "judge": verdict,
-            "claim_score": round(score, 3) if score is not None else None,
-            "contradicted": sum(1 for c in claims if c.get("verdict") == "contradicted"),
-            "must_not_violations": len([v for v in verdict.get("must_not_violations", []) if v]),
-            "refusal_ok": verdict.get("refusal_ok"),
-        })
-        print(f"    {seconds}s, {len(cited)} studies, claim score {results[-1]['claim_score']}, "
-              f"recall {recall['recall'] if recall else '-'}", flush=True)
-
-    spend_after = openrouter_usage(key)
-    scored = [r for r in results if r["claim_score"] is not None]
-    summary = {
-        "benchmark": Path(args.benchmark).name, "label": args.label, "date": date.today().isoformat(),
-        "project_id": args.project_id, "model_config": model_config, "judge_model": JUDGE_MODEL,
-        "items": len(results), "errors": sum(1 for r in results if r["error"]),
-        "mean_claim_score": round(sum(r["claim_score"] for r in scored) / len(scored), 3) if scored else None,
-        "contradicted_claims": sum(r["contradicted"] for r in results),
-        "must_not_violations": sum(r["must_not_violations"] for r in results),
-        "refusal_ok": f"{sum(1 for r in results if r['refusal_ok'] is True)}/{sum(1 for r in results if r['refusal_ok'] is not None)}",
-        "mean_studies_cited": round(sum(r["n_studies"] for r in results) / len(results), 1) if results else None,
-        "mean_seconds": round(sum(r["seconds"] for r in results) / len(results), 1) if results else None,
-        "openrouter_spend_usd": round(spend_after - spend_before, 4) if spend_before is not None and spend_after is not None else None,
-    }
-
-    out = ROOT / "evaluation/results" / f"benchmark_{Path(args.benchmark).stem}_{args.label}_{date.today().isoformat()}"
-    out.with_suffix(".json").write_text(json.dumps({"summary": summary, "results": results}, indent=2, ensure_ascii=False), encoding="utf-8")
-    lines = [f"# Benchmark {summary['benchmark']}: {args.label} ({summary['date']})", "",
-             "| Metric | Value |", "| --- | --- |"]
-    lines += [f"| {k} | {v} |" for k, v in summary.items() if k not in ("model_config",)]
-    lines += ["", "| Item | Type | Claim score | Contradicted | Studies | Recall | Refusal ok | Seconds |",
-              "| --- | --- | --- | --- | --- | --- | --- | --- |"]
-    for r in results:
-        rec = f"{r['recall']['found']}/{r['recall']['gold']}" if r["recall"] else "-"
-        lines.append(f"| {r['id']} | {r['type']} | {r['claim_score']} | {r['contradicted']} | {r['n_studies']} | {rec} | {r['refusal_ok']} | {r['seconds']} |")
-    out.with_suffix(".md").write_text("\n".join(lines) + "\n", encoding="utf-8")
-    print(json.dumps(summary, indent=2))
+        results = list(await asyncio.gather(*(run_one(item) for item in items)))
+        summaries[model] = write_results(
+            f"{args.label}_{short}", args.benchmark, args.project_id, results,
+            {"pipeline": "studies", "reader_model": args.reader_model, "answer_model": model,
+             "reading_spend_usd_shared": read_spend}, judges, spend_since(key, before))
+    print(json.dumps(summaries, indent=2))
 
 
 if __name__ == "__main__":
