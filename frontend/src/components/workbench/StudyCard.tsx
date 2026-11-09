@@ -85,8 +85,10 @@ export function StudyCard({
         <Tag>{confidenceLabel[study.confidence] ?? study.confidence}</Tag>
       </div>
 
+      {study.finding && <p className="mt-3 text-body text-ink">{study.finding}</p>}
+
       {study.snippet && (
-        <blockquote className="mt-3 line-clamp-4 rounded-sm bg-surface-2 px-3 py-2 text-body text-ink">
+        <blockquote className="mt-3 line-clamp-4 rounded-sm bg-surface-2 px-3 py-2 text-body text-ink-muted">
           “{study.snippet}”
         </blockquote>
       )}

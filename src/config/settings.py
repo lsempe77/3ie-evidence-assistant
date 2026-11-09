@@ -128,6 +128,18 @@ class Settings(BaseSettings):
     )
     llm_temperature: float = Field(default=0.1, ge=0.0, le=2.0)
     llm_max_tokens: int = Field(default=4096, ge=1)
+
+    # Answer pipeline (docs/MODEL_REVIEW_2026-11.md). "studies" reads every relevant
+    # study, then synthesises (src/agents/study_synthesis.py): 0.49 of the graduation
+    # review's claims against 0.29 for "agent", the 2024 claim-ledger pipeline, which
+    # stays available as a fallback.
+    answer_pipeline: str = Field(default="studies", description="studies | agent")
+    reader_model: str = Field(default="anthropic/claude-haiku-5.5",
+                              description="Reads each candidate study (via OpenRouter)")
+    answer_model: str = Field(default="anthropic/claude-haiku-5.5",
+                              description="Writes the answer from the study findings")
+    deep_answer_model: str = Field(default="anthropic/claude-sonnet-5.5",
+                                   description="Answer model when the user asks for a deeper answer")
     
     # =========================================================================
     # Embeddings

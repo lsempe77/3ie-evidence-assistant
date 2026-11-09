@@ -29,6 +29,7 @@ class SearchSettings(BaseModel):
     answerStyle: Literal["executive", "research", "policy", "citations"] = "executive"
     useReranking: bool = True
     minConfidence: Literal["all", "medium", "high"] = "all"
+    deepAnswer: bool = False  # use the stronger answer model (settings.deep_answer_model)
     yearCutoff: int = Field(default=2010, ge=1990, le=2030)
 
 
@@ -57,6 +58,8 @@ class StudyResponse(BaseModel):
     snippet: str = ""
     score: float = 0.0
     pdfUrl: Optional[str] = None
+    finding: Optional[str] = None  # what this study found on the question (study-synthesis pipeline)
+    citationNumber: Optional[int] = None
     
     @field_validator('authors', mode='before')
     @classmethod
@@ -92,6 +95,7 @@ class QueryResponse(BaseModel):
     studies: List[StudyResponse]
     suggestions: List[str] = []
     evidenceHealth: EvidenceHealth
+    studiesRead: Optional[int] = None  # studies the reader model looked at (study-synthesis pipeline)
 
 
 class CompareRequest(BaseModel):

@@ -150,6 +150,88 @@ def _get_project_prompt_config(project_id: str) -> dict | None:
     return None
 
 
+def _band(score: float) -> str:
+    # Bands fitted to Cohere rerank-v3.5 scores, which rarely exceed 0.7
+    return "high" if score >= 0.5 else "medium" if score >= 0.3 else "low"
+
+
+def _year(value) -> Optional[int]:
+    try:
+        return int(value) if value not in (None, "") else None
+    except (TypeError, ValueError):
+        return None
+
+
+async def _answer_with_study_synthesis(question: str, project_id: str, deep: bool) -> QueryResponse:
+    """Answer with the read-then-synthesise pipeline and map it to the frontend's shape."""
+    from src.agents.study_synthesis import StudySynthesisPipeline, relevant_in_answer_order
+
+    pipe = StudySynthesisPipeline(
+        project_id,
+        reader_model=settings.reader_model,
+        answer_model=settings.deep_answer_model if deep else settings.answer_model,
+    )
+    result = await pipe.run(question)
+    logger.info(f"Study synthesis: {result.timings}, model={result.model_used}")
+
+    relevant = relevant_in_answer_order(result.readings)
+    cited_ids = {c["id"] for c in result.citations}
+    studies: list[StudyResponse] = []
+    citations: list[CitationResponse] = []
+    for number, r in enumerate(relevant, start=1):
+        meta = r.metadata
+        countries = meta.get("countries") or []
+        sectors = meta.get("sectors") or []
+        study = StudyResponse(
+            id=r.study_id,
+            title=meta.get("title") or r.label,
+            authors=meta.get("authors") or "",
+            year=_year(meta.get("year")),
+            country=", ".join(countries) if isinstance(countries, list) else str(countries),
+            sector=", ".join(sectors) if isinstance(sectors, list) else str(sectors),
+            studyType=meta.get("study_type") or "",
+            studyDesign=r.design if r.design and r.design != "unknown" else None,
+            studyDesignConfidence=_as_float(meta.get("study_design_confidence")),
+            confidence=_band(r.best_score),
+            snippet=clean_text_for_display(r.quote or r.passage, max_length=300),
+            score=r.best_score,
+            pdfUrl=_generate_pdf_url(r.study_id, meta.get("source")),
+            finding=r.finding,
+            citationNumber=number,
+        )
+        studies.append(study)
+        if number in cited_ids:
+            citations.append(CitationResponse(
+                id=number,
+                studyId=r.study_id,
+                text=clean_text_for_display(r.finding, max_length=200),
+                study=study,
+                page=r.page or r.passage_page,
+                highlightText=(r.quote or r.passage)[:1500],
+            ))
+
+    years = [s.year for s in studies if s.year]
+    date_range = (str(min(years)) if min(years) == max(years) else f"{min(years)} to {max(years)}") if years else "Unknown"
+    gaps = []
+    designs = {s.studyDesign for s in studies if s.studyDesign}
+    if studies and not designs & {"rct", "cluster_rct", "stepped_wedge"}:
+        gaps.append("None of the relevant studies is a randomised trial")
+    return QueryResponse(
+        answer=result.answer,
+        citations=citations,
+        studies=studies,
+        suggestions=[],
+        evidenceHealth=EvidenceHealth(
+            studyCount=len(studies),
+            dateRange=date_range,
+            gaps=gaps,
+            coverageWarning=(f"Only {len(studies)} {'study' if len(studies) == 1 else 'studies'} in this "
+                             f"collection address this question") if len(studies) < 3 else None,
+        ),
+        studiesRead=len(result.readings),
+    )
+
+
 @router.post("/query", response_model=QueryResponse)
 async def query_evidence(request: QueryRequest, user: Optional[AuthenticatedUser] = Depends(get_optional_user)):
     """
@@ -205,6 +287,20 @@ async def query_evidence(request: QueryRequest, user: Optional[AuthenticatedUser
         if cached_response:
             logger.info(f"Cache hit for query: {request.query[:50]}...")
             return cached_response
+
+        # Default answer path: read every relevant study, then synthesise
+        # (docs/MODEL_REVIEW_2026-11.md). ANSWER_PIPELINE=agent restores the old path.
+        if settings.answer_pipeline == "studies" and request.collection:
+            deep = bool(request.settings and request.settings.deepAnswer)
+            query_response = await _answer_with_study_synthesis(request.query, request.collection, deep)
+            await cache.set(
+                query=request.query,
+                response=query_response,
+                filters=cache_key_filters,
+                settings_dict=cache_key_settings,
+                query_embedding=query_embedding,
+            )
+            return query_response
         
         # Use circuit breaker for external service calls
         llm_breaker = get_circuit_breaker("llm_service", failure_threshold=3, recovery_timeout=60)

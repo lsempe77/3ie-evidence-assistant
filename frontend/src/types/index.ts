@@ -58,6 +58,8 @@ export interface Study {
   snippet: string;
   score: number;
   pdfUrl?: string;
+  finding?: string;  // what this study found on the question
+  citationNumber?: number;
 }
 
 export interface Citation {
