@@ -226,7 +226,8 @@ async def _answer_with_study_synthesis(question: str, project_id: str, deep: boo
             dateRange=date_range,
             gaps=gaps,
             coverageWarning=(f"Only {len(studies)} {'study' if len(studies) == 1 else 'studies'} in this "
-                             f"collection address this question") if len(studies) < 3 else None,
+                             f"collection {'addresses' if len(studies) == 1 else 'address'} this question")
+            if len(studies) < 3 else None,
         ),
         studiesRead=len(result.readings),
     )

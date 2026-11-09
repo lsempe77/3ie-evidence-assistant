@@ -44,6 +44,7 @@ import {
   authHeaders,
 } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { openPdfInNewTab } from "@/lib/pdf";
 
 const defaultEvidenceHealth: EvidenceHealth = {
   studyCount: 0,
@@ -483,10 +484,13 @@ export default function RAGChatPage() {
           <h2 className="min-w-0 flex-1 truncate font-sans text-body font-medium text-ink" title={pdfTitle}>
             {pdfTitle}
           </h2>
-          <Button variant="ghost" size="icon-sm" asChild>
-            <a href={pdfUrl} target="_blank" rel="noopener noreferrer" aria-label="Open the document in a new tab">
-              <ExternalLink aria-hidden="true" />
-            </a>
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            onClick={() => openPdfInNewTab(pdfUrl, pdfPage)}
+            aria-label="Open the document in a new tab"
+          >
+            <ExternalLink aria-hidden="true" />
           </Button>
         </div>
         {pdfSearchText && <PassageCard snippet={pdfSearchText} page={pdfPage} />}

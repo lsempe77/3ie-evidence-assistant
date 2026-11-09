@@ -80,7 +80,8 @@ Write the answer:
   that the evidence in this collection is limited or absent, and do not fill the gap with
   general knowledge.
 - Cite every factual sentence with the study numbers in square brackets, e.g. [3] or [3, 7].
-  Cite only studies listed above.
+  Cite only studies listed above. When a sentence gives a count ("19 of 29 studies"), cite at
+  most five representative studies, not all of them; the full list is shown beside the answer.
 - Use short headings only if the answer is long. Aim for 200 to 450 words. No preamble."""
 
 
