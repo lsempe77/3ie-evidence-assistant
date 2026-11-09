@@ -14,6 +14,9 @@
 #   - effect sizes from the extraction tables, for quantitative accuracy
 #
 # Scoring per item:
+#   claim_kinds    per gold claim: "study" (stated or derivable from the studies' own text) or
+#                  "pooled" (needs the review's meta-analysis, cost-benefit model or counts across
+#                  all included studies). Default "study". Reported as two scores.
 #   gold_claims    each claim is judged supported, contradicted or missing in the answer
 #   must_not       statements that count as an error if the answer makes them
 #   expect_refusal the answer should say the evidence is limited or absent, and not invent findings
@@ -47,6 +50,7 @@ items:
       - Effects on poverty reduction are less consistent than effects on economic outcomes.
       - A direct effect on poverty is not visible in the short term.
       - Long-term data measuring poverty well after programmes end are lacking.
+    claim_kinds: [study, pooled, study]
     source: brief p.1, p.5
 
   - id: grad-004
@@ -63,6 +67,7 @@ items:
     question: Do graduation programmes that target women produce different income gains?
     gold_claims:
       - Programmes targeting women as the main transfer recipients tend to yield smaller income gains.
+    claim_kinds: [pooled]
     source: brief p.5
 
   - id: grad-006
@@ -106,6 +111,7 @@ items:
     gold_claims:
       - The median cost per beneficiary is about USD 825 (2024 USD), with wide variation.
       - The transfer component is the main cost driver, at about 43% of total cost.
+    claim_kinds: [pooled, pooled]
     source: brief p.6
 
   - id: grad-011
@@ -116,6 +122,7 @@ items:
       - Most programmes break even by around year eight.
       - Benefits reach nearly four times costs over 20 years.
       - Graduation programmes appear more cost-effective than cash transfers alone, owing to durable and multidimensional impacts and some positive spillovers.
+    claim_kinds: [study, pooled, pooled, study]
     source: brief p.1, p.6
 
   - id: grad-012
@@ -152,6 +159,7 @@ items:
       - BRAC's CFPR/TUP programme in Bangladesh is the seminal model.
       - Other programmes include Haku Wiñay (Peru), SPIR (Ethiopia) and Terintambwe (Burundi).
     notes: Counts depend on the full review, so do not penalise a different count drawn from the collection if it is stated as such.
+    claim_kinds: [pooled, study, study]
     source: brief p.4
 
   - id: grad-016
