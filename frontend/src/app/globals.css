@@ -163,7 +163,9 @@
     touch-action: manipulation;
   }
   h1, h2, h3, h4 {
-    font-family: var(--font-heading);
+    /* Not var(--font-heading): that is declared on :root, where the next/font
+       variables (set on <body>) do not exist yet, so it resolves to nothing. */
+    font-family: var(--font-poppins), var(--font-inter), ui-sans-serif, sans-serif;
     text-wrap: balance;
   }
   /* Numbers that sit in columns or are compared line up (DESIGN.md, Typography). */
