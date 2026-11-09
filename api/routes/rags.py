@@ -2678,6 +2678,7 @@ async def get_highlighted_pdf(
     doc_id: str,
     page: int = 1,
     text: str = "",
+    user: Optional[AuthenticatedUser] = Depends(get_optional_user),
 ):
     """
     Get a PDF with highlighted text for a specific citation.
@@ -2685,7 +2686,8 @@ async def get_highlighted_pdf(
     Downloads the PDF from R2, adds yellow highlight annotation to the specified text,
     and returns the modified PDF as a streaming response.
     
-    No auth required for public projects. For private projects, returns 403.
+    No auth required for public projects. Private projects need the owner's token
+    (401 without one, 403 for anyone else).
     
     Args:
         project_id: The RAG project ID or slug
@@ -2724,9 +2726,13 @@ async def get_highlighted_pdf(
     if not project:
         raise HTTPException(status_code=404, detail="RAG project not found")
     
-    # Check if public (no auth required for public projects)
+    # Public projects are open. Private ones only to their owner, as in /{project_id}/public.
+    # (This used to refuse every private project, including its owner.)
     if not project.get("is_public", False):
-        raise HTTPException(status_code=403, detail="This RAG is private. Authentication required.")
+        if user is None:
+            raise HTTPException(status_code=401, detail="Sign in to open this document")
+        if str(project.get("user_id")) != str(user.id):
+            raise HTTPException(status_code=403, detail="This RAG is private")
     
     actual_project_id = project["id"]
     
