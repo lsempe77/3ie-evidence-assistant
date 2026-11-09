@@ -43,6 +43,13 @@ logger = get_logger(__name__)
 router = APIRouter(prefix="/api", tags=["Frontend API"])
 
 
+
+def _as_float(value) -> Optional[float]:
+    try:
+        return float(value) if value is not None else None
+    except (TypeError, ValueError):
+        return None
+
 async def _resolve_project_id(rag_id: str) -> str:
     """
     Resolve a rag_id (which could be a UUID or slug) to the actual project UUID.
@@ -326,8 +333,11 @@ async def query_evidence(request: QueryRequest, user: Optional[AuthenticatedUser
                         year=year_val,
                         country=c.get("country", ""),
                         sector=c.get("sector", ""),
-                        studyType=c.get("study_type", ""),
-                        confidence="high" if c.get("score", 0.5) > 0.7 else "medium" if c.get("score", 0.5) > 0.4 else "low",
+                        studyType=c.get("study_type") or "",
+                        studyDesign=c.get("study_design") or None,
+                        studyDesignConfidence=_as_float(c.get("study_design_confidence")),
+                        # Bands fitted to Cohere rerank-v3.5 scores, which rarely exceed 0.7
+                        confidence="high" if c.get("score", 0.0) >= 0.5 else "medium" if c.get("score", 0.0) >= 0.3 else "low",
                         snippet=clean_snippet,
                         score=c.get("score", 0.0),
                         pdfUrl=pdf_url,
@@ -364,19 +374,28 @@ async def query_evidence(request: QueryRequest, user: Optional[AuthenticatedUser
                 
                 # Calculate evidence health with richer metrics
                 years = [s.year for s in unique_studies if s.year]
-                date_range = f"{min(years)}-{max(years)}" if years else "Unknown"
+                date_range = (
+                    (str(min(years)) if min(years) == max(years) else f"{min(years)} to {max(years)}")
+                    if years else "Unknown"
+                )
                 
                 gaps = []
                 
                 # Check geographic diversity
-                countries_found = set(s.country for s in unique_studies if s.country)
-                if len(countries_found) < 3:
+                countries_found = {
+                    c.strip() for s in unique_studies if s.country for c in s.country.split(",") if c.strip()
+                }
+                # Skipped when no country metadata is available (see TRUST_COUNTRY_METADATA)
+                if countries_found and len(countries_found) < 3:
                     gaps.append(f"Limited geographic coverage ({len(countries_found)} {'country' if len(countries_found) == 1 else 'countries'})")
                 
-                # Check methodology diversity
-                study_types = set(s.studyType for s in unique_studies if s.studyType)
+                # Check methodology diversity (classified study designs; "unknown" does not count)
+                study_types = set(
+                    (s.studyDesign or s.studyType) for s in unique_studies
+                    if (s.studyDesign or s.studyType) and (s.studyDesign or s.studyType) != "unknown"
+                )
                 if len(study_types) < 2:
-                    gaps.append(f"Limited methodology diversity ({len(study_types)} study type{'s' if len(study_types) != 1 else ''})")
+                    gaps.append(f"Limited methodology diversity ({len(study_types)} study design{'s' if len(study_types) != 1 else ''})")
                 
                 # Check recency (if most studies are old)
                 current_year = 2026

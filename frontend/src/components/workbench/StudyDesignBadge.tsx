@@ -102,6 +102,12 @@ const STUDY_DESIGN_INFO: Record<StudyDesign, {
     color: "bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200 border-amber-300",
     evidenceWeight: 0.5
   },
+  observational: {
+    label: "Observational",
+    category: "Observational",
+    color: "bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200 border-amber-300",
+    evidenceWeight: 0.45
+  },
   descriptive: { 
     label: "Descriptive", 
     category: "Observational", 

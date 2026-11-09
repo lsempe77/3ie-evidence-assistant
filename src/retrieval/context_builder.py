@@ -10,7 +10,7 @@ Assembles retrieved results into formatted context for the LLM:
 
 import re
 from dataclasses import dataclass
-from typing import Dict, List, Optional
+from typing import Any, Dict, List
 
 from src.retrieval.hybrid_retriever import RetrievalResult
 from src.utils.logging import get_logger
@@ -169,6 +169,34 @@ def clean_text_for_display(text: str, max_length: int = 300) -> str:
             clean = clean[:max_length] + "..."
     
     return clean
+
+
+def _joined(meta: Dict[str, Any], *keys: str) -> str:
+    """
+    First non-empty value among `keys`, joined if it is a list.
+
+    Chunks written by the Modal pipeline store lists under plural keys
+    ("countries", "sectors"). Older records used the singular key.
+    """
+    for key in keys:
+        value = meta.get(key)
+        if isinstance(value, (list, tuple)):
+            value = ", ".join(str(v) for v in value if v)
+        if value:
+            return str(value)
+    return ""
+
+
+# The Modal pipeline fills "countries" from the authors' institutions in OpenAlex
+# (infrastructure/modal_lib/metadata.py), which is where the authors work, not where
+# the study took place: Targeting the Ultra Poor in Bangladesh comes out as "US".
+# Until metadata extraction records study countries, keep them out of the context and
+# the UI, so the model is not told that a Bangladesh study is a US one.
+TRUST_COUNTRY_METADATA = False
+
+
+def _study_country(meta: Dict[str, Any]) -> str:
+    return _joined(meta, "countries", "country") if TRUST_COUNTRY_METADATA else ""
 
 
 @dataclass
@@ -355,11 +383,8 @@ class ContextBuilder:
             title = meta.get("title", f"Study {study_id}")
             year = meta.get("year", "")
             
-            # Handle sector/country that might be lists
-            raw_sector = meta.get("sector", "")
-            sector = ", ".join(raw_sector) if isinstance(raw_sector, list) else str(raw_sector) if raw_sector else ""
-            raw_country = meta.get("country", "")
-            country = ", ".join(raw_country) if isinstance(raw_country, list) else str(raw_country) if raw_country else ""
+            sector = _joined(meta, "sectors", "sector")
+            country = _study_country(meta)
             
             # Build header with citation number [1], [2], etc.
             header_parts = [f"[{citation_num}] **{title}**"]
@@ -416,6 +441,9 @@ class ContextBuilder:
                 "year": year,
                 "sector": sector,
                 "country": country,
+                "study_design": meta.get("study_design"),
+                "study_design_confidence": meta.get("study_design_confidence"),
+                "study_type": meta.get("study_type"),
                 "url": meta.get("url"),
                 "doi": meta.get("doi"),
                 "source": meta.get("source"),  # R2 path for PDF URL generation
@@ -477,11 +505,8 @@ class ContextBuilder:
             if study_id and study_id not in seen_studies:
                 seen_studies.add(study_id)
                 
-                # Handle sector/country that might be lists
-                raw_sector = meta.get("sector")
-                sector = ", ".join(raw_sector) if isinstance(raw_sector, list) else str(raw_sector) if raw_sector else ""
-                raw_country = meta.get("country")
-                country = ", ".join(raw_country) if isinstance(raw_country, list) else str(raw_country) if raw_country else ""
+                sector = _joined(meta, "sectors", "sector")
+                country = _study_country(meta)
                 
                 citations.append({
                     "study_id": study_id,
@@ -490,6 +515,9 @@ class ContextBuilder:
                     "year": year,
                     "sector": sector,
                     "country": country,
+                    "study_design": meta.get("study_design"),
+                    "study_design_confidence": meta.get("study_design_confidence"),
+                    "study_type": meta.get("study_type"),
                     "url": meta.get("url"),
                     "doi": meta.get("doi"),
                     "snippet": clean_text_for_display(result.text, 300),
