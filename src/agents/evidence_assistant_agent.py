@@ -330,6 +330,10 @@ class EvidenceAssistantAgent:
                 top_k=retrieval_top_k,
                 filters=active_filters,
             )
+        # A filter that matches nothing must not empty the answer: retry without it.
+        if not results and active_filters and active_filters.to_search_params():
+            logger.warning(f"Filtered retrieval returned nothing ({active_filters}); retrying without filters")
+            results = await self.retriever.retrieve(query=retrieval_query, top_k=retrieval_top_k, filters=None)
         retrieval_time = (time.time() - retrieval_start) * 1000
         retrieval_count = len(results)
         

@@ -1,0 +1,201 @@
+# Benchmark v0: poverty graduation programmes
+#
+# Gold answers come from the 3ie systematic review brief "Do Poverty Graduation Programs Work?
+# Findings from an 8-week Systematic Review on Effectiveness, Implementation and Policy
+# Implications" (EOEPM, December 2025). Page numbers refer to that brief.
+#
+# Collection: "Poverty graduation programmes" (project 7efdc60e-e863-480c-929e-616574725e5f,
+# 97 PDFs). The review rests on 103 impact evaluations, 59 qualitative studies and 18
+# cost-benefit studies, so the collection is a subset and some gold claims may rest on
+# studies the app does not hold.
+#
+# Not yet covered (needs the review's own files, see docs/RAG_PIPELINE_PLAN.md section 4):
+#   - included-study lists per question, for retrieval recall
+#   - effect sizes from the extraction tables, for quantitative accuracy
+#
+# Scoring per item:
+#   gold_claims    each claim is judged supported, contradicted or missing in the answer
+#   must_not       statements that count as an error if the answer makes them
+#   expect_refusal the answer should say the evidence is limited or absent, and not invent findings
+#
+# Item types: synthesis, quantitative, implementation, cost, country, gap, multilingual
+
+items:
+  - id: grad-001
+    type: synthesis
+    question: Do poverty graduation programmes improve economic outcomes for ultra-poor households?
+    gold_claims:
+      - Graduation programmes improve productive assets, income, expenditure and savings in most contexts.
+      - Many of these gains persist 2 to 4 years after the programmes end.
+    source: brief p.1, p.5
+
+  - id: grad-002
+    type: synthesis
+    question: What are the effects of graduation programmes on household income and consumption?
+    gold_claims:
+      - Total income rises modestly in both the short and the long term.
+      - Expenditure increases slightly.
+      - Short-term gains in food expenditure are not always sustained.
+    must_not:
+      - Describing income or consumption effects as large without qualification.
+    source: brief p.5
+
+  - id: grad-003
+    type: synthesis
+    question: Do graduation programmes reduce poverty?
+    gold_claims:
+      - Effects on poverty reduction are less consistent than effects on economic outcomes.
+      - A direct effect on poverty is not visible in the short term.
+      - Long-term data measuring poverty well after programmes end are lacking.
+    source: brief p.1, p.5
+
+  - id: grad-004
+    type: synthesis
+    question: Are the effects of graduation programmes sustained after the programme ends?
+    gold_claims:
+      - Gains in economic outcomes are largely sustained 2 to 4 years after the programmes end.
+      - Gains in productive assets prove durable in the long run.
+      - Durability depends on programme length, intensity, follow-up quality and post-exit market conditions.
+    source: brief p.5, p.6
+
+  - id: grad-005
+    type: synthesis
+    question: Do graduation programmes that target women produce different income gains?
+    gold_claims:
+      - Programmes targeting women as the main transfer recipients tend to yield smaller income gains.
+    source: brief p.5
+
+  - id: grad-006
+    type: synthesis
+    question: What happens to savings in graduation programmes?
+    gold_claims:
+      - Participants' savings increase, and the increase is sustained.
+    source: brief p.5
+
+  - id: grad-007
+    type: implementation
+    question: Which design and implementation factors make graduation programmes more effective?
+    gold_claims:
+      - Coherent combination and sequencing of components is key to effectiveness.
+      - Poorly aligned or inconsistently delivered components reduce engagement and benefits.
+      - Participant-centred, context-sensitive design improves relevance and perceived fairness.
+      - Strong communication, clear institutional roles, government ownership and well-trained staff matter.
+      - Consistent case management, including local champions, is a successful implementation form.
+    source: brief p.1, p.5
+
+  - id: grad-008
+    type: implementation
+    question: How do gender norms and household dynamics affect graduation programmes?
+    gold_claims:
+      - Power relations, labour distribution and control over assets within households shape who benefits.
+      - Gender norms can restrict women's mobility, participation or control over resources.
+      - Community dynamics can create tensions, jealousy or accusations of favouritism, but savings groups and collective activities can foster solidarity.
+    source: brief p.5
+
+  - id: grad-009
+    type: implementation
+    question: What can harm participants or limit the benefits of graduation programmes?
+    gold_claims:
+      - Rigid models and weak targeting risk exclusion and dissatisfaction, and can reinforce inequalities and vulnerabilities.
+      - Intersecting vulnerabilities such as climate shocks, insecurity and illness shape how participants engage and how resilient they become.
+    source: brief p.5
+
+  - id: grad-010
+    type: cost
+    question: How much do graduation programmes cost per beneficiary?
+    gold_claims:
+      - The median cost per beneficiary is about USD 825 (2024 USD), with wide variation.
+      - The transfer component is the main cost driver, at about 43% of total cost.
+    source: brief p.6
+
+  - id: grad-011
+    type: cost
+    question: Are graduation programmes good value for money compared with cash transfers?
+    gold_claims:
+      - Costs outweigh benefits in the first 1 to 3 years.
+      - Most programmes break even by around year eight.
+      - Benefits reach nearly four times costs over 20 years.
+      - Graduation programmes appear more cost-effective than cash transfers alone, owing to durable and multidimensional impacts and some positive spillovers.
+    source: brief p.1, p.6
+
+  - id: grad-012
+    type: country
+    question: What do evaluations of the Bab Amal programme in Egypt find?
+    gold_claims:
+      - Bab Amal targeted ultra-poor rural households in Upper Egypt.
+      - Results are largely consistent with global patterns, especially for productive assets, income and expenditure in the short and long term.
+    source: brief p.1, p.7
+
+  - id: grad-013
+    type: country
+    question: What are the effects of Egypt's Forsa programme?
+    gold_claims:
+      - Forsa is Egypt's national economic inclusion programme, complementing Takaful and Karama.
+      - Its effects are mixed and generally smaller than the average across programmes.
+      - The evidence for Forsa is more limited.
+    source: brief p.1, p.7
+
+  - id: grad-014
+    type: country
+    question: Which structural barriers limited the Egyptian graduation programmes?
+    gold_claims:
+      - Price volatility, irregular incomes and weak access to capital made it hard to accumulate and protect assets.
+      - Limited follow-up, insufficient planning for sustainability and overly complex components weakened the programmes.
+      - Mistrust of formal financial services and restrictive gender norms reduced engagement.
+    source: brief p.1, p.7
+
+  - id: grad-015
+    type: synthesis
+    question: Where has the graduation approach been evaluated, and which programmes are best known?
+    gold_claims:
+      - The evidence covers programmes in many low- and middle-income countries (the review counts 44 programmes in 27 countries).
+      - BRAC's CFPR/TUP programme in Bangladesh is the seminal model.
+      - Other programmes include Haku Wiñay (Peru), SPIR (Ethiopia) and Terintambwe (Burundi).
+    notes: Counts depend on the full review, so do not penalise a different count drawn from the collection if it is stated as such.
+    source: brief p.4
+
+  - id: grad-016
+    type: gap
+    question: What do we know about the effects of graduation programmes ten years or more after they end?
+    expect_refusal: true
+    gold_claims:
+      - Long-term evidence is limited, so sustainability well beyond a few years is hard to assess.
+    must_not:
+      - Stating a ten-year effect as an established finding without a cited study that measured it.
+    source: brief p.8
+
+  - id: grad-017
+    type: gap
+    question: What evidence is there on the costs of individual graduation programme components?
+    expect_refusal: true
+    gold_claims:
+      - Cost data are uneven, with limited disaggregation across components and little understanding of cost drivers in different contexts.
+    source: brief p.8
+
+  - id: grad-018
+    type: gap
+    question: What are the main evidence gaps on graduation programmes?
+    gold_claims:
+      - Long-term data are limited.
+      - Evidence on gender-specific impacts is insufficient.
+      - Programme cost data are uneven and rarely disaggregated by component.
+      - Outcomes such as employment and food security could be analysed further.
+    source: brief p.8
+
+  - id: grad-019
+    type: multilingual
+    question: ¿Qué efectos tuvo el programa Haku Wiñay en Perú?
+    gold_claims:
+      - The answer is in Spanish.
+      - It reports findings from Haku Wiñay evaluations held in the collection, with citations.
+    notes: The brief names Haku Wiñay but gives no programme-specific result, so this item checks language handling and grounding only.
+    source: brief p.4
+
+  - id: grad-020
+    type: synthesis
+    question: Do graduation programmes work better than cash transfers alone?
+    gold_claims:
+      - Graduation programmes appear more cost-effective than cash transfers alone, because their impacts are durable and multidimensional.
+    must_not:
+      - Claiming that cash transfers alone outperform graduation programmes on value for money, unless citing a study that found this.
+    source: brief p.6, p.8
