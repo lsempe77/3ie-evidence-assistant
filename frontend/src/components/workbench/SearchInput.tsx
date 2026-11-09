@@ -1,59 +1,93 @@
 "use client";
 
-import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Search, Loader2 } from "lucide-react";
-import { useState, useEffect, FormEvent } from "react";
+import { Loader2, ArrowUp } from "lucide-react";
+import { useState, useId, FormEvent, KeyboardEvent } from "react";
+import { cn } from "@/lib/utils";
 
 interface SearchInputProps {
   onSearch: (query: string) => void;
   isLoading?: boolean;
   placeholder?: string;
-  value?: string;  // External controlled value
+  value?: string; // External controlled value
+  label?: string;
+  className?: string;
 }
 
+/**
+ * Ask box (DESIGN.md, Components: Ask box). One question field and the primary
+ * "Ask" button. Enter submits, Shift+Enter adds a line.
+ */
 export function SearchInput({
   onSearch,
   isLoading = false,
-  placeholder = "Ask about development evidence...",
+  placeholder = "Ask a question about development evidence…",
   value: externalValue,
+  label = "Your question",
+  className,
 }: SearchInputProps) {
   const [query, setQuery] = useState(externalValue || "");
+  const [syncedValue, setSyncedValue] = useState(externalValue);
+  const id = useId();
 
-  // Sync internal state with external value when it changes
-  useEffect(() => {
-    if (externalValue !== undefined) {
-      setQuery(externalValue);
-    }
-  }, [externalValue]);
+  // Follow the external value when it changes (adjusting state during render,
+  // as React recommends, rather than in an effect).
+  if (externalValue !== syncedValue) {
+    setSyncedValue(externalValue);
+    if (externalValue !== undefined) setQuery(externalValue);
+  }
 
-  const handleSubmit = (e: FormEvent) => {
-    e.preventDefault();
+  const submit = () => {
     if (query.trim() && !isLoading) {
       onSearch(query.trim());
     }
   };
 
+  const handleSubmit = (e: FormEvent) => {
+    e.preventDefault();
+    submit();
+  };
+
+  const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+      e.preventDefault();
+      submit();
+    }
+  };
+
   return (
-    <form onSubmit={handleSubmit} className="flex gap-2">
-      <div className="relative flex-1">
-        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-        <Input
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder={placeholder}
-          className="pl-10"
-          disabled={isLoading}
-        />
-      </div>
-      <Button type="submit" disabled={isLoading || !query.trim()}>
+    <form
+      onSubmit={handleSubmit}
+      className={cn(
+        "flex items-end gap-2 rounded-md border border-hairline bg-canvas p-2 focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2",
+        className
+      )}
+    >
+      <label htmlFor={id} className="sr-only">
+        {label}
+      </label>
+      <textarea
+        id={id}
+        name="question"
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+        onKeyDown={handleKeyDown}
+        placeholder={placeholder}
+        rows={1}
+        autoComplete="off"
+        className="field-sizing-content max-h-40 min-h-9 flex-1 resize-none bg-transparent px-2 py-1.5 text-body-lg text-ink placeholder:text-ink-subtle outline-none"
+      />
+      <Button type="submit" disabled={isLoading || !query.trim()} className="shrink-0">
         {isLoading ? (
           <>
-            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-            Searching...
+            <Loader2 className="animate-spin" aria-hidden="true" />
+            Asking…
           </>
         ) : (
-          "Search"
+          <>
+            <ArrowUp aria-hidden="true" />
+            Ask
+          </>
         )}
       </Button>
     </form>

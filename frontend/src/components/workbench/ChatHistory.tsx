@@ -1,8 +1,7 @@
 "use client";
 
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
-import { MessageSquare, Trash2, Plus } from "lucide-react";
+import { Trash2, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { CachedResponseData } from "@/lib/api";
 
@@ -24,6 +23,18 @@ interface ChatHistoryProps {
   onNewChat: () => void;
 }
 
+const relativeTime = new Intl.RelativeTimeFormat("en-GB", { numeric: "auto", style: "short" });
+
+function formatTimeAgo(date: Date): string {
+  const diffMins = Math.round((date.getTime() - Date.now()) / 60000);
+  if (Math.abs(diffMins) < 1) return "Just now";
+  if (Math.abs(diffMins) < 60) return relativeTime.format(diffMins, "minute");
+  const diffHours = Math.round(diffMins / 60);
+  if (Math.abs(diffHours) < 24) return relativeTime.format(diffHours, "hour");
+  return relativeTime.format(Math.round(diffHours / 24), "day");
+}
+
+/** Past questions for this collection (DESIGN.md, Ask screen: history region). */
 export function ChatHistory({
   history,
   currentQueryId,
@@ -31,92 +42,66 @@ export function ChatHistory({
   onDeleteQuery,
   onNewChat,
 }: ChatHistoryProps) {
-  // Format time ago
-  const formatTimeAgo = (date: Date) => {
-    const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
-    const diffMins = Math.floor(diffMs / 60000);
-    const diffHours = Math.floor(diffMs / 3600000);
-    const diffDays = Math.floor(diffMs / 86400000);
-
-    if (diffMins < 1) return "Just now";
-    if (diffMins < 60) return `${diffMins}m ago`;
-    if (diffHours < 24) return `${diffHours}h ago`;
-    return `${diffDays}d ago`;
-  };
-
-  // Truncate query for display
-  const truncateQuery = (query: string, maxLength: number = 50) => {
-    if (query.length <= maxLength) return query;
-    return query.substring(0, maxLength).trim() + "...";
-  };
-
   return (
-    <div className="h-full flex flex-col bg-muted/30 border-r">
-      {/* Header */}
-      <div className="p-3 border-b flex items-center justify-between">
-        <h3 className="font-medium text-sm flex items-center gap-2">
-          <MessageSquare className="h-4 w-4" />
-          History
-        </h3>
-        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={onNewChat} title="New chat">
-          <Plus className="h-4 w-4" />
+    <nav aria-label="Past questions" className="flex h-full flex-col bg-surface-1">
+      <div className="flex items-center justify-between px-4 pt-4 pb-2">
+        <h2 className="text-caption font-medium tracking-wide text-ink-muted uppercase">History</h2>
+      </div>
+      <div className="px-3 pb-3">
+        <Button variant="outline" className="w-full justify-start" onClick={onNewChat}>
+          <Plus aria-hidden="true" />
+          New question
         </Button>
       </div>
 
-      {/* History List */}
-      <ScrollArea className="flex-1">
-        <div className="p-2 space-y-1">
-          {history.length === 0 ? (
-            <div className="text-center py-8 px-4">
-              <MessageSquare className="h-8 w-8 mx-auto mb-2 text-muted-foreground/50" />
-              <p className="text-xs text-muted-foreground">
-                Your queries will appear here
-              </p>
-            </div>
-          ) : (
-            history.map((item) => (
-              <div
-                key={item.id}
-                className={cn(
-                  "group relative rounded-lg p-2 cursor-pointer transition-colors",
-                  currentQueryId === item.id
-                    ? "bg-primary/10 border border-primary/20"
-                    : "hover:bg-muted"
-                )}
-                onClick={() => onSelectQuery(item)}
-              >
-                <p className="text-sm font-medium line-clamp-2 pr-6">
-                  {truncateQuery(item.query, 60)}
-                </p>
-                <div className="flex items-center gap-2 mt-1">
-                  <span className="text-xs text-muted-foreground">
-                    {formatTimeAgo(item.timestamp)}
-                  </span>
-                  {item.studyCount !== undefined && (
-                    <span className="text-xs text-muted-foreground">
-                      • {item.studyCount} studies
+      <div className="flex-1 overflow-y-auto overscroll-contain px-3 pb-4">
+        {history.length === 0 ? (
+          <p className="px-2 py-6 text-body text-ink-subtle">
+            Questions you ask appear here.
+          </p>
+        ) : (
+          <ul className="space-y-0.5">
+            {history.map((item) => {
+              const active = currentQueryId === item.id;
+              return (
+                <li key={item.id} className="group relative">
+                  <button
+                    type="button"
+                    onClick={() => onSelectQuery(item)}
+                    aria-current={active ? "true" : undefined}
+                    className={cn(
+                      "w-full rounded-md px-2 py-2 pr-9 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                      active ? "bg-primary-tint" : "hover:bg-surface-2"
+                    )}
+                  >
+                    <span
+                      className={cn(
+                        "line-clamp-2 text-body break-words",
+                        active ? "font-medium text-primary" : "text-ink"
+                      )}
+                    >
+                      {item.query}
                     </span>
-                  )}
-                </div>
-                {/* Delete button - shows on hover */}
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="absolute right-1 top-1 h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onDeleteQuery(item.id);
-                  }}
-                  title="Remove from history"
-                >
-                  <Trash2 className="h-3 w-3 text-muted-foreground hover:text-destructive" />
-                </Button>
-              </div>
-            ))
-          )}
-        </div>
-      </ScrollArea>
-    </div>
+                    <span className="tabular mt-0.5 block text-caption text-ink-subtle">
+                      {formatTimeAgo(item.timestamp)}
+                      {item.studyCount !== undefined && ` · ${item.studyCount} studies`}
+                    </span>
+                  </button>
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    className="absolute top-1.5 right-1 text-ink-subtle opacity-0 group-hover:opacity-100 focus-visible:opacity-100 hover:text-danger pointer-coarse:opacity-100"
+                    onClick={() => onDeleteQuery(item.id)}
+                    aria-label={`Remove “${item.query.slice(0, 40)}” from history`}
+                  >
+                    <Trash2 aria-hidden="true" />
+                  </Button>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </div>
+    </nav>
   );
 }

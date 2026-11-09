@@ -1,11 +1,10 @@
 "use client";
 
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Study } from "@/types";
-import { FileText, GitCompare, X, ExternalLink } from "lucide-react";
+import { FileText, GitCompare, X, Check } from "lucide-react";
 import { StudyDesignBadge } from "./StudyDesignBadge";
+import { cn } from "@/lib/utils";
 
 interface StudyCardProps {
   study: Study;
@@ -18,12 +17,24 @@ interface StudyCardProps {
   onClick?: () => void;
 }
 
-const confidenceColors = {
-  high: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200",
-  medium: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200",
-  low: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200",
+const confidenceLabel: Record<Study["confidence"], string> = {
+  high: "Close match",
+  medium: "Partial match",
+  low: "Weak match",
 };
 
+function Tag({ children }: { children: React.ReactNode }) {
+  return (
+    <span className="inline-flex items-center rounded-sm border border-hairline bg-surface-1 px-1.5 py-0.5 text-caption text-ink-muted">
+      {children}
+    </span>
+  );
+}
+
+/**
+ * Source card (DESIGN.md, Components: Source card): study, authors and year,
+ * design and country tags, the quoted passage and a link to the page.
+ */
 export function StudyCard({
   study,
   citationNumber,
@@ -32,104 +43,93 @@ export function StudyCard({
   onSelect,
   onExclude,
   onOpenPdf,
-  onClick,
 }: StudyCardProps) {
+  const countries = study.country && study.country !== "Unknown" ? study.country : null;
+
   return (
-    <Card
+    <article
       id={`study-${study.id}`}
-      className={`transition-all cursor-pointer ${
-        isHighlighted
-          ? "ring-2 ring-blue-500 bg-blue-50 dark:bg-blue-950"
-          : ""
-      } ${isSelected ? "ring-2 ring-purple-500" : ""}`}
-      onClick={onClick}
+      aria-labelledby={`study-title-${study.id}`}
+      className={cn(
+        "scroll-mt-4 rounded-md border bg-canvas p-4 transition-colors",
+        isHighlighted ? "border-primary bg-primary-tint" : "border-hairline",
+        isSelected && !isHighlighted && "border-primary"
+      )}
     >
-      <CardHeader className="pb-2">
-        <div className="flex items-start justify-between gap-2">
-          <div className="flex items-center gap-2">
-            {citationNumber && (
-              <Badge variant="outline" className="font-mono">
-                [{citationNumber}]
-              </Badge>
-            )}
-            <CardTitle className="text-sm font-medium leading-tight">
-              {study.authors} ({study.year})
-            </CardTitle>
-          </div>
-          <Badge className={confidenceColors[study.confidence]}>
-            {study.confidence}
-          </Badge>
-        </div>
-        <p className="text-xs text-muted-foreground line-clamp-2">
-          {study.title}
-        </p>
-      </CardHeader>
-      <CardContent className="pt-0">
-        <div className="flex flex-wrap gap-1 mb-2">
-          {study.studyDesign && (
-            <StudyDesignBadge 
-              design={study.studyDesign} 
-              confidence={study.studyDesignConfidence}
-            />
-          )}
-          <Badge variant="secondary" className="text-xs">
-            {study.country}
-          </Badge>
-          <Badge variant="secondary" className="text-xs">
-            {study.studyType}
-          </Badge>
-          {study.sector && (
-            <Badge variant="secondary" className="text-xs">
-              {study.sector}
-            </Badge>
-          )}
-        </div>
-
-        {study.snippet && (
-          <blockquote className="border-l-2 border-muted pl-3 text-sm text-muted-foreground italic mb-3 line-clamp-3">
-            &quot;{study.snippet}&quot;
-          </blockquote>
+      <div className="flex items-start gap-2">
+        {citationNumber !== undefined && (
+          <span className="tabular mt-0.5 inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded-sm bg-primary-tint px-1 text-caption font-medium text-primary">
+            {citationNumber}
+          </span>
         )}
+        <div className="min-w-0 flex-1">
+          <h3
+            id={`study-title-${study.id}`}
+            className="font-sans text-body font-semibold break-words text-ink"
+          >
+            {study.title || "Untitled study"}
+          </h3>
+          <p className="tabular mt-0.5 text-body break-words text-ink-muted">
+            {study.authors}
+            {study.year ? ` (${study.year})` : ""}
+          </p>
+        </div>
+      </div>
 
-        <div className="flex gap-1 flex-wrap">
-          {onOpenPdf && study.pdfUrl && (
+      <div className="mt-3 flex flex-wrap gap-1">
+        {study.studyDesign && (
+          <StudyDesignBadge design={study.studyDesign} confidence={study.studyDesignConfidence} />
+        )}
+        {countries && <Tag>{countries}</Tag>}
+        {study.sector && <Tag>{study.sector}</Tag>}
+        <Tag>{confidenceLabel[study.confidence] ?? study.confidence}</Tag>
+      </div>
+
+      {study.snippet && (
+        <blockquote className="mt-3 line-clamp-4 rounded-sm bg-surface-2 px-3 py-2 text-body text-ink">
+          “{study.snippet}”
+        </blockquote>
+      )}
+
+      <div className="mt-3 flex flex-wrap items-center gap-1">
+        {onOpenPdf && study.pdfUrl && (
+          <Button
+            variant="link"
+            size="sm"
+            className="px-0 pr-2"
+            onClick={() => onOpenPdf(study)}
+          >
+            <FileText aria-hidden="true" />
+            Open document
+          </Button>
+        )}
+        <div className="ml-auto flex items-center gap-1">
+          {onSelect && (
             <Button
               variant="ghost"
               size="sm"
-              onClick={(e) => {
-                e.stopPropagation();
-                onOpenPdf(study);
-              }}
+              aria-pressed={isSelected}
+              className={cn(isSelected && "text-primary")}
+              onClick={() => onSelect(study)}
             >
-              <FileText className="h-3 w-3 mr-1" />
-              PDF
+              {isSelected ? <Check aria-hidden="true" /> : <GitCompare aria-hidden="true" />}
+              {isSelected ? "Selected" : "Compare"}
             </Button>
           )}
-          <Button
-            variant={isSelected ? "default" : "outline"}
-            size="sm"
-            className={isSelected ? "bg-purple-600 hover:bg-purple-700 text-white" : ""}
-            onClick={(e) => {
-              e.stopPropagation();
-              onSelect?.(study);
-            }}
-          >
-            <GitCompare className="h-3 w-3 mr-1" />
-            {isSelected ? "✓ Selected" : "Compare"}
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={(e) => {
-              e.stopPropagation();
-              onExclude?.(study);
-            }}
-          >
-            <X className="h-3 w-3 mr-1" />
-            Exclude
-          </Button>
+          {onExclude && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-ink-muted"
+              onClick={() => onExclude(study)}
+              aria-label={`Hide ${study.title || "this study"} from the sources`}
+            >
+              <X aria-hidden="true" />
+              Hide
+            </Button>
+          )}
         </div>
-      </CardContent>
-    </Card>
+      </div>
+    </article>
   );
 }
