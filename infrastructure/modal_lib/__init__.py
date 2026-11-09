@@ -65,6 +65,11 @@ from .processing import (
     sync_to_supabase_rag,
 )
 
+from .refresh import (
+    refresh_document_metadata,
+    refresh_project_metadata,
+)
+
 from .chunks import (
     check_chunks_indexed,
     delete_doc_chunks,
@@ -123,4 +128,7 @@ __all__ = [
     "orchestrate_rag",
     "list_pdfs",
     "check_vector_store_status",
+    # Metadata refresh
+    "refresh_document_metadata",
+    "refresh_project_metadata",
 ]

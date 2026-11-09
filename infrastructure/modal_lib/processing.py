@@ -27,7 +27,7 @@ from .config import (
 )
 from .utils import get_r2_client, get_bucket_name, sanitize_text, sanitize_dict
 from .extraction import run_docling, run_mineru, post_process_content
-from .metadata import resolve_metadata, classify_study_design_llm
+from .metadata import resolve_metadata, classify_study_design_llm, build_design_excerpt
 from .embedding import embed_and_index
 from .chunks import check_chunks_indexed, delete_doc_chunks
 
@@ -358,9 +358,9 @@ def process_pdf(pdf_key: str, skip_extraction: bool = False, force_reindex: bool
         print(f"  Classifying study design...")
         openrouter_key = os.environ.get("OPENROUTER_API_KEY")
         if openrouter_key:
-            abstract_text = enriched_metadata.get("abstract") or result.get("abstract") or ""
-            if not abstract_text and result.get("content"):
-                abstract_text = result["content"][:8000]
+            abstract_text = build_design_excerpt(
+                result.get("content", ""), enriched_metadata.get("abstract") or result.get("abstract")
+            )
             
             study_design_result = asyncio.run(
                 classify_study_design_llm(
@@ -570,7 +570,9 @@ def process_pdf_monkeyocr(
 
         openrouter_key = os.environ.get("OPENROUTER_API_KEY")
         if openrouter_key:
-            abstract_text = enriched_metadata.get("abstract") or result.get("abstract") or result["content"][:8000]
+            abstract_text = build_design_excerpt(
+                result["content"], enriched_metadata.get("abstract") or result.get("abstract")
+            )
             study_design_result = asyncio.run(
                 classify_study_design_llm(
                     title=enriched_metadata.get("title") or result.get("title") or "",
@@ -779,9 +781,9 @@ def process_rag_document(pdf_key: str, project_id: str, parser: str = "mineru") 
         print(f"  Classifying study design...")
         openrouter_key = os.environ.get("OPENROUTER_API_KEY")
         if openrouter_key:
-            abstract_text = enriched_metadata.get("abstract") or result.get("abstract") or ""
-            if not abstract_text and result.get("content"):
-                abstract_text = result["content"][:8000]
+            abstract_text = build_design_excerpt(
+                result.get("content", ""), enriched_metadata.get("abstract") or result.get("abstract")
+            )
             
             study_design_result = asyncio.run(
                 classify_study_design_llm(

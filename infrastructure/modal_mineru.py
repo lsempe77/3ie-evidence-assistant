@@ -46,6 +46,9 @@ from modal_lib import (
     orchestrate_rag,
     list_pdfs,
     check_vector_store_status,
+    # Metadata refresh (these are @app.function decorated)
+    refresh_document_metadata,
+    refresh_project_metadata,
 )
 
 
@@ -168,6 +171,8 @@ def main(
     index: bool = False,
     index_project_id: str = None,
     parser: str = None,
+    reclassify: str = "weak",
+    only_doc: str = None,
 ):
     """
     CLI for MinerU / MonkeyOCR processing.
@@ -177,6 +182,8 @@ def main(
         run          - Process all pending PDFs with MinerU
         single       - Process a single PDF with MinerU (requires --pdf-key)
         rag          - Process a RAG project (requires --project-id; --parser docling|mineru)
+        refresh-metadata - Re-derive metadata from saved parser output (requires --project-id;
+                       --reclassify weak|all|none, --only-doc <filename> for one document)
         monkeyocr    - Process a single PDF with MonkeyOCR (requires --pdf-key)
                        Use --index --index-project-id <uuid> to also embed & index the results.
     """
@@ -231,6 +238,16 @@ def main(
         print(f"   Failed: {result.get('failed', 0)}")
         print(f"   Skipped: {result.get('skipped', 0)}")
         print(f"   Total: {result.get('total', 0)}")
+
+    elif action == "refresh-metadata":
+        if not project_id:
+            print("❌ --project-id required for refresh-metadata")
+            return
+        import json as _json
+        results = refresh_project_metadata.remote(project_id=project_id, reclassify=reclassify, only_doc=only_doc)
+        errors = [r for r in results if r.get("error")]
+        print(f"   Refreshed: {len(results) - len(errors)}   Errors: {len(errors)}")
+        print("REFRESH_RESULTS_JSON " + _json.dumps(results, ensure_ascii=False))
 
     elif action == "monkeyocr":
         if not pdf_key:

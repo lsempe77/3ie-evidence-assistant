@@ -28,10 +28,17 @@ def resolve_metadata(
     Resolve rich metadata using CrossRef, OpenAlex, and LLM.
     
     Flow:
-    1. Extract DOI from content
-    2. If DOI found: CrossRef lookup → OpenAlex enrichment
-    3. If no DOI: Search by title/author
-    4. LLM fills domain-specific gaps (countries, sectors, study_type)
+    1. Collect DOIs from the first pages. Try each in Crossref and accept the first
+       whose title appears on those pages (a paper's first pages also cite other
+       papers, and the first DOI found is often one of theirs).
+    2. No accepted DOI: search OpenAlex by title and accept a hit only on the same check.
+    3. One LLM call reads the first pages for the study countries (where the
+       intervention ran or the data were collected), sectors and intervention, and
+       for title, authors and year when no record was accepted.
+
+    Countries never come from OpenAlex author affiliations: those say where the
+    authors work, and put a Bangladesh study down as "US". They are kept separately
+    as `author_countries`.
     """
     import asyncio
     import httpx
@@ -52,6 +59,7 @@ def resolve_metadata(
         "cited_by_count": None,
         "is_open_access": False,
         "countries": [],
+        "author_countries": [],
         "sectors": [],
         "study_type": None,
         "intervention_type": None,
@@ -63,103 +71,109 @@ def resolve_metadata(
         "pdf_name": pdf_filename,
     }
     
-    # Step 1: Extract DOI from content
-    doi = extract_doi_from_text(content[:10000])
-    if doi:
-        metadata["doi"] = doi
-        print(f"  Found DOI: {doi}")
-    
-    # Step 2: CrossRef + OpenAlex lookup
+    first_pages = (content or "")[:FIRST_PAGES_CHARS]
+    record_accepted = False
+
+    # The LLM reads the paper's own title page first. A looked-up record must match
+    # that title, which stops generic hits ("Journal of Development Economics",
+    # "How to Make Your Research & Publications Visible") that share common words
+    # with the first pages.
+    llm_result = {}
+    openrouter_key = os.environ.get("OPENROUTER_API_KEY")
+    if openrouter_key:
+        try:
+            llm_result = asyncio.run(llm_extract_paper_fields(first_pages, api_key=openrouter_key)) or {}
+        except Exception as e:
+            print(f"  LLM enrichment error: {e}")
+    own_title = str(llm_result.get("title") or "").strip()
+    search_title = own_title or title
+
+    def is_this_paper(candidate_title: str) -> bool:
+        if own_title:
+            return titles_agree(candidate_title, own_title)
+        return title_matches_document(candidate_title, first_pages)
+
     async def lookup_apis():
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            crossref_data = None
-            openalex_data = None
-            
-            if doi:
-                # CrossRef lookup
+        headers = {"User-Agent": "3ie-Evidence-Assistant/2.0"}
+        async with httpx.AsyncClient(timeout=30.0, headers=headers) as client:
+            # Step 1: DOIs found on the first pages, checked against those pages
+            for candidate in extract_dois_from_text(first_pages)[:MAX_DOI_CANDIDATES]:
                 try:
-                    crossref_url = f"https://api.crossref.org/works/{doi}"
-                    resp = await client.get(
-                        crossref_url,
-                        headers={"User-Agent": "3ie-Evidence-Assistant/2.0 (mailto:dev@example.com)"}
-                    )
-                    if resp.status_code == 200:
-                        crossref_data = resp.json().get("message", {})
-                        print(f"  CrossRef: found")
+                    resp = await client.get(f"https://api.crossref.org/works/{candidate}")
                 except Exception as e:
                     print(f"  CrossRef error: {e}")
-                
-                # OpenAlex lookup by DOI
+                    continue
+                if resp.status_code != 200:
+                    continue
+                crossref = resp.json().get("message", {})
+                cr_title = (crossref.get("title") or [""])[0]
+                if not is_this_paper(cr_title):
+                    print(f"  Rejected DOI {candidate}: title does not match the paper ({cr_title[:60]!r})")
+                    continue
+                print(f"  CrossRef: accepted DOI {candidate}")
+                openalex = None
                 try:
-                    openalex_url = f"https://api.openalex.org/works/https://doi.org/{doi}"
-                    resp = await client.get(
-                        openalex_url,
-                        headers={"User-Agent": "mailto:dev@example.com"}
-                    )
+                    resp = await client.get(f"https://api.openalex.org/works/https://doi.org/{candidate}")
                     if resp.status_code == 200:
-                        openalex_data = resp.json()
-                        print(f"  OpenAlex: found")
+                        openalex = resp.json()
                 except Exception as e:
                     print(f"  OpenAlex error: {e}")
-            
-            elif title and len(title) > 10:
-                # Search by title
+                return crossref, openalex
+
+            # Step 2: title search, same check
+            if search_title and len(search_title) > 10:
                 try:
-                    search_title = title[:200].replace('"', '')
-                    openalex_url = f"https://api.openalex.org/works?search={search_title}&per_page=1"
                     resp = await client.get(
-                        openalex_url,
-                        headers={"User-Agent": "mailto:dev@example.com"}
+                        "https://api.openalex.org/works",
+                        params={"search": search_title[:200].replace('"', ""), "per_page": 3},
                     )
                     if resp.status_code == 200:
-                        results = resp.json().get("results", [])
-                        if results:
-                            openalex_data = results[0]
-                            print(f"  OpenAlex: found via title search")
+                        for hit in resp.json().get("results", []):
+                            if is_this_paper(hit.get("title") or ""):
+                                print("  OpenAlex: accepted title search hit")
+                                return None, hit
+                        print("  OpenAlex: no title search hit matched the paper")
                 except Exception as e:
                     print(f"  OpenAlex search error: {e}")
-            
-            return crossref_data, openalex_data
-    
+            return None, None
+
     try:
         crossref_data, openalex_data = asyncio.run(lookup_apis())
-        
-        # Merge CrossRef data
         if crossref_data:
             metadata = _merge_crossref_data(metadata, crossref_data)
-        
-        # Merge OpenAlex data
+            record_accepted = True
         if openalex_data:
             metadata = _merge_openalex_data(metadata, openalex_data, is_primary=not crossref_data)
-    
+            record_accepted = True
     except Exception as e:
         print(f"  Metadata lookup error: {e}")
-    
-    # Step 3: LLM gap-filling for domain fields
-    if not metadata["sectors"] or not metadata["study_type"]:
-        openrouter_key = os.environ.get("OPENROUTER_API_KEY")
-        if openrouter_key:
-            try:
-                llm_result = asyncio.run(
-                    llm_extract_domain_fields(
-                        title=metadata["title"],
-                        abstract=metadata.get("abstract") or content[:3000],
-                        api_key=openrouter_key,
-                    )
-                )
-                if llm_result:
-                    if not metadata["countries"] and llm_result.get("countries"):
-                        metadata["countries"] = llm_result["countries"]
-                    if llm_result.get("sectors"):
-                        metadata["sectors"] = llm_result["sectors"]
-                    if llm_result.get("study_type"):
-                        metadata["study_type"] = llm_result["study_type"]
-                    if llm_result.get("intervention_type"):
-                        metadata["intervention_type"] = llm_result["intervention_type"]
-                    print(f"  LLM enrichment: sectors={metadata['sectors']}, study_type={metadata['study_type']}")
-            except Exception as e:
-                print(f"  LLM enrichment error: {e}")
-    
+
+    # Step 3: one LLM call for study countries and domain fields, and for title,
+    # authors and year when no bibliographic record was accepted
+    if llm_result:
+        try:
+            metadata["countries"] = _clean_list(llm_result.get("countries"))
+            if llm_result.get("sectors"):
+                metadata["sectors"] = _clean_list(llm_result["sectors"])
+            if llm_result.get("study_type"):
+                metadata["study_type"] = llm_result["study_type"]
+            if llm_result.get("intervention_type"):
+                metadata["intervention_type"] = llm_result["intervention_type"]
+            if not record_accepted:
+                if own_title:
+                    metadata["title"] = own_title
+                if llm_result.get("authors"):
+                    metadata["authors"] = _clean_list(llm_result["authors"])
+                year_val = llm_result.get("year")
+                if isinstance(year_val, int) or (isinstance(year_val, str) and year_val.isdigit()):
+                    metadata["year"] = int(year_val)
+                metadata["metadata_source"] = "llm"
+                metadata["metadata_confidence"] = 0.5
+                metadata["needs_review"] = True
+            print(f"  LLM fields: countries={metadata['countries']}, sectors={metadata['sectors']}")
+        except Exception as e:
+            print(f"  LLM enrichment error: {e}")
+
     return metadata
 
 
@@ -282,8 +296,9 @@ def _merge_openalex_data(metadata: dict, openalex_data: dict, is_primary: bool =
         for inst in a.get("institutions", []):
             if inst.get("country_code"):
                 countries.add(inst["country_code"])
-    metadata["countries"] = list(countries)
-    
+    # Where the authors work, not where the study took place (see resolve_metadata)
+    metadata["author_countries"] = sorted(countries)
+
     return metadata
 
 
@@ -312,35 +327,135 @@ def extract_doi_from_text(text: str) -> Optional[str]:
     return None
 
 
+FIRST_PAGES_CHARS = 6000
+MAX_DOI_CANDIDATES = 3
+TITLE_MATCH_THRESHOLD = 0.75
+
+_STOPWORDS = {
+    "the", "and", "for", "from", "with", "into", "that", "this", "its", "are", "was", "were",
+    "how", "what", "does", "can", "evidence", "study", "analysis", "effects", "effect", "impact",
+    "impacts", "evaluation", "programme", "program", "paper", "working",
+}
+
+
+def _significant_words(text: str) -> list:
+    words = re.findall(r"[a-z0-9]+", (text or "").lower())
+    return [w for w in words if len(w) >= 3 and w not in _STOPWORDS]
+
+
+def title_matches_document(candidate_title: str, first_pages: str,
+                           threshold: float = TITLE_MATCH_THRESHOLD) -> bool:
+    """
+    True when most significant words of `candidate_title` appear on the first pages.
+
+    Guards against accepting a cited paper's DOI or an unrelated search hit:
+    "Interpretation and machine translation towards google translate" shares almost
+    no words with a BRAC evaluation's title page.
+    """
+    words = set(_significant_words(candidate_title))
+    if len(words) < 2:
+        return False
+    page_words = set(_significant_words(first_pages))
+    return len(words & page_words) / len(words) >= threshold
+
+
+def _normalise_title(text: str) -> str:
+    return " ".join(re.findall(r"[a-z0-9]+", (text or "").lower()))
+
+
+def titles_agree(candidate: str, own_title: str, threshold: float = 0.85) -> bool:
+    """
+    True when a looked-up title is the paper's own title: near-identical, or one
+    contains the other (subtitles are often dropped).
+    """
+    from difflib import SequenceMatcher
+
+    a, b = _normalise_title(candidate), _normalise_title(own_title)
+    if len(a) < 12 or len(b) < 12:
+        return False
+    if a in b or b in a:
+        return min(len(a), len(b)) / max(len(a), len(b)) >= 0.5
+    return SequenceMatcher(None, a, b).ratio() >= threshold
+
+
+def extract_dois_from_text(text: str) -> list:
+    """Every DOI in `text`, in order of appearance, without duplicates."""
+    found = []
+    for match in re.finditer(r'10\.\d{4,}/[^\s\]>)\'"]+', text or ""):
+        doi = re.sub(r'[.,;:\'")\]]+$', '', match.group(0))
+        if len(doi) > 10 and doi.lower() not in (d.lower() for d in found):
+            found.append(doi)
+    return found
+
+
+def _clean_list(value) -> list:
+    if not value:
+        return []
+    if isinstance(value, str):
+        value = [v.strip() for v in value.split(",")]
+    return [str(v).strip() for v in value if str(v).strip()]
+
+
+METHOD_KEYWORDS = (
+    "random", "control group", "treatment group", "difference-in-difference",
+    "difference in difference", "regression discontinuity", "instrumental variable",
+    "propensity score", "matching", "identification strategy", "empirical strategy",
+    "quasi-experiment", "baseline", "endline", "panel data", "cross-section", "qualitative",
+    "interviews", "focus group", "mixed method", "case study", "systematic review", "meta-analysis",
+)
+
+
+def build_design_excerpt(content: str, abstract: str = None, max_chars: int = 7000) -> str:
+    """
+    Text for the study design classifier: the abstract or opening, then paragraphs
+    that describe the method. Reports often open with a cover and contents pages, so
+    the first few thousand characters alone left six papers "unknown".
+    """
+    content = content or ""
+    head = (abstract or content[:2500]).strip()
+    picked, used = [], len(head)
+    for para in re.split(r"\n\s*\n", content[2500:]):
+        low = para.lower()
+        if any(k in low for k in METHOD_KEYWORDS):
+            para = para.strip()[:800]
+            if used + len(para) > max_chars:
+                break
+            picked.append(para)
+            used += len(para)
+    return head + ("\n\n[Method passages]\n" + "\n\n".join(picked) if picked else "")
+
+
 # ============================================================================
 # LLM Extraction
 # ============================================================================
 
-async def llm_extract_domain_fields(
-    title: str,
-    abstract: str,
-    api_key: str,
-) -> Optional[dict]:
-    """Use LLM to extract domain-specific fields."""
+async def llm_extract_paper_fields(first_pages: str, api_key: str) -> Optional[dict]:
+    """
+    Read a paper's first pages and return title, authors, year, study countries,
+    sectors, study_type and intervention_type as a dict.
+    """
     import httpx
     import json
-    
-    prompt = f"""Analyze this academic paper about development/impact evaluation and extract domain-specific metadata.
 
-TITLE: {title}
+    prompt = f"""Below are the first pages of a development research paper or report.
 
-ABSTRACT:
-{abstract[:2000]}
+{first_pages[:FIRST_PAGES_CHARS]}
 
-Extract the following as JSON:
-- countries: List of countries studied or mentioned (use official names)
-- sectors: List of sectors (e.g., "education", "health", "agriculture", "finance")
-- study_type: One of ["RCT", "quasi-experimental", "systematic-review", "meta-analysis", "observational", "qualitative", "mixed-methods", "other"]
-- intervention_type: Type of intervention studied
+Return JSON with these keys:
+- title: the paper's own title, as printed on its first page, in title case (not all capitals)
+- authors: list of author names, as printed
+- year: publication year as an integer, or null
+- countries: countries where the intervention ran or the data were collected, as official
+  English names (e.g. "Bangladesh"). Do NOT list countries of the authors' universities or of
+  funders. Empty list if the paper names none.
+- sectors: list of sectors (e.g. "social protection", "agriculture", "health", "education", "finance")
+- study_type: one of "RCT", "quasi-experimental", "systematic-review", "meta-analysis",
+  "observational", "qualitative", "mixed-methods", "other"
+- intervention_type: the intervention studied, in a few words
 
-Return ONLY valid JSON, no explanation."""
+Return ONLY valid JSON."""
 
-    async with httpx.AsyncClient(timeout=30.0) as client:
+    async with httpx.AsyncClient(timeout=60.0) as client:
         response = await client.post(
             "https://openrouter.ai/api/v1/chat/completions",
             headers={
@@ -352,24 +467,21 @@ Return ONLY valid JSON, no explanation."""
                 "messages": [
                     {
                         "role": "system",
-                        "content": "You are a metadata extraction assistant. Always respond with valid JSON only."
+                        "content": "You extract bibliographic and study metadata. Respond with valid JSON only."
                     },
                     {"role": "user", "content": prompt}
                 ],
-                "temperature": 0.1,
-                "max_tokens": 500,
+                "temperature": 0.0,
+                "max_tokens": 600,
+                "response_format": {"type": "json_object"},
             },
         )
-        
+
         response.raise_for_status()
-        data = response.json()
-        content = data["choices"][0]["message"]["content"]
-        
-        content = content.strip()
+        content = response.json()["choices"][0]["message"]["content"].strip()
         if content.startswith("```"):
             lines = content.split("\n")
             content = "\n".join(lines[1:-1] if lines[-1].startswith("```") else lines[1:])
-        
         return json.loads(content)
 
 
@@ -391,7 +503,7 @@ async def classify_study_design_llm(
 DOCUMENT TITLE: {title or "Unknown"}
 
 ABSTRACT/CONTENT:
-{abstract_or_content[:4000] if abstract_or_content else "No abstract available"}
+{abstract_or_content[:7000] if abstract_or_content else "No abstract available"}
 
 STUDY DESIGN CATEGORIES:
 

@@ -187,12 +187,13 @@ def _joined(meta: Dict[str, Any], *keys: str) -> str:
     return ""
 
 
-# The Modal pipeline fills "countries" from the authors' institutions in OpenAlex
-# (infrastructure/modal_lib/metadata.py), which is where the authors work, not where
-# the study took place: Targeting the Ultra Poor in Bangladesh comes out as "US".
-# Until metadata extraction records study countries, keep them out of the context and
-# the UI, so the model is not told that a Bangladesh study is a US one.
-TRUST_COUNTRY_METADATA = False
+# "countries" are the countries a study took place in, extracted from the paper by an
+# LLM (infrastructure/modal_lib/metadata.py, since 9 Nov 2026). Before that the pipeline
+# took them from the authors' institutions in OpenAlex (a Bangladesh study came out as
+# "US"); author countries are now kept apart as "author_countries". Set this to False
+# to withhold countries again if a collection was processed before the fix and not
+# refreshed (modal run infrastructure/modal_mineru.py --action refresh-metadata).
+TRUST_COUNTRY_METADATA = True
 
 
 def _study_country(meta: Dict[str, Any]) -> str:
