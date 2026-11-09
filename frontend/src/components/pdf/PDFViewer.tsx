@@ -2,16 +2,13 @@
 
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { 
-  Loader2, 
-  AlertCircle, 
-  ExternalLink
-} from "lucide-react";
+import { Loader2, AlertCircle, RotateCcw } from "lucide-react";
+import { fetchPdfBlobUrl, isApiUrl } from "@/lib/pdf";
 
 interface PDFViewerProps {
   url: string;
   initialPage?: number;
-  searchText?: string;  // Text to search and highlight in PDF
+  searchText?: string; // shown by the caller in the cited-passage card
   onClose?: () => void;
   className?: string;
   /** Hide the toolbar for embedded use */
@@ -19,96 +16,78 @@ interface PDFViewerProps {
 }
 
 /**
- * PDF Viewer using browser's native PDF viewer via iframe.
- * This approach is compatible with Next.js Turbopack and all browsers.
- * 
- * The URL can include a page parameter: url#page=5
+ * PDF viewer using the browser's native viewer in an iframe.
+ *
+ * The PDF is fetched with the user's sign-in token and shown from a blob URL, because
+ * an iframe cannot send the Authorization header that private collections require.
+ * The page is selected with the #page=N fragment.
  */
-export function PDFViewer({ 
-  url, 
-  initialPage = 1,
-  searchText,
-  onClose,
-  className = "",
-  hideToolbar = false,
-}: PDFViewerProps) {
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+export function PDFViewer({ url, initialPage = 1, className = "" }: PDFViewerProps) {
+  const [attempt, setAttempt] = useState(0);
+  // Result of the last download, tagged with the url and attempt it belongs to, so a
+  // new url or a retry shows the loading state without resetting state in the effect.
+  const [loaded, setLoaded] = useState<{ key: string; blob?: string; error?: string } | null>(null);
+  const direct = !isApiUrl(url); // presigned storage links need no sign-in token
+  const key = `${url}|${attempt}`;
 
-  // Build URL with page parameter only
-  // #page=N is more widely supported than #search=text
-  // We show the snippet in an "evidence card" in the UI instead of relying on PDF viewer highlighting
-  const buildPdfUrl = () => {
-    // Only use page anchor - it's the most compatible approach
-    if (initialPage > 1) {
-      return `${url}#page=${initialPage}`;
-    }
-    return url;
-  };
-  
-  const pdfUrl = buildPdfUrl();
-
-  // Reset loading state when URL changes
   useEffect(() => {
-    setIsLoading(true);
-    setError(null);
-  }, [pdfUrl]);
+    if (direct) return;
+    let cancelled = false;
+    let created: string | null = null;
+    fetchPdfBlobUrl(url)
+      .then((u) => {
+        created = u;
+        if (cancelled) URL.revokeObjectURL(u);
+        else setLoaded({ key, blob: u });
+      })
+      .catch((e) => {
+        if (!cancelled) setLoaded({ key, error: e instanceof Error ? e.message : "The document could not be loaded." });
+      });
+    return () => {
+      cancelled = true;
+      if (created) URL.revokeObjectURL(created);
+    };
+  }, [url, key, direct]);
 
-  const handleLoad = () => {
-    setIsLoading(false);
-  };
-
-  const handleError = () => {
-    setError("Failed to load PDF");
-    setIsLoading(false);
-  };
-
-  const openInNewTab = () => {
-    window.open(pdfUrl, '_blank');
-  };
+  const current = loaded?.key === key ? loaded : null;
+  const blobUrl = direct ? url : current?.blob ?? null;
+  const error = direct ? null : current?.error ?? null;
+  const src = blobUrl ? (initialPage > 1 ? `${blobUrl}#page=${initialPage}` : blobUrl) : null;
 
   return (
-    <div className={`relative flex flex-col h-full w-full ${className}`}>
-      {/* PDF Content - full size */}
-      <div className="flex-1 relative">
-        {isLoading && (
-          <div className="absolute inset-0 flex items-center justify-center bg-gray-50 z-10">
-            <div className="flex flex-col items-center gap-2">
-              <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
-              <span className="text-sm text-gray-500">Loading PDF...</span>
-            </div>
+    <div className={`relative flex h-full w-full flex-col ${className}`}>
+      <div className="relative flex-1">
+        {!src && !error && (
+          <div className="absolute inset-0 z-10 flex items-center justify-center bg-surface-1">
+            <p className="flex items-center gap-2 text-body text-ink-muted" role="status">
+              <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+              Loading the document…
+            </p>
           </div>
         )}
 
         {error && (
-          <div className="absolute inset-0 flex items-center justify-center bg-gray-50">
-            <div className="flex flex-col items-center gap-3 text-red-600 max-w-md text-center p-4">
-              <AlertCircle className="h-8 w-8" />
-              <span className="text-sm">{error}</span>
-              <Button variant="outline" size="sm" onClick={openInNewTab}>
-                <ExternalLink className="h-4 w-4 mr-2" />
-                Open in new tab
+          <div className="absolute inset-0 flex items-center justify-center bg-surface-1 p-4">
+            <div className="flex max-w-sm flex-col items-center gap-3 text-center" role="alert">
+              <AlertCircle className="size-6 text-danger" aria-hidden="true" />
+              <p className="text-body text-ink">{error}</p>
+              <Button variant="outline" size="sm" onClick={() => setAttempt((a) => a + 1)}>
+                <RotateCcw aria-hidden="true" />
+                Try again
               </Button>
             </div>
           </div>
         )}
 
-        <iframe
-          key={pdfUrl}
-          src={pdfUrl}
-          className="w-full h-full border-0 absolute inset-0"
-          onLoad={handleLoad}
-          onError={handleError}
-          title="PDF Document"
-        />
+        {src && (
+          <iframe key={src} src={src} className="absolute inset-0 h-full w-full border-0" title="Document" />
+        )}
       </div>
     </div>
   );
 }
 
-/**
- * Simple PDF viewer - same as PDFViewer but exported for compatibility
- */
+/** Same as PDFViewer, kept for older imports. */
 export const SimplePDFViewer = PDFViewer;
 
 export default PDFViewer;
