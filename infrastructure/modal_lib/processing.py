@@ -166,6 +166,42 @@ def sync_to_supabase_rag(
         return False
 
 
+def _supabase_client():
+    from supabase import create_client
+
+    url = os.environ.get("SUPABASE_URL")
+    key = os.environ.get("SUPABASE_SERVICE_KEY") or os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
+    return create_client(url, key) if url and key else None
+
+
+def find_document_uuid(project_id: str, doc_id: str) -> Optional[str]:
+    """documents.id of the row whose filename is doc_id, so chunks link to it."""
+    try:
+        client = _supabase_client()
+        if client is None:
+            return None
+        rows = (client.table("documents").select("id")
+                .eq("rag_project_id", project_id).eq("filename", doc_id).limit(1).execute().data)
+        return rows[0]["id"] if rows else None
+    except Exception as e:
+        print(f"  ⚠ Could not look up document row: {e}")
+        return None
+
+
+def mark_document_failed(project_id: str, doc_id: str, error: str) -> None:
+    """Record a failure on the document row itself, so it does not stay 'pending'."""
+    try:
+        client = _supabase_client()
+        if client is None:
+            return
+        (client.table("documents")
+         .update({"status": "failed", "error_message": error[:1000],
+                  "updated_at": datetime.now().isoformat()})
+         .eq("rag_project_id", project_id).eq("filename", doc_id).execute())
+    except Exception as e:
+        print(f"  ⚠ Could not mark document failed: {e}")
+
+
 # ============================================================================
 # PDF Processing Functions (GPU)
 # ============================================================================
@@ -596,6 +632,8 @@ def process_pdf_rag(pdf_key: str, project_id: str) -> dict:
     memory=16384,
     timeout=3600,
     retries=1,
+    # Bounded so chunk writes do not pile up on the HNSW index (see ChunkStore._post_with_retry).
+    max_containers=10,
 )
 def process_pdf_rag_docling(pdf_key: str, project_id: str) -> dict:
     """Process one project PDF with Docling (CPU only). See process_rag_document."""
@@ -643,9 +681,8 @@ def process_rag_document(pdf_key: str, project_id: str, parser: str = "mineru") 
     """
     import gzip
     import tempfile
-    import httpx
     import asyncio
-    
+
     s3 = get_r2_client()
     bucket = get_bucket_name()
     
@@ -769,6 +806,7 @@ def process_rag_document(pdf_key: str, project_id: str, parser: str = "mineru") 
             doc_id=doc_id,
             content_list=result.get("content_list"),
             project_id=project_id,
+            document_uuid=find_document_uuid(project_id, doc_id),
         )
         
         print(f"  Indexed {chunk_count} chunks into project {project_id}")
@@ -799,12 +837,7 @@ def process_rag_document(pdf_key: str, project_id: str, parser: str = "mineru") 
         }
         
     except Exception as e:
-        print(f"  ❌ Error: {e}")
-        try:
-            backend_url = os.environ.get("BACKEND_URL", "https://3iechat.up.railway.app")
-            with httpx.Client(timeout=10.0) as client:
-                client.patch(f"{backend_url}/rags/{project_id}/documents/{doc_id}/status", json={"status": "failed", "error": str(e)})
-        except:
-            pass
-        
-        return {"success": False, "doc_id": doc_id, "project_id": project_id, "parser": parser, "error": str(e)}
+        error = f"{type(e).__name__}: {e}"
+        print(f"  ❌ Error: {error}")
+        mark_document_failed(project_id, doc_id, error)
+        return {"success": False, "doc_id": doc_id, "project_id": project_id, "parser": parser, "error": error}

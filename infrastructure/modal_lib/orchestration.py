@@ -391,6 +391,11 @@ def orchestrate_rag(
             print(f"  ✗ Error: {result}")
             failed += 1
             results.append({"error": str(result)})
+        elif isinstance(result, dict) and result.get("success") is False:
+            # The worker catches its own errors and returns them, so count them here.
+            print(f"  ✗ Failed: {result.get('doc_id', 'unknown')}: {result.get('error')}")
+            failed += 1
+            results.append(result)
         else:
             print(f"  ✓ Completed: {result.get('pdf_name', result.get('doc_id', 'unknown'))}")
             success += 1

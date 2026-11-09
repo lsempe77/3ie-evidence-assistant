@@ -14,12 +14,15 @@ from __future__ import annotations
 
 import json
 import os
+import time
 from typing import Any, Dict, Iterable, List, Optional, Sequence
 
 import httpx
 
 DEFAULT_TIMEOUT = 60.0
-UPSERT_BATCH = 200
+UPSERT_BATCH = 50
+UPSERT_ATTEMPTS = 4
+UPSERT_BACKOFF_SECONDS = 2.0
 PAGE_SIZE = 1000
 
 # Columns of public.chunks that callers may set directly; anything else in a row
@@ -69,6 +72,17 @@ def _parse_vector(value: Any) -> Optional[List[float]]:
     return [float(x) for x in value]
 
 
+def _strip_nul(value: Any) -> Any:
+    """Remove NUL characters, which Postgres text and JSONB cannot store (22P05)."""
+    if isinstance(value, str):
+        return value.replace("\x00", "")
+    if isinstance(value, dict):
+        return {_strip_nul(k): _strip_nul(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_strip_nul(v) for v in value]
+    return value
+
+
 def to_chunk_row(project_id: str, row: Dict[str, Any]) -> Dict[str, Any]:
     """Split a flat chunk dict into table columns plus a metadata JSONB object."""
     out: Dict[str, Any] = {"rag_project_id": project_id, "metadata": dict(row.get("metadata") or {})}
@@ -81,6 +95,7 @@ def to_chunk_row(project_id: str, row: Dict[str, Any]) -> Dict[str, Any]:
             out["metadata"][key] = value
     if out.get("embedding") is not None:
         out["embedding"] = [float(x) for x in out["embedding"]]
+    out = {k: (v if k == "embedding" else _strip_nul(v)) for k, v in out.items()}
     if "doc_key" not in out or "chunk_index" not in out or "content" not in out:
         raise ValueError("chunk rows need doc_key, chunk_index and content")
     return out
@@ -134,13 +149,34 @@ class ChunkStore:
         """Insert or replace chunks, keyed on (project, doc_key, chunk_index)."""
         prepared = [to_chunk_row(project_id, r) for r in rows]
         for i in range(0, len(prepared), batch_size):
-            self._check(self._client.post(
-                "/chunks",
-                params={"on_conflict": "rag_project_id,doc_key,chunk_index"},
-                headers={"Prefer": "return=minimal,resolution=merge-duplicates"},
-                json=prepared[i:i + batch_size],
-            ))
+            self._post_with_retry(prepared[i:i + batch_size])
         return len(prepared)
+
+    def _post_with_retry(self, batch: List[Dict[str, Any]]) -> None:
+        """
+        POST one batch, retrying timeouts and server errors with backoff.
+
+        Each insert also updates the HNSW and full-text indexes. With many workers
+        writing at once a batch can exceed the database statement timeout (57014)
+        or the client read timeout. The upsert is idempotent, so retrying is safe.
+        """
+        for attempt in range(UPSERT_ATTEMPTS):
+            last = attempt == UPSERT_ATTEMPTS - 1
+            try:
+                response = self._client.post(
+                    "/chunks",
+                    params={"on_conflict": "rag_project_id,doc_key,chunk_index"},
+                    headers={"Prefer": "return=minimal,resolution=merge-duplicates"},
+                    json=batch,
+                )
+            except httpx.TimeoutException:
+                if last:
+                    raise
+            else:
+                if response.status_code < 500 or last:
+                    self._check(response)
+                    return
+            time.sleep(UPSERT_BACKOFF_SECONDS * 2 ** attempt)
 
     def delete_document(self, project_id: str, doc_key: str) -> int:
         """Delete every chunk of one document; returns the number deleted."""
