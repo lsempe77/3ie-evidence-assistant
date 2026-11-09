@@ -162,7 +162,7 @@ export function AnswerPanel({
     return (
       <div className="w-full max-w-[760px]" aria-busy="true">
         <p className="mb-4 text-body text-ink-muted" role="status" aria-live="polite">
-          Searching the collection and writing the answer…
+          Reading the studies in this collection and writing the answer…
         </p>
         <div className="animate-pulse space-y-3" aria-hidden="true">
           <div className="h-4 w-full rounded-sm bg-surface-2" />

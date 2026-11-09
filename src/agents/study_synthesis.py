@@ -97,6 +97,9 @@ class StudyReading:
     quote: str
     page: Optional[int]
     best_score: float
+    metadata: Dict[str, Any] = field(default_factory=dict)  # title, authors, year, source, ...
+    passage: str = ""            # best passage, for highlighting in the PDF viewer
+    passage_page: Optional[int] = None
 
 
 @dataclass
@@ -202,6 +205,9 @@ class StudySynthesisPipeline:
                     direction=str(data.get("direction") or ""), quote=str(data.get("quote") or ""),
                     page=data.get("page") if isinstance(data.get("page"), int) else None,
                     best_score=rows[0].score,
+                    metadata=dict(meta),
+                    passage=rows[0].text,
+                    passage_page=rows[0].metadata.get("page_start"),
                 )
 
             readings = await asyncio.gather(*(read(i + 1, sid, rows) for i, (sid, rows) in enumerate(groups)))
@@ -233,3 +239,15 @@ class StudySynthesisPipeline:
         return SynthesisResult(answer=text, citations=citations, readings=readings,
                                model_used=self.answer_model,
                                timings={"answer_s": round(time.time() - t0, 1)})
+
+    async def run(self, question: str) -> SynthesisResult:
+        """Read, then answer. Timings for both steps are in result.timings."""
+        readings, read_timing = await self.read_studies(question)
+        result = await self.answer(question, readings)
+        result.timings = {**read_timing, **result.timings}
+        return result
+
+
+def relevant_in_answer_order(readings: List[StudyReading]) -> List[StudyReading]:
+    """Relevant readings in the order they were numbered for the answer ([1], [2], ...)."""
+    return [r for r in readings if r.relevant and r.finding]

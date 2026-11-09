@@ -142,6 +142,7 @@ export default function RAGChatPage() {
   const [answer, setAnswer] = useState("");
   const [evidenceHealth, setEvidenceHealth] = useState<EvidenceHealth>(defaultEvidenceHealth);
   const [suggestions, setSuggestions] = useState<string[]>([]);
+  const [studiesRead, setStudiesRead] = useState<number | undefined>();
 
   const [selectedStudies, setSelectedStudies] = useState<Study[]>([]);
   const [highlightedCitation, setHighlightedCitation] = useState<number | undefined>();
@@ -272,6 +273,7 @@ export default function RAGChatPage() {
         setAnswer(data.answer || "");
         setSuggestions(responseData.suggestions);
         setEvidenceHealth(responseData.evidenceHealth);
+        setStudiesRead(typeof data.studiesRead === "number" ? data.studiesRead : undefined);
 
         const savedItem = await addChatHistory(
           project.id,
@@ -373,6 +375,7 @@ export default function RAGChatPage() {
     setCurrentQueryId(undefined);
     setPdfViewerOpen(false);
     setNarrowTab("answer");
+    setStudiesRead(undefined);
   }, []);
 
   const handleSelectHistoryItem = useCallback(
@@ -389,6 +392,7 @@ export default function RAGChatPage() {
           (item.responseData.evidenceHealth as unknown as EvidenceHealth) || defaultEvidenceHealth
         );
         setHasSearched(true);
+        setStudiesRead(undefined);
         setCurrentQueryId(item.id);
         setError(null);
         setPdfViewerOpen(false);
@@ -501,6 +505,7 @@ export default function RAGChatPage() {
         onOpenPdf={(study) => openPdf(study.id, study.title || study.id, 1)}
         query={query}
         answer={answer}
+        studiesRead={studiesRead}
       />
     );
 

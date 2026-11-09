@@ -14,6 +14,8 @@ interface EvidencePanelProps {
   onOpenPdf: (study: Study) => void;
   query?: string;
   answer?: string;
+  /** Studies the reader looked at, when the answer came from the study-synthesis pipeline. */
+  studiesRead?: number;
 }
 
 export function EvidencePanel({
@@ -26,9 +28,12 @@ export function EvidencePanel({
   onOpenPdf,
   query = "",
   answer = "",
+  studiesRead,
 }: EvidencePanelProps) {
   // Get citation number for each study
   const getCitationNumber = (studyId: string): number | undefined => {
+    const study = studies.find((s) => s.id === studyId);
+    if (study?.citationNumber !== undefined) return study.citationNumber;
     const citation = citations.find((c) => c.studyId === studyId);
     return citation?.id;
   };
@@ -139,6 +144,12 @@ export function EvidencePanel({
           </div>
         )}
       </div>
+
+      {studiesRead !== undefined && (
+        <p className="tabular mb-2 text-body text-ink-muted">
+          Read {studiesRead} {studiesRead === 1 ? "study" : "studies"}. {studies.length} address the question.
+        </p>
+      )}
 
       {studies.length > 1 && selectedStudies.length === 0 && (
         <p className="mb-3 text-caption text-ink-subtle">Select two or more studies to compare them.</p>
