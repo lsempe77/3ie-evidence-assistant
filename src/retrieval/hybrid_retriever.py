@@ -161,7 +161,12 @@ class HybridRetriever:
         project_id: Optional[str] = None,
         store: Optional[ChunkStore] = None,
         embedding_generator: Optional[EmbeddingGenerator] = None,
-        mmr_enabled: bool = True,
+        # Off by default since 9 Nov 2026. MMR needs every candidate's embedding sent
+        # back from the database: with query decomposition (3-4 sub-queries) and a
+        # 150-passage pool that is about 600 rows of 1,536-dim vectors per sub-query,
+        # and the requests timed out, leaving answers empty. Diversity across studies
+        # now comes from select_by_study (src/retrieval/selection.py).
+        mmr_enabled: bool = False,
         mmr_lambda: float = 0.7,  # Balance: 1.0 = pure relevance, 0.0 = pure diversity
         collection_name: Optional[str] = None,  # Legacy 'rag_<hex>' name, mapped to project_id
     ):
@@ -297,7 +302,9 @@ class HybridRetriever:
         
         # Retrieve for each query variant in parallel
         # Fetch more results per query since we'll deduplicate
-        per_query_k = top_k * 2
+        # Each query fetches the full pool; RRF then fuses to top_k. (Was top_k * 2,
+        # which doubled the database load on every sub-query.)
+        per_query_k = top_k
         
         retrieval_tasks = [
             self.retrieve(q, per_query_k, filters, alpha)

@@ -62,10 +62,17 @@ class TestExtractedFilters:
         params = ExtractedFilters(year_min=2020, year_max=2025).to_search_params()
         assert params == {"year_min": 2020, "year_max": 2025}
 
-    def test_to_search_params_sector(self):
-        """Sectors pass through as a list."""
-        params = ExtractedFilters(sectors=["education", "health"]).to_search_params()
-        assert params == {"sectors": ["education", "health"]}
+    def test_free_text_filters_are_not_hard_filters(self):
+        """Sectors and target populations stay in the query text, not the filter.
+
+        A hard target_populations filter matched no chunk and emptied the answers to
+        "Do graduation programmes improve economic outcomes for ultra-poor households?"
+        and to the question on women (benchmark, 9 Nov 2026).
+        """
+        params = ExtractedFilters(
+            sectors=["education", "health"], target_populations=["women"]
+        ).to_search_params()
+        assert params == {}
 
     def test_to_search_params_ignores_unpopulated_fields(self):
         """Country and study-type filters stay off, as before."""

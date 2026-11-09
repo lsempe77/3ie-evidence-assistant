@@ -61,19 +61,19 @@ class ExtractedFilters:
     def to_search_params(self) -> dict:
         """Convert to keyword arguments for ChunkStore.hybrid_search.
 
-        Year, sector and target-population filters are applied. Country, study-type
-        and confidence filters stay off until the corpus metadata is consistently
-        populated, as before the move from Qdrant.
+        Only year filters are applied as hard filters. Sectors, target populations,
+        countries and study types are free text guessed by an LLM from the question
+        ("ultra-poor households", "women"), and the chunk metadata either lacks the
+        field (no chunk has target_population) or words it differently, so a hard
+        filter returned nothing: the benchmark questions on economic outcomes and on
+        women got empty answers (9 Nov 2026). Those words stay in the query text,
+        where semantic and keyword search already use them.
         """
         params: dict = {}
         if self.year_min:
             params["year_min"] = self.year_min
         if self.year_max:
             params["year_max"] = self.year_max
-        if self.sectors:
-            params["sectors"] = list(self.sectors)
-        if self.target_populations:
-            params["target_populations"] = list(self.target_populations)
         return params
 
 
