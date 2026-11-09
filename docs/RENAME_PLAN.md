@@ -134,7 +134,7 @@ After two weeks without errors on the new names:
 
 ### Step 9. Local folder (optional)
 
-Renaming `apps/devchat` breaks references outside this repo: the workbench `CLAUDE.md`, `Desktop/TVET/MEMORY.md`,
+Renaming `apps/devchat` breaks references outside this repo: the workbench `CLAUDE.md`, `pipelines/TVET/MEMORY.md`,
 editor workspaces and agent memory paths. Do it last, in one sitting, and update those references at the same time.
 
 ---

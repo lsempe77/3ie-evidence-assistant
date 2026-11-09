@@ -1,7 +1,7 @@
 """
 Parser pilot: Docling against the existing MinerU output on the same papers.
 
-Method follows the TVET parser bake-off (Desktop/TVET/pipeline/bakeoff_metrics.py,
+Method follows the TVET parser bake-off (pipelines/TVET/pipeline/bakeoff_metrics.py,
 October 2026): with no hand-built gold set, numeric fidelity is scored against each
 PDF's own text layer, read with PyMuPDF. For a born-digital PDF that text layer is the
 publisher's content, so the numbers in it are a fair proxy for "the numbers in the

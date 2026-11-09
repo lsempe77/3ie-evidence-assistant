@@ -657,7 +657,7 @@ def post_process_content(
 # Docling Extraction
 # ============================================================================
 #
-# Why Docling: in the TVET parser bake-off (Desktop/TVET, October 2026; six economics
+# Why Docling: in the TVET parser bake-off (pipelines/TVET, October 2026; six economics
 # papers scored against a human table key) Docling matched MinerU on table recall
 # (0.94 vs 0.94) and kept more numbers intact (decimal recall 0.997 vs 0.965), on CPU
 # and under the MIT licence. See docs/RAG_PIPELINE_PLAN.md and roadmap item T4.
