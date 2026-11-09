@@ -95,3 +95,45 @@ async def test_clear_history_never_clears_everyone(history_env):
     with pytest.raises(HTTPException) as exc:
         await api_module.clear_chat_history(PUBLIC["id"], session_id=None, user=None)
     assert exc.value.status_code == 401
+
+
+class _ProjectTable:
+    """Answers rag_projects lookups by id; raises on anything past the access check."""
+
+    def __init__(self, rows):
+        self.rows, self.value = rows, None
+
+    def table(self, name):
+        if name != "rag_projects":
+            raise RuntimeError("past the access check")
+        return self
+
+    def select(self, *a):
+        return self
+
+    def eq(self, col, value):
+        self.value = value
+        return self
+
+    def execute(self):
+        return SimpleNamespace(data=[r for r in self.rows if r["id"] == self.value])
+
+
+@pytest.mark.parametrize("user, code", [(None, 401), (OTHER, 403)])
+@pytest.mark.asyncio
+async def test_highlighted_pdf_closed_to_others(monkeypatch, user, code):
+    import api.routes.rags as rags
+    monkeypatch.setattr(rags, "get_supabase_client", lambda: _ProjectTable([PRIVATE]))
+    with pytest.raises(HTTPException) as exc:
+        await rags.get_highlighted_pdf(PRIVATE["id"], "doc", user=user)
+    assert exc.value.status_code == code
+
+
+@pytest.mark.asyncio
+async def test_highlighted_pdf_open_to_owner(monkeypatch):
+    """The owner gets past the access check (it used to refuse every private project)."""
+    import api.routes.rags as rags
+    monkeypatch.setattr(rags, "get_supabase_client", lambda: _ProjectTable([PRIVATE]))
+    with pytest.raises(Exception) as exc:
+        await rags.get_highlighted_pdf(PRIVATE["id"], "doc", user=OWNER)
+    assert not (isinstance(exc.value, HTTPException) and exc.value.status_code in (401, 403))
