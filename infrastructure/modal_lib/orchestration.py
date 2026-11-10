@@ -20,6 +20,7 @@ from .config import (
     r2_secret,
     cohere_secret,
     supabase_secret,
+    openrouter_secret,
 )
 from .utils import get_r2_client, get_bucket_name
 from .processing import process_pdf, process_pdf_rag, process_pdf_rag_docling
@@ -200,7 +201,7 @@ def orchestrate(force_reprocess: bool = False, check_qdrant: bool = True, max_do
 
 @app.function(
     image=base_image,
-    secrets=[r2_secret, cohere_secret, supabase_secret],
+    secrets=[r2_secret, cohere_secret, supabase_secret, openrouter_secret],
     timeout=3600,
 )
 def orchestrate_rag(
@@ -417,6 +418,21 @@ def orchestrate_rag(
         print(f"Study cards: {build_study_cards(project_id)} written")
     except Exception as e:
         print(f"  ⚠ Study cards not built: {e}")
+
+    # Effect estimates from the new documents' tables feed the reader (roadmap N6,
+    # src/extraction/store_estimates.py). About 2.5 US cents per document.
+    new_keys = [r["doc_id"] for r in results
+                if isinstance(r, dict) and r.get("success") and not r.get("skipped") and r.get("doc_id")]
+    if new_keys:
+        try:
+            import asyncio
+
+            from src.extraction.store_estimates import extract_and_store
+
+            totals = asyncio.run(extract_and_store(project_id, doc_keys=new_keys))
+            print(f"Estimates: {totals['kept']} stored from {totals['docs']} documents ({totals['errors']} errors)")
+        except Exception as e:
+            print(f"  ⚠ Estimates not extracted: {e}")
     
     return {
         "project_id": project_id,
