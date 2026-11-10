@@ -1,14 +1,23 @@
 # 3ie Evidence Assistant - Retrieval Module
-from src.retrieval.query_processor import QueryProcessor, QueryClassification
-from src.retrieval.hybrid_retriever import HybridRetriever
-from src.retrieval.reranker import CohereReranker, Reranker
-from src.retrieval.context_builder import ContextBuilder
+#
+# Names load on first use (PEP 562), so importing a light submodule such as
+# src.retrieval.study_cards does not pull in LlamaIndex. The Modal image has no
+# LlamaIndex, and the eager imports made the study-card rebuild fail there.
+from importlib import import_module
 
-__all__ = [
-    "QueryProcessor",
-    "QueryClassification",
-    "HybridRetriever",
-    "CohereReranker",
-    "Reranker",
-    "ContextBuilder",
-]
+_EXPORTS = {
+    "QueryProcessor": "src.retrieval.query_processor",
+    "QueryClassification": "src.retrieval.query_processor",
+    "HybridRetriever": "src.retrieval.hybrid_retriever",
+    "CohereReranker": "src.retrieval.reranker",
+    "Reranker": "src.retrieval.reranker",
+    "ContextBuilder": "src.retrieval.context_builder",
+}
+
+__all__ = list(_EXPORTS)
+
+
+def __getattr__(name):
+    if name in _EXPORTS:
+        return getattr(import_module(_EXPORTS[name]), name)
+    raise AttributeError(f"module 'src.retrieval' has no attribute {name!r}")
