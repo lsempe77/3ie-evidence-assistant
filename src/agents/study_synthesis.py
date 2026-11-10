@@ -112,6 +112,7 @@ class StudyReading:
     passage: str = ""            # best passage, for highlighting in the PDF viewer
     passage_page: Optional[int] = None
     programme: str = ""          # programme or intervention evaluated, as the reader names it
+    error: str = ""              # set when the reader call or its JSON failed
 
 
 @dataclass
@@ -253,19 +254,31 @@ class StudySynthesisPipeline:
         on_event: Optional[Callable[[Dict[str, Any]], Awaitable[None]]] = None,
     ) -> tuple[List[StudyReading], Dict[str, float]]:
         """Find and read candidate studies. on_event receives progress events as they happen."""
-        async def emit(event: Dict[str, Any]) -> None:
-            if on_event:
-                await on_event(event)
+        groups, timing = await self.candidate_groups(question)
+        if on_event:
+            await on_event({"type": "candidates", "total": len(groups)})
+        t2 = time.time()
+        readings = await self.read_groups(question, groups, on_event)
+        timing.update(read_s=round(time.time() - t2, 1), studies_read=len(readings))
+        return readings, timing
 
+    async def candidate_groups(self, question: str) -> tuple[List[tuple], Dict[str, Any]]:
+        """Candidate studies with their passages, reranked, best first: [(study_id, rows)]."""
         t0 = time.time()
         candidates, info = await self._candidates(question)
         t1 = time.time()
         pool = await self.reranker.rerank(query=question, results=candidates, top_n=len(candidates))
         t2 = time.time()
         groups = [(sid, rows) for sid, rows in _group_by_study(pool).items() if rows[0].score >= STUDY_FLOOR]
-        groups = groups[:MAX_STUDIES_READ]
-        await emit({"type": "candidates", "total": len(groups)})
+        return groups[:MAX_STUDIES_READ], {"retrieve_s": round(t1 - t0, 1), "rerank_s": round(t2 - t1, 1), **info}
 
+    async def read_groups(
+        self, question: str, groups: List[tuple],
+        on_event: Optional[Callable[[Dict[str, Any]], Awaitable[None]]] = None,
+        model: Optional[str] = None,
+    ) -> List[StudyReading]:
+        """Read each candidate study with the reader model (or `model`), in parallel."""
+        reader_model = model or self.reader_model
         sem = asyncio.Semaphore(READER_CONCURRENCY)
         async with httpx.AsyncClient(timeout=120, headers=self._headers) as client:
             async def read(number: int, sid: str, rows: List[RetrievalResult]) -> StudyReading:
@@ -275,16 +288,19 @@ class StudySynthesisPipeline:
                 passages = "\n\n".join(
                     f"[page {r.metadata.get('page_start') or '?'}] {r.text.strip()}" for r in rows[:PASSAGES_PER_STUDY]
                 )
+                prompt = READER_PROMPT.format(question=question, label=_label(meta), design=design,
+                                              countries=countries, passages=passages)
                 async with sem:
-                    try:
-                        data = _parse_json(await _chat(
-                            client, self.reader_model,
-                            READER_PROMPT.format(question=question, label=_label(meta), design=design,
-                                                 countries=countries, passages=passages),
-                            max_tokens=2000, json_mode=True))
-                    except Exception as e:
-                        data = {"relevant": False, "finding": "", "direction": "not_applicable",
-                                "quote": "", "page": None, "error": str(e)[:200]}
+                    # One retry: a failed or malformed reply used to drop the study silently
+                    # (11 of ~800 Haiku readings in the reader comparison, 10 Nov 2026).
+                    for attempt in range(2):
+                        try:
+                            data = _parse_json(await _chat(client, reader_model, prompt,
+                                                           max_tokens=2000, json_mode=True))
+                            break
+                        except Exception as e:
+                            data = {"relevant": False, "finding": "", "direction": "not_applicable",
+                                    "quote": "", "page": None, "error": str(e)[:200]}
                 return StudyReading(
                     number=number, study_id=sid, label=_label(meta), design=design, countries=countries,
                     relevant=bool(data.get("relevant")), finding=str(data.get("finding") or ""),
@@ -295,6 +311,7 @@ class StudySynthesisPipeline:
                     passage=rows[0].text,
                     passage_page=rows[0].metadata.get("page_start"),
                     programme=str(data.get("programme") or ""),
+                    error=str(data.get("error") or ""),
                 )
 
             tasks = [asyncio.create_task(read(i + 1, sid, rows)) for i, (sid, rows) in enumerate(groups)]
@@ -302,11 +319,10 @@ class StudySynthesisPipeline:
             for done, task in enumerate(asyncio.as_completed(tasks), start=1):
                 reading = await task
                 readings.append(reading)
-                await emit({"type": "study", "done": done, "total": len(groups), "reading": reading})
+                if on_event:
+                    await on_event({"type": "study", "done": done, "total": len(groups), "reading": reading})
             readings.sort(key=lambda r: r.number)  # back to rerank order, which numbers the answer
-        t3 = time.time()
-        return list(readings), {"retrieve_s": round(t1 - t0, 1), "rerank_s": round(t2 - t1, 1),
-                                "read_s": round(t3 - t2, 1), "studies_read": len(readings), **info}
+        return readings
 
     def _answer_prompt(self, question: str, readings: List[StudyReading]) -> tuple[str, Dict[str, int], List[StudyReading]]:
         relevant = [r for r in readings if r.relevant and r.finding]
