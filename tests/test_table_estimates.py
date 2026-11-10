@@ -49,3 +49,21 @@ def test_table_units_carry_page_caption_and_context():
              {"type": "text", "text": "*** p<0.01"}]
     (u,) = table_units(items)
     assert u["page"] == 11 and u["caption"] == "Table 1. Impacts" and "p<0.01" in u["context"]
+
+
+def test_rows_for_keeps_grounded_numbers_and_cleans_values():
+    from src.extraction.store_estimates import estimate_text, rows_for
+
+    base = {"grounded": True, "effect_size": 0.2, "standard_error": float("inf"), "p_value": 3.0, "stars": 2,
+            "sample_size": 1200.0, "ci_low": None, "ci_high": None, "table_label": "Table 2", "outcome": "Income\x00",
+            "row_label": "Income", "column_label": "(1)", "arm": "", "subgroup": "Women", "estimate_cell": "0.20**",
+            "se_cell": "(0.08)", "page": 7}
+    out = {"estimates": [base, {**base, "grounded": False}, {**base, "effect_size": None}]}
+    rows = rows_for("p", {"id": "d", "filename": "doc"}, out, "m")
+    assert len(rows) == 1
+    r = rows[0]
+    assert r["standard_error"] is None and r["p_value"] is None and r["p_text"] == "**"
+    assert r["sample_size"] == 1200 and isinstance(r["sample_size"], int)
+    assert r["outcome_name"] == "Income" and r["treatment_arm"] is None
+    assert r["literal_text"] == "0.20** (0.08)"
+    assert estimate_text(r) == "Income | subgroup: Women"
