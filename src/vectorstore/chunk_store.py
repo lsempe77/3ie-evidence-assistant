@@ -298,3 +298,65 @@ class ChunkStore:
         for row in rows:
             row["embedding"] = _parse_vector(row.get("embedding"))
         return rows
+
+    # ------------------------------------------------------------- study cards
+
+    def upsert_study_cards(self, project_id: str, rows: Iterable[Dict[str, Any]]) -> int:
+        """Insert or replace study cards, keyed on (project, doc_key)."""
+        prepared = []
+        for r in rows:
+            row = {"rag_project_id": project_id, "doc_key": r["doc_key"],
+                   "card_text": _strip_nul(r["card_text"]), "document_id": r.get("document_id"),
+                   "updated_at": r.get("updated_at")}
+            if r.get("embedding") is not None:
+                row["embedding"] = [float(x) for x in r["embedding"]]
+            prepared.append({k: v for k, v in row.items() if v is not None})
+        for i in range(0, len(prepared), UPSERT_BATCH):
+            self._check(self._client.post(
+                "/study_cards",
+                params={"on_conflict": "rag_project_id,doc_key"},
+                headers={"Prefer": "return=minimal,resolution=merge-duplicates"},
+                json=prepared[i:i + UPSERT_BATCH],
+            ))
+        return len(prepared)
+
+    def search_study_cards(self, project_id: str, query_text: str, query_embedding: Sequence[float],
+                           match_count: int = 80) -> List[Dict[str, Any]]:
+        """Rank whole studies for a question (cosine on cards + full-text, RRF)."""
+        return self._rpc("search_study_cards", {
+            "p_project_id": project_id, "query_text": query_text,
+            "query_embedding": json.dumps([float(x) for x in query_embedding]),
+            "match_count": match_count,
+        })
+
+    def passages_for_studies(self, project_id: str, query_embedding: Sequence[float],
+                             doc_keys: Sequence[str], per_doc: int = 4) -> List[Dict[str, Any]]:
+        """The best per_doc passages within each listed study."""
+        if not doc_keys:
+            return []
+        return self._rpc("passages_for_studies", {
+            "p_project_id": project_id,
+            "query_embedding": json.dumps([float(x) for x in query_embedding]),
+            "p_doc_keys": list(doc_keys), "per_doc": per_doc,
+        })
+
+    def opening_chunks(self, project_id: str, max_index: int = 4) -> List[Dict[str, Any]]:
+        """The first chunks (chunk_index < max_index) of every document in a project."""
+        out: List[Dict[str, Any]] = []
+        params = {"rag_project_id": f"eq.{project_id}", "chunk_index": f"lt.{max_index}",
+                  "select": "doc_key,chunk_index,content,metadata,document_id",
+                  "order": "doc_key.asc,chunk_index.asc"}
+        while True:
+            batch = self._check(self._client.get(
+                "/chunks", params={**params, "limit": str(PAGE_SIZE), "offset": str(len(out))},
+            )).json()
+            out.extend(batch)
+            if len(batch) < PAGE_SIZE:
+                return out
+
+    def count_study_cards(self, project_id: str) -> int:
+        response = self._check(self._client.get(
+            "/study_cards", params={"select": "id", "rag_project_id": f"eq.{project_id}", "limit": "1"},
+            headers={"Prefer": "count=exact"},
+        ))
+        return self._count_from(response)

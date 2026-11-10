@@ -32,15 +32,18 @@ import httpx
 
 from src.retrieval.hybrid_retriever import HybridRetriever, RetrievalResult
 from src.retrieval.reranker import CohereReranker
+from src.retrieval.study_cards import embed_query
+from src.vectorstore.chunk_store import ChunkStore
 
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 DEFAULT_READER_MODEL = "anthropic/claude-haiku-5.5"
 DEFAULT_ANSWER_MODEL = "anthropic/claude-sonnet-5.5"
-POOL_SIZE = 300          # 150 reached only ~28 of the 86 included studies
-STUDY_FLOOR = 0.1          # lowest rerank score that still sends a study to the reader
+POOL_SIZE = 300          # passage pool; 150 reached only ~28 of the 86 included studies
+STUDY_CANDIDATES = 60    # studies ranked by their study card (src/retrieval/study_cards.py)
+STUDY_FLOOR = 0.1        # lowest rerank score that still sends a study to the reader
 MAX_STUDIES_READ = 80
 PASSAGES_PER_STUDY = 4
-READER_CONCURRENCY = 16
+READER_CONCURRENCY = 32   # 60+ studies per broad question since study cards (N1)
 
 READER_PROMPT = """You are screening one study for a question about development evidence.
 
@@ -57,7 +60,8 @@ Using ONLY these passages, return JSON:
   "finding": "<one or two sentences: what this study found on the question, with direction and size as reported (units, %, SD), and the time point if given; empty if not relevant>",
   "direction": "positive" | "negative" | "null" | "mixed" | "not_applicable",
   "quote": "<a short exact quote from the passages that supports the finding>",
-  "page": <page number of the quote, or null>}}
+  "page": <page number of the quote, or null>,
+  "programme": "<short name of the programme evaluated, with its country, e.g. 'BRAC TUP, Bangladesh' or 'Haku Wiñay, Peru'. At most eight words, no explanation. Empty if the passages do not say>"}}
 Do not use outside knowledge. If the passages only mention the topic without results, relevant is false."""
 
 ANSWER_PROMPT = """You are an evidence synthesis assistant for development research. Answer the
@@ -73,6 +77,10 @@ Write the answer:
 - Lead with the overall pattern across the studies, then the important exceptions. Say how
   many studies point each way (e.g. "12 of 15 studies found…") and their designs where it
   matters (RCTs vs quasi-experimental).
+- Count programmes as well as studies. Several studies often evaluate the same programme
+  (for example many papers on BRAC's TUP in Bangladesh, also called CFPR or CFPR-TUP). Treat
+  name variants of one programme as one programme. Say "N studies of M programmes" and do not
+  present several papers on one programme as independent confirmations.
 - Describe sizes as the studies report them and qualify them honestly ("modest", "small",
   "large"). Do not call an effect large, significant or sustained unless the findings say so.
 - Distinguish short-term from long-term results when the findings give time points.
@@ -101,6 +109,7 @@ class StudyReading:
     metadata: Dict[str, Any] = field(default_factory=dict)  # title, authors, year, source, ...
     passage: str = ""            # best passage, for highlighting in the PDF viewer
     passage_page: Optional[int] = None
+    programme: str = ""          # programme or intervention evaluated, as the reader names it
 
 
 @dataclass
@@ -168,15 +177,58 @@ class StudySynthesisPipeline:
         self.project_id = project_id
         self.reader_model = reader_model
         self.answer_model = answer_model
-        self.retriever = HybridRetriever(project_id=project_id)
+        self.store = ChunkStore()
         self.reranker = CohereReranker()
+        self.use_study_cards = True
         self._headers = {"Authorization": f"Bearer {os.environ['OPENROUTER_API_KEY']}"}
+
+    async def _candidates(self, question: str) -> tuple[List[RetrievalResult], Dict[str, Any]]:
+        """
+        Passages for every candidate study: the passage pool for the question, plus the
+        best passages of studies ranked highly by their study card but missed by the pool.
+        """
+        q_emb = await asyncio.to_thread(embed_query, question)
+        pool_task = asyncio.to_thread(
+            self.store.hybrid_search, self.project_id, question, q_emb,
+            match_count=POOL_SIZE, candidate_count=POOL_SIZE)
+        if self.use_study_cards:
+            cards_task = asyncio.to_thread(self.store.search_study_cards, self.project_id, question, q_emb,
+                                           STUDY_CANDIDATES)
+            pool_rows, card_rows = await asyncio.gather(pool_task, cards_task)
+        else:
+            pool_rows, card_rows = await pool_task, []
+        pool = [HybridRetriever._row_to_result(r) for r in pool_rows]
+
+        in_pool: Dict[str, int] = {}
+        for r in pool:
+            in_pool[r.study_id] = in_pool.get(r.study_id, 0) + 1
+        missing = [c["doc_key"] for c in card_rows if in_pool.get(c["doc_key"], 0) < 2]
+        extra_rows = await asyncio.to_thread(
+            self.store.passages_for_studies, self.project_id, q_emb, missing, PASSAGES_PER_STUDY)
+        extra = [HybridRetriever._row_to_result(r) for r in extra_rows]
+
+        seen, merged = set(), []
+        for r in pool + extra:
+            if r.node_id not in seen:
+                seen.add(r.node_id)
+                merged.append(r)
+        # Keep at most PASSAGES_PER_STUDY passages per study for reranking
+        per_study: Dict[str, int] = {}
+        kept = []
+        for r in merged:
+            if per_study.get(r.study_id, 0) < PASSAGES_PER_STUDY:
+                per_study[r.study_id] = per_study.get(r.study_id, 0) + 1
+                kept.append(r)
+        info = {"pool_studies": len(in_pool), "card_studies": len(card_rows),
+                "studies_added_by_cards": len({r.study_id for r in extra} - set(in_pool)),
+                "passages_reranked": len(kept)}
+        return kept, info
 
     async def read_studies(self, question: str) -> tuple[List[StudyReading], Dict[str, float]]:
         t0 = time.time()
-        pool = await self.retriever.retrieve(query=question, top_k=POOL_SIZE)
+        candidates, info = await self._candidates(question)
         t1 = time.time()
-        pool = await self.reranker.rerank(query=question, results=pool, top_n=len(pool))
+        pool = await self.reranker.rerank(query=question, results=candidates, top_n=len(candidates))
         t2 = time.time()
         groups = [(sid, rows) for sid, rows in _group_by_study(pool).items() if rows[0].score >= STUDY_FLOOR]
         groups = groups[:MAX_STUDIES_READ]
@@ -209,19 +261,21 @@ class StudySynthesisPipeline:
                     metadata=dict(meta),
                     passage=rows[0].text,
                     passage_page=rows[0].metadata.get("page_start"),
+                    programme=str(data.get("programme") or ""),
                 )
 
             readings = await asyncio.gather(*(read(i + 1, sid, rows) for i, (sid, rows) in enumerate(groups)))
         t3 = time.time()
         return list(readings), {"retrieve_s": round(t1 - t0, 1), "rerank_s": round(t2 - t1, 1),
-                                "read_s": round(t3 - t2, 1), "studies_read": len(readings)}
+                                "read_s": round(t3 - t2, 1), "studies_read": len(readings), **info}
 
     async def answer(self, question: str, readings: List[StudyReading]) -> SynthesisResult:
         relevant = [r for r in readings if r.relevant and r.finding]
         # Renumber the relevant studies 1..n so citations are compact
         numbered = {r.study_id: i + 1 for i, r in enumerate(relevant)}
         findings = "\n".join(
-            f"[{numbered[r.study_id]}] {r.label} | design: {r.design} | countries: {r.countries}\n"
+            f"[{numbered[r.study_id]}] {r.label} | design: {r.design} | countries: {r.countries}"
+            f" | programme: {r.programme or 'not stated'}\n"
             f"    finding ({r.direction}): {r.finding}"
             for r in relevant
         ) or "(none of the studies read reports evidence on this question)"

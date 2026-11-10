@@ -408,6 +408,15 @@ def orchestrate_rag(
     update_job_progress(processed_count, len(all_to_process), status=final_status, error=error_msg)
     
     print(f"\nComplete: {success} succeeded, {failed} failed")
+
+    # Study cards rank whole studies at question time (src/retrieval/study_cards.py).
+    # Rebuild them for the whole project, so new documents are found at study level.
+    try:
+        from src.retrieval.study_cards import build_study_cards
+
+        print(f"Study cards: {build_study_cards(project_id)} written")
+    except Exception as e:
+        print(f"  ⚠ Study cards not built: {e}")
     
     return {
         "project_id": project_id,

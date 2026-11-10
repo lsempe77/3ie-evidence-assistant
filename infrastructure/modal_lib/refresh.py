@@ -13,7 +13,7 @@ import os
 from datetime import datetime
 from typing import Optional
 
-from .config import app, docling_image, r2_secret, supabase_secret, openrouter_secret
+from .config import app, docling_image, r2_secret, supabase_secret, openrouter_secret, cohere_secret
 from .chunks import get_store
 from .metadata import build_design_excerpt, classify_study_design_llm, resolve_metadata
 from .utils import get_bucket_name, get_r2_client
@@ -99,7 +99,7 @@ def refresh_document_metadata(project_id: str, document_id: str, reclassify: str
     }
 
 
-@app.function(image=docling_image, secrets=[supabase_secret], timeout=3600)
+@app.function(image=docling_image, secrets=[supabase_secret, cohere_secret], timeout=3600)
 def refresh_project_metadata(project_id: str, reclassify: str = "weak",
                              only_doc: Optional[str] = None) -> list:
     """Refresh every completed document of a project (or one, by filename)."""
@@ -114,4 +114,11 @@ def refresh_project_metadata(project_id: str, reclassify: str = "weak",
         [(project_id, d["id"], reclassify) for d in docs], return_exceptions=True
     ):
         results.append(result if isinstance(result, dict) else {"error": str(result)})
+    # Titles, countries and designs feed the study cards, so rebuild them
+    try:
+        from src.retrieval.study_cards import build_study_cards
+
+        print(f"Study cards: {build_study_cards(project_id)} rebuilt")
+    except Exception as e:
+        print(f"  ⚠ Study cards not rebuilt: {e}")
     return results
