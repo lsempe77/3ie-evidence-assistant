@@ -1,6 +1,6 @@
 # 3ie Evidence Assistant roadmap (formerly DevChat)
 
-**Last Updated:** November 6, 2026
+**Last Updated:** 10 November 2026
 
 > This document tracks **future features** and priorities.  
 > For current implementation status, see [SETUP_TRACKER.md](../SETUP_TRACKER.md).  
@@ -13,6 +13,62 @@
 ---
 
 ## Upcoming Features
+
+### ▶ Next up (after the model review, 10 November 2026)
+
+> Since 9 November 2026 answers come from the "read every relevant study, then synthesise" pipeline with
+> Claude Haiku 5.5 (0.49 of the graduation review's claims, against 0.29 before). Evidence and reasons:
+> [MODEL_REVIEW_2026-11.md](MODEL_REVIEW_2026-11.md). Run the benchmark (`evaluation/run_benchmark.py`)
+> before and after each item below.
+
+1. **N1. Study-level retrieval** - 1-2 d ⬅️ biggest quality limit
+   - Broad questions read only 10 to 52 of the 86 included studies held, because passages are ranked one by
+     one. Rank whole studies first (title, abstract, best passages), then fetch passages within each.
+   - Target: most of the included studies read on broad questions, at no more than double today's cost.
+
+2. **N2. Something to watch while the answer is written** - 2-3 d (asked for by Lucas, 10 Nov 2026)
+   - Today the screen shows skeleton lines for 20 to 40 seconds. The pipeline already knows a lot during
+     that time, so show it as it happens:
+     - **Progress in steps:** "Searching 97 documents", then "Found 52 candidate studies", then "Reading 18
+       of 37", "12 relevant so far", "Writing the answer".
+     - **A live tally:** a bar per direction (positive, null, mixed) that fills as each study is read, with
+       the study designs underneath ("9 RCTs, 3 difference-in-differences").
+     - **Studies arriving:** source cards appear in the Sources panel as they are read, each with its
+       finding, so users can start checking before the answer lands.
+     - Optional: a small map or country list of where the relevant studies took place.
+   - Needs: server-sent events from `/api/query` (emit an event as each study reading completes in
+     `src/agents/study_synthesis.py`), then stream the answer text itself.
+   - Design: extends the loading state and the charts gap in [DESIGN.md](../DESIGN.md). Respect reduced
+     motion, and announce progress politely to screen readers.
+
+3. **N3. Confirm the default model** - 0.5 d
+   - Repeat the three leading configurations twice more. Model differences (under 0.03) were within the
+     noise of single runs.
+   - Then make the benchmark a regression gate: run it before merging prompt, retrieval or model changes.
+
+4. **N4. Follow-up questions** - 0.5 d
+   - The new pipeline dropped the "Related questions" suggestions. Bring them back as one cheap call after
+     the answer is shown, so they do not add to the wait.
+
+5. **N5. Questions in other languages** - 1 d
+   - A Spanish question read only 2 studies against 3 Haku Wiñay documents held. Translate the question for
+     retrieval (keep answering in the user's language), or retrieve with both versions.
+
+6. **N6. Effect sizes and pooled comparisons** - 1-2 weeks
+   - Seven of the 49 gold claims need comparisons across studies, such as smaller income gains when women
+     are the transfer recipients. Extract effect sizes per study (the TVET and OM_QEX work), then let the
+     answer compare them. This is the quantitative layer in [RAG_PIPELINE_PLAN.md](RAG_PIPELINE_PLAN.md).
+
+7. **N7. Design: collection pages** - 2-3 d
+   - Documents and Settings next, following [DESIGN.md](../DESIGN.md). They hold most of the remaining
+     technical wording.
+
+8. **N8. Housekeeping**
+   - Remove the old claim-ledger path (`ANSWER_PIPELINE=agent`) and LlamaIndex once the new path has run
+     for two weeks without problems.
+   - Decommission the old `devchat-mineru` Modal app. Rename the R2 bucket (on hold).
+   - Fix or remove the Sphinx docs workflow (GitHub Pages is not enabled). Check the unrelated
+     "giving-adaptation - web" Vercel project attached to this repository.
 
 ### 🚨 Critical Gaps (Must Fix Before Any Other Improvement)
 
@@ -185,7 +241,7 @@ exits silently on this machine.
 | Faithfulness check | MiniCheck | RAGAS 0.4, Vectara HHEM / FaithJudge, LettuceDetect, FRANQ (ACL 2026 Findings) | Medium: the 5-query baseline is too small to steer by |
 | Answer mode | Single-pass retrieve → Claim Ledger | Routed agentic "deep research" with a claim-evidence graph for complex questions | Medium: Claim Ledger is a good base |
 
-1. **S1. Upgrade the LLM defaults** - 6h ⬅️ biggest gap
+1. **S1. Upgrade the LLM defaults** - done 9 Nov 2026, see [MODEL_REVIEW_2026-11.md](MODEL_REVIEW_2026-11.md)
    - Replace the defaults in `src/config/settings.py` and `api/routes/rags.py` (`DEFAULT_MODEL_CONFIG` and the
      model picker list), and remove retired experimental ids
    - Run each candidate on the T1/T2 ground truth for extraction and on an enlarged faithfulness set (S5)
