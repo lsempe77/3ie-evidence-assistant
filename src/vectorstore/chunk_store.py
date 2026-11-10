@@ -340,6 +340,18 @@ class ChunkStore:
             "p_doc_keys": list(doc_keys), "per_doc": per_doc,
         })
 
+    def estimates_for_studies(self, project_id: str, query_embedding: Sequence[float],
+                              doc_keys: Sequence[str], per_doc: int = 12,
+                              source: str = "tables_v1") -> List[Dict[str, Any]]:
+        """Each listed study's extracted estimates closest to the question (roadmap N6)."""
+        if not doc_keys:
+            return []
+        return self._rpc("estimates_for_studies", {
+            "p_project_id": project_id,
+            "query_embedding": json.dumps([float(x) for x in query_embedding]),
+            "p_doc_keys": list(doc_keys), "per_doc": per_doc, "p_source": source,
+        })
+
     def opening_chunks(self, project_id: str, max_index: int = 4) -> List[Dict[str, Any]]:
         """The first chunks (chunk_index < max_index) of every document in a project."""
         out: List[Dict[str, Any]] = []

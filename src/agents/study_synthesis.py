@@ -55,13 +55,20 @@ Design: {design}. Countries: {countries}.
 PASSAGES FROM THE STUDY (with page numbers):
 {passages}
 
+ESTIMATES EXTRACTED FROM THIS STUDY'S TABLES (closest to the question; id | outcome | arm |
+subgroup | estimate (SE), stars | N | table, page):
+{estimates}
+
 Using ONLY these passages, return JSON:
 {{"relevant": true or false,           // does the study report evidence that answers the question?
   "finding": "<one or two sentences: what this study found on the question, with direction and size as reported (units, %, SD), and the time point if given; empty if not relevant>",
   "direction": "positive" | "negative" | "null" | "mixed" | "not_applicable",
   "quote": "<a short exact quote from the passages that supports the finding>",
   "page": <page number of the quote, or null>,
-  "programme": "<short name of the programme evaluated, with its country, e.g. 'BRAC TUP, Bangladesh' or 'Haku Wiñay, Peru'. At most eight words, no explanation. Empty if the passages do not say>"}}
+  "programme": "<short name of the programme evaluated, with its country, e.g. 'BRAC TUP, Bangladesh' or 'Haku Wiñay, Peru'. At most eight words, no explanation. Empty if the passages do not say>",
+  "estimate_ids": ["<ids of up to four extracted estimates above that directly answer the question, e.g. 'E2'; [] if none>"]}}
+If extracted estimates answer the question, use them in the finding with their numbers, and prefer
+them to vaguer statements in the passages. Never use an estimate that is not listed or quoted.
 Do not use outside knowledge. If the passages only mention the topic without results, relevant is false.
 If the passages are garbled or unreadable (for example a broken table), relevant is false: never report
 on how the text looks."""
@@ -79,6 +86,10 @@ Write the answer:
 - Lead with the overall pattern across the studies, then the important exceptions. Say how
   many studies point each way (e.g. "12 of 15 studies found…") and their designs where it
   matters (RCTs vs quasi-experimental).
+- Where studies list estimates on the same outcome, compare them: how many are positive and
+  statistically significant, how sizes compare (only within the same units), and whether
+  subgroups such as women or the poorest differ. Say this is a comparison of reported
+  estimates, not a meta-analysis, and never average numbers across studies.
 - Count programmes as well as studies. Several studies often evaluate the same programme
   (for example many papers on BRAC's TUP in Bangladesh, also called CFPR or CFPR-TUP). Treat
   name variants of one programme as one programme. Say "N studies of M programmes" and do not
@@ -132,6 +143,7 @@ class StudyReading:
     passage_page: Optional[int] = None
     programme: str = ""          # programme or intervention evaluated, as the reader names it
     error: str = ""              # set when the reader call or its JSON failed
+    estimates: List[Dict[str, Any]] = field(default_factory=list)  # extracted estimates the reader used
 
 
 @dataclass
@@ -189,6 +201,48 @@ async def _chat_stream(client: httpx.AsyncClient, model: str, prompt: str, max_t
                 yield delta
 
 
+def significance(e: Dict[str, Any]) -> Optional[bool]:
+    """
+    Significant at 5%? In order of reliability: the p-value, |estimate / SE| > 1.96, then
+    stars (two or more; one star is often only 10%). None when nothing says.
+    """
+    if e.get("p_value") is not None:
+        return e["p_value"] < 0.05
+    if e.get("standard_error") and e.get("effect_size") is not None:
+        return abs(e["effect_size"] / e["standard_error"]) > 1.96
+    p_text = str(e.get("p_text") or "").strip()
+    stars = p_text.count("*") if p_text and set(p_text) == {"*"} else 0
+    if stars >= 2:
+        return True
+    return None
+
+
+def _estimate_text(e: Dict[str, Any]) -> str:
+    who = "; ".join(x for x in (e.get("treatment_arm"), e.get("subgroup")) if x)
+    value = e.get("literal_text") or e.get("effect_size")
+    sig = {True: "significant at 5%", False: "not significant", None: "significance not reported"}[significance(e)]
+    where = ", ".join(x for x in (e.get("table_number"), f"p. {e['page']}" if e.get("page") else "") if x)
+    n = f", N={e['sample_size']}" if e.get("sample_size") else ""
+    return f"{e.get('outcome_name')}{f' ({who})' if who else ''}: {value} ({sig}{n}; {where})"
+
+
+def _estimate_lines(estimates: List[Dict[str, Any]]) -> str:
+    if not estimates:
+        return "(none extracted)"
+    return "\n".join(f"E{i + 1} | {_estimate_text(e)}" for i, e in enumerate(estimates))
+
+
+def _chosen(estimates: List[Dict[str, Any]], ids: Any) -> List[Dict[str, Any]]:
+    out = []
+    for raw in ids or []:
+        m = re.fullmatch(r"E?(\d+)", str(raw).strip(), re.I)
+        if m and 1 <= int(m.group(1)) <= len(estimates):
+            e = estimates[int(m.group(1)) - 1]
+            if e not in out:
+                out.append(e)
+    return out[:4]
+
+
 def _parse_json(text: str) -> Dict[str, Any]:
     text = text.strip()
     if text.startswith("```"):
@@ -222,6 +276,11 @@ class StudySynthesisPipeline:
         self.reader_model = reader_model
         self.answer_model = answer_model
         self.store = ChunkStore()
+        self._query_embeddings: Dict[str, List[float]] = {}
+        # Estimate lookups started as soon as the candidate studies are known, so they
+        # overlap the passage fetch and rerank instead of delaying the reader (about 9 s).
+        self._estimate_tasks: Dict[str, "asyncio.Task[Dict[str, List[Dict[str, Any]]]]"] = {}
+        self.use_estimates = True
         self.reranker = CohereReranker()
         self.use_study_cards = True
         self._headers = {"Authorization": f"Bearer {os.environ['OPENROUTER_API_KEY']}"}
@@ -232,6 +291,7 @@ class StudySynthesisPipeline:
         best passages of studies ranked highly by their study card but missed by the pool.
         """
         q_emb = await asyncio.to_thread(embed_query, question)
+        self._query_embeddings[question] = q_emb
         pool_task = asyncio.to_thread(
             self.store.hybrid_search, self.project_id, question, q_emb,
             match_count=POOL_SIZE, candidate_count=POOL_SIZE)
@@ -242,6 +302,9 @@ class StudySynthesisPipeline:
         else:
             pool_rows, card_rows = await pool_task, []
         pool = [HybridRetriever._row_to_result(r) for r in pool_rows]
+        if self.use_estimates:
+            keys = list(dict.fromkeys([r.study_id for r in pool] + [c["doc_key"] for c in card_rows]))
+            self._estimate_tasks[question] = asyncio.create_task(self._lookup_estimates(q_emb, keys))
 
         in_pool: Dict[str, int] = {}
         for r in pool:
@@ -291,6 +354,32 @@ class StudySynthesisPipeline:
         groups = [(sid, rows) for sid, rows in _group_by_study(pool).items() if rows[0].score >= STUDY_FLOOR]
         return groups[:MAX_STUDIES_READ], {"retrieve_s": round(t1 - t0, 1), "rerank_s": round(t2 - t1, 1), **info}
 
+    async def _lookup_estimates(self, q_emb: List[float], doc_keys: List[str]) -> Dict[str, List[Dict[str, Any]]]:
+        if not doc_keys:
+            return {}
+        try:
+            rows = await asyncio.to_thread(self.store.estimates_for_studies, self.project_id, q_emb, doc_keys)
+        except Exception:
+            return {}  # estimates are an addition: never fail the answer over them
+        by_doc: Dict[str, List[Dict[str, Any]]] = {}
+        for r in rows:
+            by_doc.setdefault(r["doc_key"], []).append(r)
+        return by_doc
+
+    async def _estimates_for(self, question: str, doc_keys: List[str]) -> Dict[str, List[Dict[str, Any]]]:
+        """Each study's extracted estimates closest to the question; {} if none or switched off."""
+        if not self.use_estimates or not doc_keys:
+            return {}
+        task = self._estimate_tasks.pop(question, None)
+        if task is not None:
+            # Started in _candidates for every candidate study, a superset of those read
+            return await task
+        try:
+            q_emb = self._query_embeddings.get(question) or await asyncio.to_thread(embed_query, question)
+        except Exception:
+            return {}
+        return await self._lookup_estimates(q_emb, doc_keys)
+
     async def read_groups(
         self, question: str, groups: List[tuple],
         on_event: Optional[Callable[[Dict[str, Any]], Awaitable[None]]] = None,
@@ -298,6 +387,7 @@ class StudySynthesisPipeline:
     ) -> List[StudyReading]:
         """Read each candidate study with the reader model (or `model`), in parallel."""
         reader_model = model or self.reader_model
+        estimates_by_doc = await self._estimates_for(question, [sid for sid, _ in groups])
         sem = asyncio.Semaphore(READER_CONCURRENCY)
         async with httpx.AsyncClient(timeout=120, headers=self._headers) as client:
             async def read(number: int, sid: str, rows: List[RetrievalResult]) -> StudyReading:
@@ -307,7 +397,9 @@ class StudySynthesisPipeline:
                 passages = "\n\n".join(
                     f"[page {r.metadata.get('page_start') or '?'}] {r.text.strip()}" for r in rows[:PASSAGES_PER_STUDY]
                 )
+                listed = estimates_by_doc.get(sid, [])
                 prompt = READER_PROMPT.format(question=question, label=_label(meta), design=design,
+                                              estimates=_estimate_lines(listed),
                                               countries=countries, passages=passages)
                 async with sem:
                     # One retry: a failed or malformed reply used to drop the study silently
@@ -330,6 +422,7 @@ class StudySynthesisPipeline:
                     passage=rows[0].text,
                     passage_page=rows[0].metadata.get("page_start"),
                     programme=str(data.get("programme") or ""),
+                    estimates=_chosen(listed, data.get("estimate_ids")),
                     error=str(data.get("error") or ""),
                 )
 
@@ -351,6 +444,7 @@ class StudySynthesisPipeline:
             f"[{numbered[r.study_id]}] {r.label} | design: {r.design} | countries: {r.countries}"
             f" | programme: {r.programme or 'not stated'}\n"
             f"    finding ({r.direction}): {r.finding}"
+            + ("".join(f"\n    estimate: {_estimate_text(e)}" for e in r.estimates) if r.estimates else "")
             for r in relevant
         ) or "(none of the studies read reports evidence on this question)"
         prompt = ANSWER_PROMPT.format(question=question, n_relevant=len(relevant),

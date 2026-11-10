@@ -24,7 +24,6 @@ import json
 import os
 import subprocess
 import sys
-from datetime import date
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -54,10 +53,10 @@ def run(mode: str, label: str) -> dict:
     if proc.returncode != 0:
         print(proc.stdout[-3000:], proc.stderr[-3000:], sep="\n")
         raise SystemExit("benchmark run failed")
-    short = answer.split("/")[-1].replace(".", "-")
-    path = ROOT / "evaluation/results" / f"benchmark_graduation_sr_v0_{label}_{short}_{date.today().isoformat()}.json"
-    if not path.exists():  # fall back to the newest matching file
-        path = Path(sorted(glob.glob(str(ROOT / f"evaluation/results/benchmark_graduation_sr_v0_{label}_*.json")))[-1])
+    # The run just written is the newest matching file (same-day reruns get a time suffix)
+    path = max(glob.glob(str(ROOT / f"evaluation/results/benchmark_graduation_sr_v0_{label}_*.json")),
+               key=os.path.getmtime)
+    path = Path(path)
     return json.loads(path.read_text(encoding="utf-8"))
 
 

@@ -59,25 +59,32 @@
    - A Spanish question read only 2 studies against 3 Haku Wiñay documents held. Translate the question for
      retrieval (keep answering in the user's language), or retrieve with both versions.
 
-6. **N6. Effect sizes and pooled comparisons** - 1-2 weeks ⬅️ next
+6. **N6. Effect sizes and pooled comparisons** - steps 1 and 2 done 10 Nov 2026, step 3 ⬅️ next
    - Seven of the 49 gold claims need comparisons across studies, such as smaller income gains when women
      are the transfer recipients.
-   - Assets to reuse (read 10 Nov 2026): `pipelines/TVET/pipeline` runs a three-stage extraction (find
-     tables, keep results tables, extract rows; vendored from `pipelines/8w-sr/OM_QEX`), then validation
-     rules (covariates, balance checks, first stages, sample-size rows), dedupe, and normalisation to an
-     outcome taxonomy, arms and subgroups. It has a human answer key for six papers and a drift check.
-     TVET kept cells verbatim (`literal_text`) but left effect_size, SE and p empty by design, and pages
-     for 13% of rows. OM_QEX holds 9,295 extracted graduation estimates for 100 studies (effect size 96%,
-     SE 71%, p 52%, N 70%; 74% read from page images), keyed by EPPI ID, plus 12 hand-extracted studies.
-   - Step 1 (about 1 day, no extraction cost): import the OM_QEX estimates into an `effect_estimates`
-     table linked to the collection's documents, spot-check them against the hand-extracted studies, give
-     the reader each study's estimates for the asked outcome, and show an evidence table in Sources.
-   - Step 2 (3-5 days): port the three stages to Modal on the saved Docling output (tables with pages),
-     extract numbers rather than an inventory, parse cells to numbers in tested code, and choose the
-     model against the TVET and graduation answer keys first (about $8 with Haiku or $160 with Sonnet for
-     97 papers, by TVET's token estimate).
+   - Step 1 (done, PR #21): the `effect_estimates` table, and 7,127 OM_QEX estimates for 77 studies imported
+     as source `om_qex_2025`. Checked against the 20 hand-extracted estimates of three studies, OM_QEX found
+     8 and had the right SE for 4 of them, so it is kept for reference and not used in answers.
+   - Step 2 (done): our own extraction, `src/extraction/table_estimates.py`. One Haiku 5.5 call per Docling
+     table copies the estimate, SE and p cells verbatim, tested code parses them to numbers (thousands
+     separators, decimal commas, stars, intervals), and a row is kept only if its cells appear in the
+     table. On the hand-extracted check it found 20 of 20 estimates with 19 of 20 SEs right. On the
+     collection: 20,465 estimates from 90 of 97 documents (SE 78%, N 59%, stars or p 41%, page 100%) for
+     about $2.50 (`scripts/extract_estimates.py`, then `scripts/embed_estimates.py`).
+   - Each study's 12 estimates closest to the question go to the reader, which names the ones that
+     answer it. Source cards list them as "Estimates from the paper" with the printed value,
+     significance, N, table and page. The answer compares them across studies and never averages them.
+   - Benchmark (full gate): 0.559 against the 0.552 baseline, so no loss, and within the run-to-run
+     noise of about 0.03. The pooled claims did not move (grad-003 and grad-005 still 0). On the
+     women-targeting question 9 of 12 relevant studies now cite their estimates, but the gold claim
+     compares programmes that target women with those that do not, which needs step 3.
+   - Known weaknesses: arm labels sometimes miss the column (three "Income, pooled panel" values from
+     different specifications), a few values are column headers such as "0", and some N values are
+     cluster counts. The lookup adds about 3 s, overlapped with the rerank.
+   - Still to do for step 2: run the extraction on new uploads in the Modal pipeline.
    - Step 3: answers that compare studies by outcome and subgroup (counts by direction, sizes,
-     significance, standardised effects where SDs are reported), always flagged as not a meta-analysis.
+     significance, standardised effects where SDs are reported), grouped by programme features such as
+     women as recipients, always flagged as not a meta-analysis.
 
 7. **N7. Design: collection pages** - 2-3 d
    - Documents and Settings next, following [DESIGN.md](../DESIGN.md). They hold most of the remaining

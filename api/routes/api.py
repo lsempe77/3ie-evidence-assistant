@@ -18,6 +18,7 @@ from api.schemas import (
     CompareRequest,
     CompareResponse,
     CitationResponse,
+    EstimateResponse,
     EvidenceHealth,
     FeatureSuggestionItem,
     FeatureSuggestionRequest,
@@ -167,6 +168,8 @@ def _year(value) -> Optional[int]:
 
 def _study_response(r, number: Optional[int] = None) -> StudyResponse:
     """One read study in the frontend's shape."""
+    from src.agents.study_synthesis import significance
+
     meta = r.metadata
     countries = meta.get("countries") or []
     sectors = meta.get("sectors") or []
@@ -186,6 +189,11 @@ def _study_response(r, number: Optional[int] = None) -> StudyResponse:
         pdfUrl=_generate_pdf_url(r.study_id, meta.get("source")),
         finding=r.finding,
         citationNumber=number,
+        estimates=[EstimateResponse(
+            outcome=e.get("outcome_name") or "", arm=e.get("treatment_arm"), subgroup=e.get("subgroup"),
+            value=e.get("literal_text") or "", effect=e.get("effect_size"), se=e.get("standard_error"),
+            significant=significance(e), n=e.get("sample_size"), table=e.get("table_number"), page=e.get("page"),
+        ) for e in (r.estimates or [])],
     )
 
 
