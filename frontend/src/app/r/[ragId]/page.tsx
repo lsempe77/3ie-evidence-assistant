@@ -12,7 +12,6 @@ import { useState, useCallback, useEffect } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import {
-  SettingsDrawer,
   defaultSettings,
   EvidencePanel,
   AnswerPanel,
@@ -161,7 +160,7 @@ export default function RAGChatPage() {
 
   const [selectedStudies, setSelectedStudies] = useState<Study[]>([]);
   const [highlightedCitation, setHighlightedCitation] = useState<number | undefined>();
-  const [searchSettings, setSearchSettings] = useState<SearchSettings>(defaultSettings);
+  const [searchSettings] = useState<SearchSettings>(defaultSettings);
   const [isCompareModalOpen, setIsCompareModalOpen] = useState(false);
 
   const [chatHistory, setChatHistory] = useState<ChatHistoryItem[]>([]);
@@ -619,7 +618,10 @@ export default function RAGChatPage() {
             </Button>
           </>
         }
-        trailing={<SettingsDrawer settings={searchSettings} onSettingsChange={setSearchSettings} />}
+        // Answer settings are hidden while the default answer model is also the strongest
+        // one benchmarked (Sonnet 5.5, 10 Nov 2026). Bring the "Deeper answer" switch back
+        // with a stronger model behind it: <SettingsDrawer settings={searchSettings} onSettingsChange={setSearchSettings} />
+        trailing={null}
       />
 
       <Sheet open={isHistoryDrawerOpen} onOpenChange={setIsHistoryDrawerOpen}>

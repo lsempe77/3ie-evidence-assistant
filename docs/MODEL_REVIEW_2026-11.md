@@ -87,6 +87,30 @@ only.
 5. **Product:** show "read 31 studies, 25 relevant" with the answer, and list the per-study findings in the
    Sources panel. They are the evidence table users need to check the synthesis.
 
+## Update, 10 November 2026: study-level retrieval and open-weight models
+
+Study cards (roadmap N1) doubled the studies read per question (23 to 43) and relevant (10 to 20).
+With twice as many findings to weigh, the answer model started to matter. All rows below use the same
+benchmark and both judges.
+
+| Reader | Answer model | All claims | Gaps answered as gaps | Contradicted | Seconds |
+| --- | --- | --- | --- | --- | --- |
+| Claude Haiku 5.5 | Claude Haiku 5.5 | 0.52 | 2 of 2 | 3 | 39 |
+| MiniMax M3.1 Flash | Claude Haiku 5.5 | 0.48 | 2 of 2 | 3 | 32 |
+| MiniMax M3.1 Flash | Claude Sonnet 5.5 | 0.56 | 2 of 2 | 2 | 27 |
+| MiniMax M3.1 Flash | Kimi K3.1 Pro | 0.57 | 1 of 2 | 4 | 36 |
+
+On the same readings Sonnet beat Haiku by 0.08, and both judges agree. Sonnet was also faster, because
+Haiku reasons longer before it writes. Kimi K3.1 Pro (open weights) costs the same as Sonnet and scored
+the same within noise, but missed an evidence-gap question.
+
+Cheap open-weight readers (`evaluation/reader_compare.py`, about 800 readings) agreed with Haiku on 85 to
+88% of relevance decisions and kept 92 to 95% of their numbers traceable to the passages. MiniMax M3.1
+Flash halves the reading cost, about 0.6 cents a question, but lowered the benchmark score by about 0.03.
+
+**Decision (10 November 2026):** Claude Haiku 5.5 reads, Claude Sonnet 5.5 answers, about 4.5 US cents a
+question. The "Deeper answer" switch is hidden until a stronger model is benchmarked.
+
 ## Limits of this review
 
 - One run per configuration. Single questions swung by up to 0.25 between runs of the same pipeline.

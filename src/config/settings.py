@@ -136,7 +136,9 @@ class Settings(BaseSettings):
     answer_pipeline: str = Field(default="studies", description="studies | agent")
     reader_model: str = Field(default="anthropic/claude-haiku-5.5",
                               description="Reads each candidate study (via OpenRouter)")
-    answer_model: str = Field(default="anthropic/claude-haiku-5.5",
+    # Sonnet since 10 Nov 2026: +0.08 on the review's claims over Haiku on the same readings,
+    # and faster (Haiku reasons longer before writing). About 4.5 cents a question in all.
+    answer_model: str = Field(default="anthropic/claude-sonnet-5.5",
                               description="Writes the answer from the study findings")
     deep_answer_model: str = Field(default="anthropic/claude-sonnet-5.5",
                                    description="Answer model when the user asks for a deeper answer")
