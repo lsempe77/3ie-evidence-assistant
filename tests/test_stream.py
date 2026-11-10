@@ -21,6 +21,9 @@ def reading(n, sid, relevant=True):
 
 
 class FakePipeline:
+    async def suggest_followups(self, question, answer, readings):
+        return ["Do the savings effects last?"]
+
     async def run_events(self, question):
         r1, r2 = reading(1, "s1"), reading(2, "s2", relevant=False)
         yield {"type": "stage", "stage": "searching"}
@@ -74,6 +77,7 @@ def test_stream_sends_progress_then_answer_then_done(client):
     assert [s["relevant"] for s in studies] == [True, False]
     assert studies[0]["study"]["finding"] == "Savings rose in s1." and studies[1]["study"] is None
     assert "".join(d["text"] for e, d in events if e == "delta") == "Savings rose [1]."
-    done = events[-1]
+    assert events[-1] == ("suggestions", {"questions": ["Do the savings effects last?"]})
+    done = events[-2]
     assert done[0] == "done" and done[1]["answer"] == "Savings rose [1]." and done[1]["studiesRead"] == 2
     assert [s["id"] for s in done[1]["studies"]] == ["s1"]

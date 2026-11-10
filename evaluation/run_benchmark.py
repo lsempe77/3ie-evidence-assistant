@@ -215,6 +215,7 @@ async def main() -> None:
     ap.add_argument("benchmark")
     ap.add_argument("--project-id", required=True)
     ap.add_argument("--only", help="comma-separated item ids")
+    ap.add_argument("--subset", choices=["quick"], help="run only items marked quick: true")
     ap.add_argument("--label", default="baseline")
     ap.add_argument("--pipeline", choices=["agent", "studies"], default="agent")
     ap.add_argument("--answer-models", default="anthropic/claude-sonnet-5.5",
@@ -228,6 +229,8 @@ async def main() -> None:
     if args.only:
         wanted = set(args.only.split(","))
         items = [i for i in items if i["id"] in wanted]
+    if args.subset == "quick":
+        items = [i for i in items if i.get("quick")]
     included = list(csv.DictReader(open(ROOT / "evaluation/benchmark/graduation_included_studies.csv", encoding="utf-8")))
     judges = args.judges.split(",")
     key = os.environ["OPENROUTER_API_KEY"]

@@ -245,9 +245,12 @@ def _pipeline(project_id: str, deep: bool):
 
 async def _answer_with_study_synthesis(question: str, project_id: str, deep: bool) -> QueryResponse:
     """Answer with the read-then-synthesise pipeline and map it to the frontend's shape."""
-    result = await _pipeline(project_id, deep).run(question)
+    pipe = _pipeline(project_id, deep)
+    result = await pipe.run(question)
     logger.info(f"Study synthesis: {result.timings}, model={result.model_used}")
-    return _query_response(result)
+    response = _query_response(result)
+    response.suggestions = await pipe.suggest_followups(question, result.answer, result.readings)
+    return response
 
 
 def _sse(event: str, data) -> str:
@@ -261,7 +264,7 @@ async def query_evidence_stream(request: QueryRequest, user: Optional[Authentica
 
     Events: stage {stage: searching|reading|writing, documents}, candidates {total},
     study {done, total, relevant, direction, design, programme, study}, delta {text},
-    done {the full /api/query response}, error {message}.
+    done {the full /api/query response}, suggestions {questions}, error {message}.
     """
     project_ref = request.collection or request.project_id
     if not project_ref:
@@ -278,8 +281,9 @@ async def query_evidence_stream(request: QueryRequest, user: Optional[Authentica
         if cached:
             yield _sse("done", jsonable_encoder(cached))
             return
+        pipe = _pipeline(project_id, deep)
         try:
-            async for ev in _pipeline(project_id, deep).run_events(request.query):
+            async for ev in pipe.run_events(request.query):
                 kind = ev["type"]
                 if kind == "stage":
                     yield _sse("stage", {"stage": ev["stage"], "documents": project.get("document_count")})
@@ -299,11 +303,15 @@ async def query_evidence_stream(request: QueryRequest, user: Optional[Authentica
                 elif kind == "delta":
                     yield _sse("delta", {"text": ev["text"]})
                 elif kind == "result":
-                    response = _query_response(ev["result"])
-                    logger.info(f"Study synthesis (stream): {ev['result'].timings}")
+                    result = ev["result"]
+                    response = _query_response(result)
+                    logger.info(f"Study synthesis (stream): {result.timings}")
+                    yield _sse("done", jsonable_encoder(response))
+                    # Follow-up questions after the answer, so they add nothing to the wait (N4)
+                    response.suggestions = await pipe.suggest_followups(request.query, result.answer, result.readings)
+                    yield _sse("suggestions", {"questions": response.suggestions})
                     await cache.set(query=request.query, response=response, filters=None,
                                     settings_dict=cache_key_settings)
-                    yield _sse("done", jsonable_encoder(response))
         except Exception as e:
             logger.error(f"Streaming query failed: {e}", exc_info=True)
             yield _sse("error", {"message": "The answer could not be written. Try again."})
