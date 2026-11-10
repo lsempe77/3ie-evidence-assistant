@@ -68,7 +68,7 @@
      for two weeks without problems.
    - Decommission the old `devchat-mineru` Modal app. Rename the R2 bucket (on hold).
    - Fix or remove the Sphinx docs workflow (GitHub Pages is not enabled). Check the unrelated
-     "giving-adaptation - web" Vercel project attached to this repository.
+     Vercel project `giving-adaptation` (web) attached to this repository.
 
 ### 🚨 Critical Gaps (Must Fix Before Any Other Improvement)
 
