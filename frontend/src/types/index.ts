@@ -44,6 +44,20 @@ export type StudyDesign =
   | "theory"
   | "unknown";
 
+/** An effect estimate copied from one of the study's tables (roadmap N6). */
+export interface Estimate {
+  outcome: string;
+  arm?: string | null;
+  subgroup?: string | null;
+  value: string;  // as printed in the table, e.g. "4,408*** (1,369)"
+  effect?: number | null;
+  se?: number | null;
+  significant?: boolean | null;  // at 5%; null when the paper does not say
+  n?: number | null;
+  table?: string | null;
+  page?: number | null;
+}
+
 export interface Study {
   id: string;
   title: string;
@@ -59,6 +73,7 @@ export interface Study {
   score: number;
   pdfUrl?: string;
   finding?: string;  // what this study found on the question
+  estimates?: Estimate[];  // estimates from the paper's tables that the answer used
   citationNumber?: number;
 }
 

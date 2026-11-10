@@ -27,7 +27,7 @@ import json
 import os
 import sys
 import time
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 
 import httpx
@@ -193,6 +193,8 @@ def write_results(label: str, bench_path: str, project_id: str, results: list, e
     }
     safe_label = label.replace(".", "-")  # dots would be read as a file suffix
     out = ROOT / "evaluation/results" / f"benchmark_{Path(bench_path).stem}_{safe_label}_{date.today().isoformat()}"
+    if out.with_suffix(".json").exists():  # never overwrite an earlier run of the same day
+        out = out.with_name(out.name + "_" + datetime.now().strftime("%H%M%S"))
     out.with_suffix(".json").write_text(json.dumps({"summary": summary, "results": results}, indent=2, ensure_ascii=False), encoding="utf-8")
     lines = [f"# Benchmark {summary['benchmark']}: {label} ({summary['date']})", "", "| Metric | Value |", "| --- | --- |"]
     lines += [f"| {k} | {v} |" for k, v in summary.items() if k != "model_config"]

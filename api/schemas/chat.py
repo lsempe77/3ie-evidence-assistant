@@ -43,6 +43,20 @@ class QueryRequest(BaseModel):
     project_id: Optional[str] = Field(None, description="RAG project ID for model config lookup")
 
 
+class EstimateResponse(BaseModel):
+    """One effect estimate extracted from a study's tables (roadmap N6)."""
+    outcome: str
+    arm: Optional[str] = None
+    subgroup: Optional[str] = None
+    value: str = ""                 # as printed, e.g. "4,408*** (1,369)"
+    effect: Optional[float] = None
+    se: Optional[float] = None
+    significant: Optional[bool] = None
+    n: Optional[int] = None
+    table: Optional[str] = None
+    page: Optional[int] = None
+
+
 class StudyResponse(BaseModel):
     """A study in the format expected by the frontend."""
     id: str
@@ -59,6 +73,7 @@ class StudyResponse(BaseModel):
     score: float = 0.0
     pdfUrl: Optional[str] = None
     finding: Optional[str] = None  # what this study found on the question (study-synthesis pipeline)
+    estimates: List[EstimateResponse] = []  # extracted estimates the reader used (roadmap N6)
     citationNumber: Optional[int] = None
     
     @field_validator('authors', mode='before')

@@ -1,7 +1,7 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
-import { Study } from "@/types";
+import { Estimate, Study } from "@/types";
 import { FileText, GitCompare, X, Check } from "lucide-react";
 import { StudyDesignBadge } from "./StudyDesignBadge";
 import { cn } from "@/lib/utils";
@@ -28,6 +28,40 @@ function Tag({ children }: { children: React.ReactNode }) {
     <span className="inline-flex items-center rounded-sm border border-hairline bg-surface-1 px-1.5 py-0.5 text-caption text-ink-muted">
       {children}
     </span>
+  );
+}
+
+const significanceLabel = (s: Estimate["significant"]) =>
+  s === true ? "significant at 5%" : s === false ? "not significant" : "significance not reported";
+
+/** The estimates the answer used, as printed in the paper, with where to find them. */
+function EstimateList({ estimates }: { estimates: Estimate[] }) {
+  return (
+    <div className="mt-3">
+      <h4 className="text-caption font-medium text-ink-muted">Estimates from the paper</h4>
+      <ul className="mt-1 divide-y divide-hairline rounded-sm border border-hairline">
+        {estimates.map((e, i) => {
+          const who = [e.arm, e.subgroup].filter(Boolean).join(", ");
+          const where = [e.table, e.page ? `p. ${e.page}` : null].filter(Boolean).join(", ");
+          return (
+            <li key={i} className="px-3 py-2 text-body">
+              <div className="flex flex-wrap items-baseline justify-between gap-x-3">
+                <span className="min-w-0 break-words text-ink">
+                  {e.outcome}
+                  {who && <span className="text-ink-muted"> ({who})</span>}
+                </span>
+                <span className="tabular shrink-0 font-medium text-ink">{e.value}</span>
+              </div>
+              <p className="tabular mt-0.5 text-caption text-ink-muted">
+                {significanceLabel(e.significant)}
+                {e.n ? ` · N = ${e.n.toLocaleString("en-GB")}` : ""}
+                {where ? ` · ${where}` : ""}
+              </p>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
   );
 }
 
@@ -86,6 +120,8 @@ export function StudyCard({
       </div>
 
       {study.finding && <p className="mt-3 text-body text-ink">{study.finding}</p>}
+
+      {study.estimates && study.estimates.length > 0 && <EstimateList estimates={study.estimates} />}
 
       {study.snippet && (
         <blockquote className="mt-3 line-clamp-4 rounded-sm bg-surface-2 px-3 py-2 text-body text-ink-muted">
