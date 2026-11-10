@@ -341,7 +341,10 @@ export default function RAGChatPage() {
               setAnswer((prev) => prev + (data.text as string));
             } else if (event === "done") {
               finished = true;
+              setIsLoading(false); // references and summaries show now; follow-ups arrive next
               void applyResponse(data as unknown as QueryResult);
+            } else if (event === "suggestions") {
+              setSuggestions(((data.questions as string[]) || []).slice(0, 3));
             } else if (event === "error") {
               throw new Error((data.message as string) || "The answer could not be written. Try again.");
             }

@@ -25,6 +25,9 @@ class FakePipeline:
     def __init__(self, project_id, reader_model, answer_model):
         FakePipeline.answer_model = answer_model
 
+    async def suggest_followups(self, question, answer, readings):
+        return ["What about women?"]
+
     async def run(self, question):
         readings = [reading(1, "s1"), reading(2, "s2", relevant=False), reading(3, "s3", design="difference_in_differences", year=2021, score=0.35)]
         # relevant studies are numbered [1] s1, [2] s3; the answer cites only [2]
@@ -56,6 +59,7 @@ def test_maps_relevant_studies_citations_and_counts(fake):
     assert resp.evidenceHealth.studyCount == 2
     assert resp.evidenceHealth.dateRange == "2015 to 2021"
     assert resp.evidenceHealth.coverageWarning  # fewer than three studies
+    assert resp.suggestions == ["What about women?"]
 
 
 def test_deep_answer_uses_the_deep_model(fake, monkeypatch):

@@ -22,6 +22,9 @@
 #   expect_refusal the answer should say the evidence is limited or absent, and not invent findings
 #
 # Item types: synthesis, quantitative, implementation, cost, country, gap, multilingual
+#
+# quick: true marks the 5-item subset run on every pull request (evaluation/gate.py):
+# one synthesis, implementation, cost, evidence-gap and Spanish item.
 
 items:
   - id: grad-001
@@ -34,6 +37,7 @@ items:
 
   - id: grad-002
     type: synthesis
+    quick: true
     question: What are the effects of graduation programmes on household income and consumption?
     gold_claims:
       - Total income rises modestly in both the short and the long term.
@@ -79,6 +83,7 @@ items:
 
   - id: grad-007
     type: implementation
+    quick: true
     question: Which design and implementation factors make graduation programmes more effective?
     gold_claims:
       - Coherent combination and sequencing of components is key to effectiveness.
@@ -116,6 +121,7 @@ items:
 
   - id: grad-011
     type: cost
+    quick: true
     question: Are graduation programmes good value for money compared with cash transfers?
     gold_claims:
       - Costs outweigh benefits in the first 1 to 3 years.
@@ -164,6 +170,7 @@ items:
 
   - id: grad-016
     type: gap
+    quick: true
     question: What do we know about the effects of graduation programmes ten years or more after they end?
     expect_refusal: true
     gold_claims:
@@ -192,6 +199,7 @@ items:
 
   - id: grad-019
     type: multilingual
+    quick: true
     question: ¿Qué efectos tuvo el programa Haku Wiñay en Perú?
     gold_claims:
       - The answer is in Spanish.

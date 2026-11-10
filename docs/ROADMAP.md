@@ -46,12 +46,12 @@
    - Design: extends the loading state and the charts gap in [DESIGN.md](../DESIGN.md). Respect reduced
      motion, and announce progress politely to screen readers.
 
-3. **N3. Confirm the default model** - done 10 Nov 2026: Haiku 5.5 reads, Sonnet 5.5 answers (0.56 vs 0.48 for Haiku answers on the same readings). Cheap open-weight readers lost about 0.03 to save 0.6 cents a question; Kimi K3.1 Pro matched Sonnet at the same price but missed a gap question. "Deeper answer" is hidden until a stronger model (Opus 5.5) is benchmarked. Still open: make the benchmark a merge gate
+3. **N3. Confirm the default model** - done 10 Nov 2026: Haiku 5.5 reads, Sonnet 5.5 answers (0.56 vs 0.48 for Haiku answers on the same readings). Cheap open-weight readers lost about 0.03 to save 0.6 cents a question; Kimi K3.1 Pro matched Sonnet at the same price but missed a gap question. "Deeper answer" is hidden until a stronger model (Opus 5.5) is benchmarked. Benchmark gate done 10 Nov 2026: `evaluation/gate.py` and `.github/workflows/benchmark.yml` (quick 5-item check on pull requests, full check on demand, baseline in `evaluation/benchmark/baseline.json`; needs four repository secrets)
    - Repeat the three leading configurations twice more. Model differences (under 0.03) were within the
      noise of single runs.
    - Then make the benchmark a regression gate: run it before merging prompt, retrieval or model changes.
 
-4. **N4. Follow-up questions** - 0.5 d
+4. **N4. Follow-up questions** - done 10 Nov 2026 (one Haiku call after the answer, sent as a `suggestions` event, in the question's language)
    - The new pipeline dropped the "Related questions" suggestions. Bring them back as one cheap call after
      the answer is shown, so they do not add to the wait.
 
@@ -59,10 +59,25 @@
    - A Spanish question read only 2 studies against 3 Haku Wiñay documents held. Translate the question for
      retrieval (keep answering in the user's language), or retrieve with both versions.
 
-6. **N6. Effect sizes and pooled comparisons** - 1-2 weeks
+6. **N6. Effect sizes and pooled comparisons** - 1-2 weeks ⬅️ next
    - Seven of the 49 gold claims need comparisons across studies, such as smaller income gains when women
-     are the transfer recipients. Extract effect sizes per study (the TVET and OM_QEX work), then let the
-     answer compare them. This is the quantitative layer in [RAG_PIPELINE_PLAN.md](RAG_PIPELINE_PLAN.md).
+     are the transfer recipients.
+   - Assets to reuse (read 10 Nov 2026): `pipelines/TVET/pipeline` runs a three-stage extraction (find
+     tables, keep results tables, extract rows; vendored from `pipelines/8w-sr/OM_QEX`), then validation
+     rules (covariates, balance checks, first stages, sample-size rows), dedupe, and normalisation to an
+     outcome taxonomy, arms and subgroups. It has a human answer key for six papers and a drift check.
+     TVET kept cells verbatim (`literal_text`) but left effect_size, SE and p empty by design, and pages
+     for 13% of rows. OM_QEX holds 9,295 extracted graduation estimates for 100 studies (effect size 96%,
+     SE 71%, p 52%, N 70%; 74% read from page images), keyed by EPPI ID, plus 12 hand-extracted studies.
+   - Step 1 (about 1 day, no extraction cost): import the OM_QEX estimates into an `effect_estimates`
+     table linked to the collection's documents, spot-check them against the hand-extracted studies, give
+     the reader each study's estimates for the asked outcome, and show an evidence table in Sources.
+   - Step 2 (3-5 days): port the three stages to Modal on the saved Docling output (tables with pages),
+     extract numbers rather than an inventory, parse cells to numbers in tested code, and choose the
+     model against the TVET and graduation answer keys first (about $8 with Haiku or $160 with Sonnet for
+     97 papers, by TVET's token estimate).
+   - Step 3: answers that compare studies by outcome and subgroup (counts by direction, sizes,
+     significance, standardised effects where SDs are reported), always flagged as not a meta-analysis.
 
 7. **N7. Design: collection pages** - 2-3 d
    - Documents and Settings next, following [DESIGN.md](../DESIGN.md). They hold most of the remaining

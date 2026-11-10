@@ -63,6 +63,7 @@ data/
 !vercel.json
 !tsconfig.json
 !tsconfig*.json
+!evaluation/benchmark/baseline.json
 !components.json
 !next.config.js
 !next.config.ts

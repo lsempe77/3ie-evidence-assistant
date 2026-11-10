@@ -95,6 +95,25 @@ Write the answer:
 - Use short headings only if the answer is long. Aim for 200 to 450 words. No preamble."""
 
 
+FOLLOWUP_PROMPT = """A researcher asked a question of a collection of development studies and got
+the answer below. Suggest three follow-up questions they might ask next.
+
+QUESTION: {question}
+
+ANSWER:
+{answer}
+
+RELEVANT STUDIES (title | design | countries | programme):
+{covered}
+
+Rules:
+- Each question must be answerable from studies like these: go deeper on an outcome,
+  subgroup (women, youth, poorest), country, programme, time horizon, cost, or a gap the
+  answer named. Do not suggest topics the studies do not cover.
+- Write in the same language as the question. At most 15 words each. No numbering.
+Return JSON: {{"questions": ["...", "...", "..."]}}"""
+
+
 @dataclass
 class StudyReading:
     number: int
@@ -355,6 +374,26 @@ class StudySynthesisPipeline:
         async with httpx.AsyncClient(timeout=180, headers=self._headers) as client:
             text = await _chat(client, self.answer_model, prompt, max_tokens=6000, effort="medium")
         return self._result(text, numbered, relevant, readings, time.time() - t0)
+
+    async def suggest_followups(self, question: str, answer: str, readings: List[StudyReading],
+                                model: Optional[str] = None) -> List[str]:
+        """
+        Three follow-up questions a reader might ask next (roadmap N4), grounded in what the
+        relevant studies cover. One cheap call made after the answer, so it adds no wait.
+        """
+        relevant = [r for r in readings if r.relevant and r.finding][:30]
+        if not relevant:
+            return []
+        covered = "\n".join(f"- {r.label[:110]} | {r.design} | {r.countries} | {r.programme}" for r in relevant)
+        prompt = FOLLOWUP_PROMPT.format(question=question, answer=answer[:2500], covered=covered)
+        try:
+            async with httpx.AsyncClient(timeout=60, headers=self._headers) as client:
+                data = _parse_json(await _chat(client, model or self.reader_model, prompt,
+                                               max_tokens=1200, json_mode=True))
+        except Exception:
+            return []
+        questions = [str(q).strip() for q in (data.get("questions") or []) if str(q).strip()]
+        return [q for q in questions if q.lower() != question.strip().lower()][:3]
 
     async def run_events(self, question: str) -> AsyncIterator[Dict[str, Any]]:
         """

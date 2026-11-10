@@ -1,0 +1,75 @@
+# Benchmark gate (roadmap N3): fail a pull request when answer quality drops.
+#
+# Quick check (5 questions, about $0.20) on pull requests that touch the answer path;
+# full check (20 questions, about $1) on demand. Compares against
+# evaluation/benchmark/baseline.json. See evaluation/gate.py.
+#
+# Needs repository secrets: OPENROUTER_API_KEY, COHERE_API_KEY, SUPABASE_URL,
+# SUPABASE_SERVICE_ROLE_KEY. Without them the job is skipped with a notice.
+name: Benchmark gate
+
+on:
+  pull_request:
+    paths:
+      - "src/**"
+      - "api/**"
+      - "evaluation/**"
+      - "requirements*.txt"
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "quick (5 questions) or full (20 questions)"
+        required: true
+        default: quick
+        type: choice
+        options: [quick, full]
+
+concurrency:
+  group: benchmark-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true   # a new push supersedes the running check, and its cost
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+      COHERE_API_KEY: ${{ secrets.COHERE_API_KEY }}
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+    steps:
+      - name: Check secrets
+        id: secrets
+        run: |
+          if [ -z "$OPENROUTER_API_KEY" ] || [ -z "$COHERE_API_KEY" ] || [ -z "$SUPABASE_URL" ] || [ -z "$SUPABASE_SERVICE_ROLE_KEY" ]; then
+            echo "::notice::Benchmark gate skipped: repository secrets are not set (see .github/workflows/benchmark.yml)"
+            echo "ok=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@v4
+        if: steps.secrets.outputs.ok == 'true'
+
+      - uses: actions/setup-python@v5
+        if: steps.secrets.outputs.ok == 'true'
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements-prod.txt
+
+      - name: Install
+        if: steps.secrets.outputs.ok == 'true'
+        run: pip install -r requirements-prod.txt pyyaml
+
+      - name: Run the gate
+        if: steps.secrets.outputs.ok == 'true'
+        run: python evaluation/gate.py --mode ${{ inputs.mode || 'quick' }}
+
+      - name: Keep the results
+        if: always() && steps.secrets.outputs.ok == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-results
+          path: evaluation/results/benchmark_graduation_sr_v0_gate-*
+          if-no-files-found: ignore
