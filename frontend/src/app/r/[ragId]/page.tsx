@@ -44,6 +44,9 @@ import {
   authHeaders,
 } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { postEventStream, StreamUnavailableError } from "@/lib/stream";
+import { AnswerProgress, emptyProgress } from "@/components/workbench/AnswerProgress";
+import type { AnswerProgressState, ProgressStage } from "@/components/workbench/AnswerProgress";
 import { openPdfInNewTab } from "@/lib/pdf";
 
 const defaultEvidenceHealth: EvidenceHealth = {
@@ -60,6 +63,15 @@ const EXAMPLE_QUESTIONS = [
   "Do the effects last after the programme ends?",
   "Where is the evidence weakest or missing?",
 ];
+
+interface QueryResult {
+  answer?: string;
+  citations?: Citation[];
+  studies?: Study[];
+  suggestions?: string[];
+  evidenceHealth?: EvidenceHealth;
+  studiesRead?: number;
+}
 
 interface RAGProject {
   id: string;
@@ -144,6 +156,8 @@ export default function RAGChatPage() {
   const [evidenceHealth, setEvidenceHealth] = useState<EvidenceHealth>(defaultEvidenceHealth);
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [studiesRead, setStudiesRead] = useState<number | undefined>();
+  const [progress, setProgress] = useState<AnswerProgressState | null>(null);
+  const [arrivingStudies, setArrivingStudies] = useState<Study[]>([]);
 
   const [selectedStudies, setSelectedStudies] = useState<Study[]>([]);
   const [highlightedCitation, setHighlightedCitation] = useState<number | undefined>();
@@ -241,40 +255,29 @@ export default function RAGChatPage() {
       setPdfViewerOpen(false);
       window.scrollTo({ top: 0 });
 
-      try {
-        const response = await fetch(`${API_BASE_URL}/api/query`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json", ...(await authHeaders()) },
-          body: JSON.stringify({
-            query: searchQuery,
-            collection: project.id,
-            project_id: project.id,
-            settings: searchSettings,
-          }),
-        });
+      const requestBody = {
+        query: searchQuery,
+        collection: project.id,
+        project_id: project.id,
+        settings: searchSettings,
+      };
 
-        if (!response.ok) {
-          throw new Error(
-            response.status === 429
-              ? "Too many questions in a short time. Wait a minute, then try again."
-              : "The answer could not be written. Try again, and if it keeps failing, try a shorter question."
-          );
-        }
-
-        const data = await response.json();
+      // The full answer, from the stream's "done" event or from /api/query
+      const applyResponse = async (data: QueryResult) => {
         const responseData = {
           citations: data.citations || [],
           studies: data.studies || [],
           suggestions: data.suggestions || [],
           evidenceHealth: data.evidenceHealth || defaultEvidenceHealth,
         };
-
         setStudies(responseData.studies);
         setCitations(responseData.citations);
         setAnswer(data.answer || "");
         setSuggestions(responseData.suggestions);
         setEvidenceHealth(responseData.evidenceHealth);
         setStudiesRead(typeof data.studiesRead === "number" ? data.studiesRead : undefined);
+        setArrivingStudies([]);
+        setProgress(null);
 
         const savedItem = await addChatHistory(
           project.id,
@@ -283,9 +286,9 @@ export default function RAGChatPage() {
           getSessionId(),
           data.answer || "",
           responseData.citations.length,
-          responseData
+          // The cache keeps the frontend's shapes; its declared type predates them
+          responseData as unknown as Parameters<typeof addChatHistory>[6]
         );
-
         if (savedItem) {
           setChatHistory((prev) => [
             {
@@ -300,14 +303,83 @@ export default function RAGChatPage() {
           ]);
           setCurrentQueryId(savedItem.id);
         }
+      };
+
+      setProgress(emptyProgress);
+      setArrivingStudies([]);
+      setAnswer("");
+
+      try {
+        let finished = false;
+        try {
+          // Live progress (roadmap N2): steps, a tally of findings and studies as they are read
+          await postEventStream(`${API_BASE_URL}/api/query/stream`, requestBody, await authHeaders(), (event, raw) => {
+            const data = raw as Record<string, unknown>;
+            if (event === "stage") {
+              setProgress((p) => ({
+                ...(p ?? emptyProgress),
+                stage: data.stage as ProgressStage,
+                documents: (data.documents as number | null | undefined) ?? p?.documents,
+              }));
+            } else if (event === "candidates") {
+              setProgress((p) => ({ ...(p ?? emptyProgress), total: data.total as number }));
+            } else if (event === "study") {
+              setProgress((p) => {
+                const base = p ?? emptyProgress;
+                const direction = data.direction as string | null;
+                const design = data.design as string | null;
+                return {
+                  ...base,
+                  done: data.done as number,
+                  total: data.total as number,
+                  relevant: base.relevant + (data.relevant ? 1 : 0),
+                  directions: direction ? { ...base.directions, [direction]: (base.directions[direction] || 0) + 1 } : base.directions,
+                  designs: design ? { ...base.designs, [design]: (base.designs[design] || 0) + 1 } : base.designs,
+                };
+              });
+              if (data.study) setArrivingStudies((prev) => [...prev, data.study as Study]);
+            } else if (event === "delta") {
+              setAnswer((prev) => prev + (data.text as string));
+            } else if (event === "done") {
+              finished = true;
+              void applyResponse(data as unknown as QueryResult);
+            } else if (event === "error") {
+              throw new Error((data.message as string) || "The answer could not be written. Try again.");
+            }
+          });
+        } catch (streamErr) {
+          // Older API without the stream endpoint: ask the plain endpoint instead
+          if (!(streamErr instanceof StreamUnavailableError) || streamErr.status === 401 || streamErr.status === 403) {
+            throw streamErr;
+          }
+        }
+        if (finished) return;
+
+        const response = await fetch(`${API_BASE_URL}/api/query`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", ...(await authHeaders()) },
+          body: JSON.stringify(requestBody),
+        });
+        if (!response.ok) {
+          throw new Error(
+            response.status === 429
+              ? "Too many questions in a short time. Wait a minute, then try again."
+              : "The answer could not be written. Try again, and if it keeps failing, try a shorter question."
+          );
+        }
+        await applyResponse(await response.json());
       } catch (err) {
         console.error("Search failed:", err);
+        setProgress(null);
+        setArrivingStudies([]);
         setError(
           err instanceof TypeError
             ? "Cannot reach the server. Check your connection and try again."
-            : err instanceof Error
-              ? err.message
-              : "The answer could not be written. Try again."
+            : err instanceof StreamUnavailableError
+              ? "The answer could not be written. Try again."
+              : err instanceof Error
+                ? err.message
+                : "The answer could not be written. Try again."
         );
       } finally {
         setIsLoading(false);
@@ -656,6 +728,10 @@ export default function RAGChatPage() {
                       </Button>
                     </div>
                   ) : (
+                    <>
+                    {isLoading && progress && !answer ? (
+                      <AnswerProgress progress={progress} />
+                    ) : (
                     <AnswerPanel
                       answer={answer}
                       citations={citations}
@@ -666,7 +742,10 @@ export default function RAGChatPage() {
                       onCitationClick={handleCitationClick}
                       onSuggestionClick={handleSearch}
                       onShowSources={() => setNarrowTab("sources")}
+                      streaming={isLoading && !!answer}
                     />
+                    )}
+                    </>
                   )}
 
                   {/* Follow-up ask box at the foot of the answer column */}
@@ -696,7 +775,17 @@ export default function RAGChatPage() {
                     selectedStudies.length > 0 && "pb-20"
                   )}
                 >
-                  {isLoading ? (
+                  {isLoading && arrivingStudies.length > 0 ? (
+                    <EvidencePanel
+                      studies={arrivingStudies}
+                      citations={[]}
+                      selectedStudies={[]}
+                      onSelectStudy={() => {}}
+                      onExcludeStudy={() => {}}
+                      onOpenPdf={(study) => openPdf(study.id, study.title || study.id, 1)}
+                      studiesRead={progress?.done}
+                    />
+                  ) : isLoading ? (
                     <div className="space-y-3" aria-hidden="true">
                       {[0, 1, 2].map((i) => (
                         <div key={i} className="h-36 animate-pulse rounded-md bg-surface-1" />

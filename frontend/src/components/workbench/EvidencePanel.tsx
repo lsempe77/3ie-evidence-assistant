@@ -33,7 +33,7 @@ export function EvidencePanel({
   // Get citation number for each study
   const getCitationNumber = (studyId: string): number | undefined => {
     const study = studies.find((s) => s.id === studyId);
-    if (study?.citationNumber !== undefined) return study.citationNumber;
+    if (study?.citationNumber != null) return study.citationNumber;  // null while studies arrive
     const citation = citations.find((c) => c.studyId === studyId);
     return citation?.id;
   };

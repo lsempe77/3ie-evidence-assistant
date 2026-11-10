@@ -26,7 +26,7 @@ import os
 import re
 import time
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any, AsyncIterator, Awaitable, Callable, Dict, List, Optional
 
 import httpx
 
@@ -62,7 +62,9 @@ Using ONLY these passages, return JSON:
   "quote": "<a short exact quote from the passages that supports the finding>",
   "page": <page number of the quote, or null>,
   "programme": "<short name of the programme evaluated, with its country, e.g. 'BRAC TUP, Bangladesh' or 'Haku Wiñay, Peru'. At most eight words, no explanation. Empty if the passages do not say>"}}
-Do not use outside knowledge. If the passages only mention the topic without results, relevant is false."""
+Do not use outside knowledge. If the passages only mention the topic without results, relevant is false.
+If the passages are garbled or unreadable (for example a broken table), relevant is false: never report
+on how the text looks."""
 
 ANSWER_PROMPT = """You are an evidence synthesis assistant for development research. Answer the
 question from the study findings below, which were read from a collection of studies.
@@ -145,6 +147,28 @@ async def _chat(client: httpx.AsyncClient, model: str, prompt: str, max_tokens: 
     return ""
 
 
+async def _chat_stream(client: httpx.AsyncClient, model: str, prompt: str, max_tokens: int,
+                       effort: str = "low") -> AsyncIterator[str]:
+    """Yield the answer text in pieces as the model writes it (OpenRouter SSE)."""
+    body: Dict[str, Any] = {"model": model, "temperature": 0, "max_tokens": max_tokens, "stream": True,
+                            "reasoning": {"effort": effort, "exclude": True},
+                            "messages": [{"role": "user", "content": prompt}]}
+    async with client.stream("POST", OPENROUTER_URL, json=body) as r:
+        r.raise_for_status()
+        async for line in r.aiter_lines():
+            if not line.startswith("data: "):
+                continue  # keep-alive comments and blank lines
+            data = line[6:].strip()
+            if data == "[DONE]":
+                return
+            try:
+                delta = json.loads(data)["choices"][0].get("delta", {}).get("content")
+            except (ValueError, KeyError, IndexError):
+                continue
+            if delta:
+                yield delta
+
+
 def _parse_json(text: str) -> Dict[str, Any]:
     text = text.strip()
     if text.startswith("```"):
@@ -224,7 +248,15 @@ class StudySynthesisPipeline:
                 "passages_reranked": len(kept)}
         return kept, info
 
-    async def read_studies(self, question: str) -> tuple[List[StudyReading], Dict[str, float]]:
+    async def read_studies(
+        self, question: str,
+        on_event: Optional[Callable[[Dict[str, Any]], Awaitable[None]]] = None,
+    ) -> tuple[List[StudyReading], Dict[str, float]]:
+        """Find and read candidate studies. on_event receives progress events as they happen."""
+        async def emit(event: Dict[str, Any]) -> None:
+            if on_event:
+                await on_event(event)
+
         t0 = time.time()
         candidates, info = await self._candidates(question)
         t1 = time.time()
@@ -232,6 +264,7 @@ class StudySynthesisPipeline:
         t2 = time.time()
         groups = [(sid, rows) for sid, rows in _group_by_study(pool).items() if rows[0].score >= STUDY_FLOOR]
         groups = groups[:MAX_STUDIES_READ]
+        await emit({"type": "candidates", "total": len(groups)})
 
         sem = asyncio.Semaphore(READER_CONCURRENCY)
         async with httpx.AsyncClient(timeout=120, headers=self._headers) as client:
@@ -264,12 +297,18 @@ class StudySynthesisPipeline:
                     programme=str(data.get("programme") or ""),
                 )
 
-            readings = await asyncio.gather(*(read(i + 1, sid, rows) for i, (sid, rows) in enumerate(groups)))
+            tasks = [asyncio.create_task(read(i + 1, sid, rows)) for i, (sid, rows) in enumerate(groups)]
+            readings = []
+            for done, task in enumerate(asyncio.as_completed(tasks), start=1):
+                reading = await task
+                readings.append(reading)
+                await emit({"type": "study", "done": done, "total": len(groups), "reading": reading})
+            readings.sort(key=lambda r: r.number)  # back to rerank order, which numbers the answer
         t3 = time.time()
         return list(readings), {"retrieve_s": round(t1 - t0, 1), "rerank_s": round(t2 - t1, 1),
                                 "read_s": round(t3 - t2, 1), "studies_read": len(readings), **info}
 
-    async def answer(self, question: str, readings: List[StudyReading]) -> SynthesisResult:
+    def _answer_prompt(self, question: str, readings: List[StudyReading]) -> tuple[str, Dict[str, int], List[StudyReading]]:
         relevant = [r for r in readings if r.relevant and r.finding]
         # Renumber the relevant studies 1..n so citations are compact
         numbered = {r.study_id: i + 1 for i, r in enumerate(relevant)}
@@ -279,12 +318,12 @@ class StudySynthesisPipeline:
             f"    finding ({r.direction}): {r.finding}"
             for r in relevant
         ) or "(none of the studies read reports evidence on this question)"
-        t0 = time.time()
-        async with httpx.AsyncClient(timeout=180, headers=self._headers) as client:
-            text = await _chat(client, self.answer_model,
-                               ANSWER_PROMPT.format(question=question, n_relevant=len(relevant),
-                                                    n_read=len(readings), findings=findings),
-                               max_tokens=6000, effort="medium")
+        prompt = ANSWER_PROMPT.format(question=question, n_relevant=len(relevant),
+                                      n_read=len(readings), findings=findings)
+        return prompt, numbered, relevant
+
+    def _result(self, text: str, numbered: Dict[str, int], relevant: List[StudyReading],
+                readings: List[StudyReading], seconds: float) -> SynthesisResult:
         cited_numbers = {int(n) for grp in re.findall(r"\[([\d,\s]+)\]", text) for n in re.findall(r"\d+", grp)}
         citations = [
             {"id": numbered[r.study_id], "study_id": r.study_id, "title": r.label, "quote": r.quote,
@@ -292,8 +331,46 @@ class StudySynthesisPipeline:
             for r in relevant if numbered[r.study_id] in cited_numbers
         ]
         return SynthesisResult(answer=text, citations=citations, readings=readings,
-                               model_used=self.answer_model,
-                               timings={"answer_s": round(time.time() - t0, 1)})
+                               model_used=self.answer_model, timings={"answer_s": round(seconds, 1)})
+
+    async def answer(self, question: str, readings: List[StudyReading]) -> SynthesisResult:
+        prompt, numbered, relevant = self._answer_prompt(question, readings)
+        t0 = time.time()
+        async with httpx.AsyncClient(timeout=180, headers=self._headers) as client:
+            text = await _chat(client, self.answer_model, prompt, max_tokens=6000, effort="medium")
+        return self._result(text, numbered, relevant, readings, time.time() - t0)
+
+    async def run_events(self, question: str) -> AsyncIterator[Dict[str, Any]]:
+        """
+        Run the whole pipeline as a stream of events, for the live progress view:
+        {"type": "stage"}, {"type": "candidates"}, one {"type": "study"} per study read,
+        {"type": "delta"} pieces of the answer, then {"type": "result", "result": ...}.
+        """
+        queue: asyncio.Queue = asyncio.Queue()
+
+        async def on_event(event: Dict[str, Any]) -> None:
+            await queue.put(event)
+
+        yield {"type": "stage", "stage": "searching"}
+        reading_task = asyncio.create_task(self.read_studies(question, on_event))
+        while not (reading_task.done() and queue.empty()):
+            try:
+                yield await asyncio.wait_for(queue.get(), timeout=0.25)
+            except asyncio.TimeoutError:
+                continue
+        readings, read_timing = reading_task.result()
+
+        yield {"type": "stage", "stage": "writing"}
+        prompt, numbered, relevant = self._answer_prompt(question, readings)
+        t0 = time.time()
+        parts: List[str] = []
+        async with httpx.AsyncClient(timeout=180, headers=self._headers) as client:
+            async for piece in _chat_stream(client, self.answer_model, prompt, max_tokens=6000, effort="medium"):
+                parts.append(piece)
+                yield {"type": "delta", "text": piece}
+        result = self._result("".join(parts), numbered, relevant, readings, time.time() - t0)
+        result.timings = {**read_timing, **result.timings}
+        yield {"type": "result", "result": result}
 
     async def run(self, question: str) -> SynthesisResult:
         """Read, then answer. Timings for both steps are in result.timings."""

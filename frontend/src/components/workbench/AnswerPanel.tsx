@@ -18,6 +18,8 @@ interface AnswerPanelProps {
   onSuggestionClick: (suggestion: string) => void;
   /** Shown on narrow screens, where sources sit in their own tab. */
   onShowSources?: () => void;
+  /** The answer text is still arriving: show it, hold back references and summaries. */
+  streaming?: boolean;
 }
 
 export function AnswerPanel({
@@ -29,6 +31,7 @@ export function AnswerPanel({
   onCitationClick,
   onSuggestionClick,
   onShowSources,
+  streaming = false,
 }: AnswerPanelProps) {
   const [copied, setCopied] = useState(false);
 
@@ -158,7 +161,7 @@ export function AnswerPanel({
   const hasHealth =
     evidenceHealth.studyCount > 0 || evidenceHealth.gaps.length > 0 || !!evidenceHealth.coverageWarning;
 
-  if (isLoading) {
+  if (isLoading && !streaming) {
     return (
       <div className="w-full max-w-[760px]" aria-busy="true">
         <p className="mb-4 text-body text-ink-muted" role="status" aria-live="polite">
@@ -246,8 +249,15 @@ export function AnswerPanel({
         </ReactMarkdown>
       </div>
 
+      {streaming && (
+        <p className="mt-2 flex items-center gap-2 text-caption text-ink-muted" role="status">
+          <span className="size-1.5 animate-pulse rounded-full bg-primary" aria-hidden="true" />
+          Writing…
+        </p>
+      )}
+
       {/* Quiet footer row (DESIGN.md, Answer block) */}
-      {answer && (
+      {answer && !streaming && (
         <div className="mt-2 flex flex-wrap items-center gap-1 text-ink-muted">
           <Button variant="ghost" size="sm" onClick={handleCopy}>
             {copied ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />}
@@ -263,7 +273,7 @@ export function AnswerPanel({
       )}
 
       {/* Numbered list of what the answer cites */}
-      {citations.length > 0 && (
+      {!streaming && citations.length > 0 && (
         <section aria-labelledby="answer-references" className="mt-6 border-t border-hairline pt-4">
           <h2 id="answer-references" className="mb-2 text-body font-semibold text-ink">
             References
@@ -292,7 +302,7 @@ export function AnswerPanel({
       )}
 
       {/* How much evidence the answer rests on: a neutral block, words not colours */}
-      {hasHealth && (
+      {!streaming && hasHealth && (
         <section aria-labelledby="answer-evidence" className="mt-6 rounded-md bg-surface-1 p-4">
           <h2 id="answer-evidence" className="mb-2 flex items-center gap-2 text-body font-semibold text-ink">
             <Info className="size-4 text-info" aria-hidden="true" />
@@ -326,7 +336,7 @@ export function AnswerPanel({
         </section>
       )}
 
-      {suggestions.length > 0 && (
+      {!streaming && suggestions.length > 0 && (
         <section aria-labelledby="answer-related" className="mt-6">
           <h2 id="answer-related" className="mb-2 text-body font-semibold text-ink">
             Related questions
