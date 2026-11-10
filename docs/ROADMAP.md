@@ -21,10 +21,15 @@
 > [MODEL_REVIEW_2026-11.md](MODEL_REVIEW_2026-11.md). Run the benchmark (`evaluation/run_benchmark.py`)
 > before and after each item below.
 
-1. **N1. Study-level retrieval** - 1-2 d ⬅️ biggest quality limit
+1. **N1. Study-level retrieval** - done 10 Nov 2026: studies read per question 23 to 43, relevant 10 to 20, claim score 0.49 to 0.52, answers 26 to 39 s (`study_cards` table, `src/retrieval/study_cards.py`)
    - Broad questions read only 10 to 52 of the 86 included studies held, because passages are ranked one by
      one. Rank whole studies first (title, abstract, best passages), then fetch passages within each.
    - Target: most of the included studies read on broad questions, at no more than double today's cost.
+
+   **N1b. Count programmes as well as papers** - done 10 Nov 2026 (reader names the programme, answers say "N studies of M programmes")
+   - About 30 papers in the graduation collection evaluate BRAC's TUP programme alone, so "19 of 25
+     studies" can overstate how independent the evidence is. The reader records which programme each study
+     evaluates, and the answer counts programmes as well as papers ("19 studies of 11 programmes").
 
 2. **N2. Something to watch while the answer is written** - 2-3 d (asked for by Lucas, 10 Nov 2026)
    - Today the screen shows skeleton lines for 20 to 40 seconds. The pipeline already knows a lot during
@@ -63,7 +68,24 @@
    - Documents and Settings next, following [DESIGN.md](../DESIGN.md). They hold most of the remaining
      technical wording.
 
-8. **N8. Housekeeping**
+8. **N9. Search again when the evidence is thin** - 1-2 d (bounded agentic step)
+   - After reading, if few studies are relevant, reformulate the question (other terms, other language)
+     and search once more. Hard limits on rounds and cost. Never fall back to the open web: answers stay
+     within the collection. Searching DEP or OpenAlex can be an explicit option the user chooses.
+
+9. **N10. The Evidence Assistant as an MCP server** - 1-2 d
+   - Let 3ie staff query their collections from Claude, Copilot or other MCP clients, with the same
+     citations and access rules. Later: connect DEP, OpenAlex and PubMed as live sources.
+
+10. **N11. Write back validated data, never answers** - 2-3 d
+    - Reviewed metadata, human-checked effect sizes and corrections feed back into the collection.
+      Generated answers are never stored as sources, so they cannot contaminate the evidence base.
+
+11. **N12. Describe figures** - 1-2 d
+    - Docling extracts tables, but charts such as forest plots are not indexed. Add each figure's caption
+      and a model-written description as a passage, with its page.
+
+12. **N8. Housekeeping**
    - Remove the old claim-ledger path (`ANSWER_PIPELINE=agent`) and LlamaIndex once the new path has run
      for two weeks without problems.
    - Decommission the old `devchat-mineru` Modal app. Rename the R2 bucket (on hold).

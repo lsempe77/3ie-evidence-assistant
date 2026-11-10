@@ -237,6 +237,27 @@ A staged approach keeps the first bill small:
 
 ---
 
+## 5b. Additions after the November 2026 review
+
+A check of 2026 RAG trends against this plan (10 November 2026), read alongside the benchmark: the 2024
+query-rewriting chain scored 0.29, and reading every relevant study scored 0.49. Gains came from retrieval
+coverage, reading and an honest synthesis prompt more than from orchestration. Five items were missing:
+
+1. **Count programmes as well as papers** (stage 5). Several papers often evaluate one programme, so a
+   count of papers overstates how independent the evidence is. Roadmap N1b.
+2. **A bounded sufficiency check** (stages 3 and 6). Search again, once, when few studies are relevant.
+   Never fall back to the open web. Roadmap N9.
+3. **An MCP server** (stage 7). Expose collections to Claude, Copilot and other clients with the same
+   citations and access rules. Roadmap N10.
+4. **Write back validated data, never answers** (stage 0). Reviewed metadata and human-checked effect sizes
+   feed the collection. Generated answers are never stored as sources. Roadmap N11.
+5. **Figure descriptions** (stage 1). Captions plus a model-written description for charts such as forest
+   plots. Roadmap N12.
+
+For GraphRAG, the useful graph here is a structured evidence base (programme, studies, countries,
+components, outcomes, effect sizes), not entity graphs extracted by a model. It grows out of the study
+cards and the quantitative layer in Phase B.
+
 ## 6. Priorities
 
 **Phase 0, foundations (about 3 weeks, partly in parallel).**
