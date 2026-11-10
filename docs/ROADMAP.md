@@ -46,7 +46,7 @@
    - Design: extends the loading state and the charts gap in [DESIGN.md](../DESIGN.md). Respect reduced
      motion, and announce progress politely to screen readers.
 
-3. **N3. Confirm the default model** - 0.5 d
+3. **N3. Confirm the default model** - done 10 Nov 2026: Haiku 5.5 reads, Sonnet 5.5 answers (0.56 vs 0.48 for Haiku answers on the same readings). Cheap open-weight readers lost about 0.03 to save 0.6 cents a question; Kimi K3.1 Pro matched Sonnet at the same price but missed a gap question. "Deeper answer" is hidden until a stronger model (Opus 5.5) is benchmarked. Still open: make the benchmark a merge gate
    - Repeat the three leading configurations twice more. Model differences (under 0.03) were within the
      noise of single runs.
    - Then make the benchmark a regression gate: run it before merging prompt, retrieval or model changes.
