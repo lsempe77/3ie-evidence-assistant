@@ -413,13 +413,13 @@ def resolve_project(project_ref: str) -> Optional[dict]:
     """
     Find a project by UUID, legacy 'rag_<hex>' name, or slug.
 
-    Returns the rag_projects row (id, user_id, is_public, name, slug) or None.
+    Returns the rag_projects row (id, user_id, is_public, name, slug, description, document_count) or None.
     """
     from src.auth import get_supabase_client
     from src.vectorstore import legacy_collection_to_project_id
 
     client = get_supabase_client()
-    columns = "id, user_id, is_public, name, slug, description"
+    columns = "id, user_id, is_public, name, slug, description, document_count"
     project_id = legacy_collection_to_project_id(project_ref)
     if project_id:
         result = client.table("rag_projects").select(columns).eq("id", project_id).execute()

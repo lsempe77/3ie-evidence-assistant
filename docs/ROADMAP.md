@@ -31,7 +31,7 @@
      studies" can overstate how independent the evidence is. The reader records which programme each study
      evaluates, and the answer counts programmes as well as papers ("19 studies of 11 programmes").
 
-2. **N2. Something to watch while the answer is written** - 2-3 d (asked for by Lucas, 10 Nov 2026)
+2. **N2. Something to watch while the answer is written** - done 10 Nov 2026 (`/api/query/stream`, `AnswerProgress`): steps, a live tally by direction and design, source cards as studies are read, streamed answer text. Open: the answer model reasons for about 12 s before its first word; test a lower reasoning effort on the benchmark
    - Today the screen shows skeleton lines for 20 to 40 seconds. The pipeline already knows a lot during
      that time, so show it as it happens:
      - **Progress in steps:** "Searching 97 documents", then "Found 52 candidate studies", then "Reading 18

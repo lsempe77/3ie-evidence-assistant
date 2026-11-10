@@ -4,11 +4,14 @@
 Endpoints for the Research Workbench frontend (query, compare, suggest, filters).
 """
 
+import json
 import re
 from botocore.exceptions import ClientError
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.encoders import jsonable_encoder
+from fastapi.responses import StreamingResponse
 
 from api.vector_status import mark_vector_store_healthy
 from api.schemas import (
@@ -162,43 +165,40 @@ def _year(value) -> Optional[int]:
         return None
 
 
-async def _answer_with_study_synthesis(question: str, project_id: str, deep: bool) -> QueryResponse:
-    """Answer with the read-then-synthesise pipeline and map it to the frontend's shape."""
-    from src.agents.study_synthesis import StudySynthesisPipeline, relevant_in_answer_order
-
-    pipe = StudySynthesisPipeline(
-        project_id,
-        reader_model=settings.reader_model,
-        answer_model=settings.deep_answer_model if deep else settings.answer_model,
+def _study_response(r, number: Optional[int] = None) -> StudyResponse:
+    """One read study in the frontend's shape."""
+    meta = r.metadata
+    countries = meta.get("countries") or []
+    sectors = meta.get("sectors") or []
+    return StudyResponse(
+        id=r.study_id,
+        title=meta.get("title") or r.label,
+        authors=meta.get("authors") or "",
+        year=_year(meta.get("year")),
+        country=", ".join(countries) if isinstance(countries, list) else str(countries),
+        sector=", ".join(sectors) if isinstance(sectors, list) else str(sectors),
+        studyType=meta.get("study_type") or "",
+        studyDesign=r.design if r.design and r.design != "unknown" else None,
+        studyDesignConfidence=_as_float(meta.get("study_design_confidence")),
+        confidence=_band(r.best_score),
+        snippet=clean_text_for_display(r.quote or r.passage, max_length=300),
+        score=r.best_score,
+        pdfUrl=_generate_pdf_url(r.study_id, meta.get("source")),
+        finding=r.finding,
+        citationNumber=number,
     )
-    result = await pipe.run(question)
-    logger.info(f"Study synthesis: {result.timings}, model={result.model_used}")
+
+
+def _query_response(result) -> QueryResponse:
+    """Map a study-synthesis result to the /api/query response."""
+    from src.agents.study_synthesis import relevant_in_answer_order
 
     relevant = relevant_in_answer_order(result.readings)
     cited_ids = {c["id"] for c in result.citations}
     studies: list[StudyResponse] = []
     citations: list[CitationResponse] = []
     for number, r in enumerate(relevant, start=1):
-        meta = r.metadata
-        countries = meta.get("countries") or []
-        sectors = meta.get("sectors") or []
-        study = StudyResponse(
-            id=r.study_id,
-            title=meta.get("title") or r.label,
-            authors=meta.get("authors") or "",
-            year=_year(meta.get("year")),
-            country=", ".join(countries) if isinstance(countries, list) else str(countries),
-            sector=", ".join(sectors) if isinstance(sectors, list) else str(sectors),
-            studyType=meta.get("study_type") or "",
-            studyDesign=r.design if r.design and r.design != "unknown" else None,
-            studyDesignConfidence=_as_float(meta.get("study_design_confidence")),
-            confidence=_band(r.best_score),
-            snippet=clean_text_for_display(r.quote or r.passage, max_length=300),
-            score=r.best_score,
-            pdfUrl=_generate_pdf_url(r.study_id, meta.get("source")),
-            finding=r.finding,
-            citationNumber=number,
-        )
+        study = _study_response(r, number)
         studies.append(study)
         if number in cited_ids:
             citations.append(CitationResponse(
@@ -231,6 +231,85 @@ async def _answer_with_study_synthesis(question: str, project_id: str, deep: boo
         ),
         studiesRead=len(result.readings),
     )
+
+
+def _pipeline(project_id: str, deep: bool):
+    from src.agents.study_synthesis import StudySynthesisPipeline
+
+    return StudySynthesisPipeline(
+        project_id,
+        reader_model=settings.reader_model,
+        answer_model=settings.deep_answer_model if deep else settings.answer_model,
+    )
+
+
+async def _answer_with_study_synthesis(question: str, project_id: str, deep: bool) -> QueryResponse:
+    """Answer with the read-then-synthesise pipeline and map it to the frontend's shape."""
+    result = await _pipeline(project_id, deep).run(question)
+    logger.info(f"Study synthesis: {result.timings}, model={result.model_used}")
+    return _query_response(result)
+
+
+def _sse(event: str, data) -> str:
+    return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
+
+
+@router.post("/query/stream")
+async def query_evidence_stream(request: QueryRequest, user: Optional[AuthenticatedUser] = Depends(get_optional_user)):
+    """
+    The /api/query answer as server-sent events, for the live progress view (roadmap N2).
+
+    Events: stage {stage: searching|reading|writing, documents}, candidates {total},
+    study {done, total, relevant, direction, design, programme, study}, delta {text},
+    done {the full /api/query response}, error {message}.
+    """
+    project_ref = request.collection or request.project_id
+    if not project_ref:
+        raise HTTPException(status_code=400, detail="collection is required")
+    project = authorize_project(project_ref, user)
+    project_id = str(project["id"])
+    deep = bool(request.settings and request.settings.deepAnswer)
+
+    cache = get_response_cache()
+    cache_key_settings = {**(request.settings.model_dump() if request.settings else {}), "_project": project_id}
+    cached = await cache.get(query=request.query, filters=None, settings_dict=cache_key_settings)
+
+    async def events():
+        if cached:
+            yield _sse("done", jsonable_encoder(cached))
+            return
+        try:
+            async for ev in _pipeline(project_id, deep).run_events(request.query):
+                kind = ev["type"]
+                if kind == "stage":
+                    yield _sse("stage", {"stage": ev["stage"], "documents": project.get("document_count")})
+                elif kind == "candidates":
+                    yield _sse("candidates", {"total": ev["total"]})
+                    yield _sse("stage", {"stage": "reading"})
+                elif kind == "study":
+                    r = ev["reading"]
+                    relevant = bool(r.relevant and r.finding)
+                    yield _sse("study", {
+                        "done": ev["done"], "total": ev["total"], "relevant": relevant,
+                        "direction": r.direction if relevant else None,
+                        "design": r.design if relevant and r.design != "unknown" else None,
+                        "programme": r.programme if relevant else None,
+                        "study": jsonable_encoder(_study_response(r)) if relevant else None,
+                    })
+                elif kind == "delta":
+                    yield _sse("delta", {"text": ev["text"]})
+                elif kind == "result":
+                    response = _query_response(ev["result"])
+                    logger.info(f"Study synthesis (stream): {ev['result'].timings}")
+                    await cache.set(query=request.query, response=response, filters=None,
+                                    settings_dict=cache_key_settings)
+                    yield _sse("done", jsonable_encoder(response))
+        except Exception as e:
+            logger.error(f"Streaming query failed: {e}", exc_info=True)
+            yield _sse("error", {"message": "The answer could not be written. Try again."})
+
+    return StreamingResponse(events(), media_type="text/event-stream",
+                             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
 
 @router.post("/query", response_model=QueryResponse)
