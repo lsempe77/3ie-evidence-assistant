@@ -352,6 +352,14 @@ class ChunkStore:
             "p_doc_keys": list(doc_keys), "per_doc": per_doc, "p_source": source,
         })
 
+    def study_facts(self, project_id: str) -> Dict[str, Dict[str, Any]]:
+        """Every document's study facts for a project, by doc key (roadmap N6 step 3)."""
+        rows = self._check(self._client.get(
+            "/study_facts", params={"select": "doc_key,facts", "rag_project_id": f"eq.{project_id}",
+                                    "limit": "10000"},
+        )).json()
+        return {r["doc_key"]: r["facts"] for r in rows}
+
     def opening_chunks(self, project_id: str, max_index: int = 4) -> List[Dict[str, Any]]:
         """The first chunks (chunk_index < max_index) of every document in a project."""
         out: List[Dict[str, Any]] = []

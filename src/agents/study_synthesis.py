@@ -32,6 +32,7 @@ import httpx
 
 from src.retrieval.hybrid_retriever import HybridRetriever, RetrievalResult
 from src.retrieval.reranker import CohereReranker
+from src.agents.evidence_summary import summary_block
 from src.retrieval.study_cards import embed_query
 from src.vectorstore.chunk_store import ChunkStore
 
@@ -81,6 +82,10 @@ QUESTION: {question}
 STUDY FINDINGS ({n_relevant} relevant of {n_read} studies read):
 {findings}
 
+FIGURES COMPUTED ACROSS THE WHOLE COLLECTION (from each study's own reported figures, one figure
+per programme, worked out in code; bracketed numbers are studies above):
+{computed}
+
 Write the answer:
 - In the same language as the question.
 - Lead with the overall pattern across the studies, then the important exceptions. Say how
@@ -90,6 +95,12 @@ Write the answer:
   statistically significant, how sizes compare (only within the same units), and whether
   subgroups such as women or the poorest differ. Say this is a comparison of reported
   estimates, not a meta-analysis, and never average numbers across studies.
+- When the question is about typical costs, benefit-cost ratios, how widely the approach has
+  been evaluated, or how gains differ between kinds of programme (such as those that put women
+  first), use the computed figures above and give their medians, ranges and counts. Say they
+  are computed from the figures the studies report, with currencies, price years, outcome
+  definitions and horizons that differ, and that this is not a meta-analysis. Ignore the
+  computed figures when they do not bear on the question.
 - Count programmes as well as studies. Several studies often evaluate the same programme
   (for example many papers on BRAC's TUP in Bangladesh, also called CFPR or CFPR-TUP). Treat
   name variants of one programme as one programme. Say "N studies of M programmes" and do not
@@ -281,6 +292,10 @@ class StudySynthesisPipeline:
         # overlap the passage fetch and rerank instead of delaying the reader (about 9 s).
         self._estimate_tasks: Dict[str, "asyncio.Task[Dict[str, List[Dict[str, Any]]]]"] = {}
         self.use_estimates = True
+        # Study facts for the whole collection feed computed summaries in the answer (N6 step 3)
+        self.use_facts = True
+        self._facts: Dict[str, Dict[str, Any]] = {}
+        self._facts_task: Optional["asyncio.Task[Dict[str, Dict[str, Any]]]"] = None
         self.reranker = CohereReranker()
         self.use_study_cards = True
         self._headers = {"Authorization": f"Bearer {os.environ['OPENROUTER_API_KEY']}"}
@@ -290,6 +305,8 @@ class StudySynthesisPipeline:
         Passages for every candidate study: the passage pool for the question, plus the
         best passages of studies ranked highly by their study card but missed by the pool.
         """
+        if self.use_facts and self._facts_task is None and not self._facts:
+            self._facts_task = asyncio.create_task(self._load_facts())
         q_emb = await asyncio.to_thread(embed_query, question)
         self._query_embeddings[question] = q_emb
         pool_task = asyncio.to_thread(
@@ -342,7 +359,16 @@ class StudySynthesisPipeline:
         t2 = time.time()
         readings = await self.read_groups(question, groups, on_event)
         timing.update(read_s=round(time.time() - t2, 1), studies_read=len(readings))
+        if self._facts_task is not None:
+            self._facts = await self._facts_task
+            self._facts_task = None
         return readings, timing
+
+    async def _load_facts(self) -> Dict[str, Dict[str, Any]]:
+        try:
+            return await asyncio.to_thread(self.store.study_facts, self.project_id)
+        except Exception:
+            return {}  # facts are an addition: never fail the answer over them
 
     async def candidate_groups(self, question: str) -> tuple[List[tuple], Dict[str, Any]]:
         """Candidate studies with their passages, reranked, best first: [(study_id, rows)]."""
@@ -447,8 +473,9 @@ class StudySynthesisPipeline:
             + ("".join(f"\n    estimate: {_estimate_text(e)}" for e in r.estimates) if r.estimates else "")
             for r in relevant
         ) or "(none of the studies read reports evidence on this question)"
+        computed = summary_block(self._facts, numbered) if self.use_facts and self._facts else             "(no study facts for this collection)"
         prompt = ANSWER_PROMPT.format(question=question, n_relevant=len(relevant),
-                                      n_read=len(readings), findings=findings)
+                                      n_read=len(readings), findings=findings, computed=computed)
         return prompt, numbered, relevant
 
     def _result(self, text: str, numbered: Dict[str, int], relevant: List[StudyReading],

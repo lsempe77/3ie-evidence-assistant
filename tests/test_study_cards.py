@@ -49,6 +49,7 @@ def test_candidates_add_studies_the_pool_missed(monkeypatch):
     pipe = ss.StudySynthesisPipeline.__new__(ss.StudySynthesisPipeline)
     pipe.project_id, pipe.store, pipe.use_study_cards, pipe._query_embeddings = "p", FakeStore(), True, {}
     pipe.use_estimates, pipe._estimate_tasks = False, {}
+    pipe.use_facts, pipe._facts, pipe._facts_task = False, {}, None
     passages, info = asyncio.run(pipe._candidates("question"))
     studies = [p.study_id for p in passages]
     # B had one pooled passage, C and D none: all three get their own passages

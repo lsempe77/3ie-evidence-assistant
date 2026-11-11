@@ -433,6 +433,19 @@ def orchestrate_rag(
             print(f"Estimates: {totals['kept']} stored from {totals['docs']} documents ({totals['errors']} errors)")
         except Exception as e:
             print(f"  ⚠ Estimates not extracted: {e}")
+        # Study facts (programme, women as recipients, costs, headline effects) feed the
+        # figures computed across the collection (src/extraction/store_facts.py). About one
+        # US cent per document.
+        try:
+            from src.extraction.store_facts import extract_and_store_facts
+
+            from src.extraction.programme_groups import group_programmes
+
+            totals = asyncio.run(extract_and_store_facts(project_id, doc_keys=new_keys))
+            print(f"Study facts: {totals['docs']} documents ({totals['errors']} errors)")
+            asyncio.run(group_programmes(project_id))  # regroup the whole collection's programmes
+        except Exception as e:
+            print(f"  ⚠ Study facts not extracted: {e}")
     
     return {
         "project_id": project_id,
