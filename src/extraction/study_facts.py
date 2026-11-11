@@ -20,6 +20,7 @@ from typing import Any, Dict, List, Optional
 
 import httpx
 
+from src.extraction.secondhand import cites_other_study
 from src.extraction.table_estimates import OPENROUTER_URL, _chat, _norm, _parse_json, parse_number
 
 MAX_DOC_CHARS = 400_000  # about 100k tokens: whole papers, cut only for very long reports
@@ -61,6 +62,10 @@ FORM (return JSON only):
   "followup_months": [<months after the start of the programme of each survey round, numbers>]
 }}
 
+Report only figures about the programme THIS document evaluates, from its own data. Never report
+figures the document cites from other studies (its literature review or comparisons with earlier
+evaluations): leave those out entirely. A document that only reviews other studies has
+is_impact_evaluation false and no costs, ratios or effects.
 Report at most six headline effects, the ones the document itself presents as its main findings.
 Only report a percent_change the document states (do not compute one).
 
@@ -92,7 +97,8 @@ def document_text(content_list: List[Dict[str, Any]], limit: int = MAX_DOC_CHARS
 
 def _quote_ok(quote: str, norm_doc: str) -> bool:
     q = _norm(quote)
-    return len(q) >= 8 and q in norm_doc
+    # A quote that cites another study reports secondhand evidence: never kept (rule, 11 Nov 2026)
+    return len(q) >= 8 and q in norm_doc and not cites_other_study(quote)
 
 
 def _number_in(value: str, quote: str) -> Optional[float]:

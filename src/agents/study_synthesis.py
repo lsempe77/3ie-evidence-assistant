@@ -33,6 +33,7 @@ import httpx
 from src.retrieval.hybrid_retriever import HybridRetriever, RetrievalResult
 from src.retrieval.reranker import CohereReranker
 from src.agents.evidence_summary import summary_block
+from src.extraction.secondhand import cites_other_study
 from src.retrieval.study_cards import embed_query
 from src.vectorstore.chunk_store import ChunkStore
 
@@ -61,7 +62,7 @@ subgroup | estimate (SE), stars | N | table, page):
 {estimates}
 
 Using ONLY these passages, return JSON:
-{{"relevant": true or false,           // does the study report evidence that answers the question?
+{{"relevant": true or false,           // does the study report its OWN evidence that answers the question?
   "finding": "<one or two sentences: what this study found on the question, with direction and size as reported (units, %, SD), and the time point if given; empty if not relevant>",
   "direction": "positive" | "negative" | "null" | "mixed" | "not_applicable",
   "quote": "<a short exact quote from the passages that supports the finding>",
@@ -71,6 +72,9 @@ Using ONLY these passages, return JSON:
 If extracted estimates answer the question, use them in the finding with their numbers, and prefer
 them to vaguer statements in the passages. Never use an estimate that is not listed or quoted.
 Do not use outside knowledge. If the passages only mention the topic without results, relevant is false.
+Use only results THIS study produced from its own data. Passages that report what OTHER studies found
+(a literature review, "Banerjee et al. (2015) find...", comparisons with earlier evaluations) are never
+evidence: ignore them, never quote them, and if they are all the passages offer, relevant is false.
 If the passages are garbled or unreadable (for example a broken table), relevant is false: never report
 on how the text looks."""
 
@@ -101,6 +105,9 @@ Write the answer:
   are computed from the figures the studies report, with currencies, price years, outcome
   definitions and horizons that differ, and that this is not a meta-analysis. Ignore the
   computed figures when they do not bear on the question.
+- Use only each study's own results. Never cite, count or relay findings that a study reports from
+  other studies (its literature review or comparisons with earlier work): their quality is unknown.
+  If a well-known study is mentioned only secondhand, say the collection does not hold it.
 - Count programmes as well as studies. Several studies often evaluate the same programme
   (for example many papers on BRAC's TUP in Bangladesh, also called CFPR or CFPR-TUP). Treat
   name variants of one programme as one programme. Say "N studies of M programmes" and do not
@@ -438,6 +445,10 @@ class StudySynthesisPipeline:
                         except Exception as e:
                             data = {"relevant": False, "finding": "", "direction": "not_applicable",
                                     "quote": "", "page": None, "error": str(e)[:200]}
+                if data.get("relevant") and cites_other_study(data.get("quote")):
+                    # The supporting quote reports another study: never evidence (rule, 11 Nov 2026)
+                    data = {**data, "relevant": False, "finding": "", "estimate_ids": [],
+                            "error": "quote reports another study"}
                 return StudyReading(
                     number=number, study_id=sid, label=_label(meta), design=design, countries=countries,
                     relevant=bool(data.get("relevant")), finding=str(data.get("finding") or ""),

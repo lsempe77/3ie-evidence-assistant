@@ -54,8 +54,8 @@ def _by_programme(facts_by_doc: Dict[str, Dict[str, Any]]) -> Dict[str, Dict[str
     """Group evaluation documents by programme: {key: {"name", "docs", "facts": [...]}}."""
     out: Dict[str, Dict[str, Any]] = {}
     for doc_key, f in facts_by_doc.items():
-        if not f.get("is_impact_evaluation") and not f.get("cost_per_beneficiary") and not f.get("benefit_cost"):
-            continue
+        if not f.get("is_impact_evaluation"):
+            continue  # reviews and overviews only relay other studies: never counted
         key = programme_key(f, doc_key)
         g = out.setdefault(key, {"name": f.get("programme_group") or f.get("programme") or doc_key[:40],
                                  "docs": [], "facts": []})

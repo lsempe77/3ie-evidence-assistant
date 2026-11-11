@@ -37,8 +37,24 @@ builds study cards, extracts estimates and study facts, and regroups programmes.
 | 10 Nov | Sonnet 5.5 answers, baseline for the gate (N3) | 0.552 |
 | 10 Nov | Estimates from tables in the reader (N6 step 2) | 0.559 |
 | 11 Nov | Study facts and computed figures (N6 step 3) | 0.545 |
+| 11 Nov | Never use findings a paper reports from other studies | 0.564 |
 
-Single runs move by about 0.03, so the last three are level. The 7 pooled gold claims did not move with
+Single runs move by about 0.03, so the last four are level.
+
+**Rule since 11 November: no secondhand findings.** Findings that a paper reports from other studies
+(its literature review, comparisons with earlier evaluations) are never cited, counted or used, because
+the quality of the study behind them is unknown. The rule is enforced in four places:
+
+- The reader prompt and the answer prompt.
+- A check that drops any reading whose supporting quote carries an author-year citation
+  (`src/extraction/secondhand.py`).
+- The study facts. Figures quoted from other studies are dropped, and review documents are not counted.
+- The table extraction prompt.
+
+The answers of 10 November held three such findings in 20 answers, for example costs for five countries
+relayed by a Niger paper. The run under the rule held none.
+
+Studies cited per answer fell from 19.9 to 15.8. Study facts now cover 91 evaluations of 39 programmes. The 7 pooled gold claims did not move with
 N6. They rest on the review's own conversions (2024 dollars, a 20-year cost-benefit model) or on a
 comparison the collection cannot support, so they are a weak target for tuning. N6 made the answers more
 quantitative (estimates with tables and pages, medians, ranges, counts) without lowering the score.
@@ -50,7 +66,7 @@ estimates and $0.89 for study facts.
 **Collection data built on 10 and 11 November.** These are for the graduation collection.
 
 - 20,465 grounded estimates from 90 of 97 documents (SE 78%, N 59%, page 100%).
-- Study facts for all 97 documents: 93 evaluations of about 41 programmes in 29 countries.
+- Study facts for all 97 documents: 91 evaluations of about 39 programmes (11 November, under the no-secondhand rule).
 
 #### Open issues
 
