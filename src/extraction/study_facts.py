@@ -84,7 +84,8 @@ def document_text(content_list: List[Dict[str, Any]], limit: int = MAX_DOC_CHARS
         if not text:
             continue
         p = item.get("page_idx")
-        if p not in (None, "") and p != page:
+        p = int(p) + 1 if p not in (None, "") else None  # 1-based pages, as chunks use
+        if p is not None and p != page:
             page = p
             out.append(f"\n[p. {p}]")
         out.append(text)
@@ -183,6 +184,7 @@ def ground(raw: Dict[str, Any], doc_text: str) -> Dict[str, Any]:
         "components": [str(c) for c in (raw.get("components") or [])][:10],
         "cost_per_beneficiary": costs, "transfer_value": transfers, "benefit_cost": ratios, "headline_effects": effects,
         "followup_months": followups,
+        "page_base": 1,  # pages count from 1 (records before 11 Nov 2026 counted from 0)
     }
 
 

@@ -15,7 +15,7 @@ The probability of extreme poverty was reduced by 17.5%."""
 def test_document_text_marks_pages_and_keeps_tables():
     cl = [{"type": "text", "text": "Intro", "page_idx": 1}, {"type": "table", "text": "| a | b |", "page_idx": 2},
           {"type": "image", "page_idx": 2}, {"type": "text", "text": "More", "page_idx": 2}]
-    assert document_text(cl) == "\n[p. 1]\nIntro\n\n[p. 2]\n| a | b |\nMore"
+    assert document_text(cl) == "\n[p. 2]\nIntro\n\n[p. 3]\n| a | b |\nMore"  # page_idx counts from 0
 
 
 def test_ground_keeps_quoted_figures_and_drops_the_rest():
