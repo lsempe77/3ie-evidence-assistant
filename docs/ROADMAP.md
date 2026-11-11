@@ -1,6 +1,6 @@
 # 3ie Evidence Assistant roadmap (formerly DevChat)
 
-**Last Updated:** 10 November 2026
+**Last Updated:** 11 November 2026
 
 > This document tracks **future features** and priorities.  
 > For current implementation status, see [SETUP_TRACKER.md](../SETUP_TRACKER.md).  
@@ -13,6 +13,61 @@
 ---
 
 ## Upcoming Features
+
+### Status on 11 November 2026
+
+**What is live.** Answers come from the read-then-synthesise pipeline (`src/agents/study_synthesis.py`):
+
+1. Study cards rank whole studies.
+2. Haiku 5.5 reads every candidate study, with the effect estimates extracted from that study's tables.
+3. Sonnet 5.5 writes the answer from the readings, plus figures computed across the collection from
+   study facts.
+
+Answers stream to a live progress view, and three follow-up questions arrive after the answer. Railway
+serves the API from `main`, Vercel serves the frontend, and Modal processes uploads. Processing now also
+builds study cards, extracts estimates and study facts, and regroups programmes.
+
+**Benchmark** (graduation review brief, 20 questions, 49 gold claims, two judges):
+
+| Date | Change | Claim score |
+| --- | --- | --- |
+| 9 Nov | Old pipeline (passage retrieval, one answer call) | 0.29 |
+| 9 Nov | Read-then-synthesise, Haiku 5.5 | 0.47 to 0.50 |
+| 10 Nov | Study cards and programme counting (N1, N1b) | 0.52 |
+| 10 Nov | Sonnet 5.5 answers, baseline for the gate (N3) | 0.552 |
+| 10 Nov | Estimates from tables in the reader (N6 step 2) | 0.559 |
+| 11 Nov | Study facts and computed figures (N6 step 3) | 0.545 |
+
+Single runs move by about 0.03, so the last three are level. The 7 pooled gold claims did not move with
+N6. They rest on the review's own conversions (2024 dollars, a 20-year cost-benefit model) or on a
+comparison the collection cannot support, so they are a weak target for tuning. N6 made the answers more
+quantitative (estimates with tables and pages, medians, ranges, counts) without lowering the score.
+
+**Cost.** About 4.5 US cents per question (Haiku reads, Sonnet answers). Processing adds about 3.5 cents
+per document for estimates and study facts. One-off N6 runs on the graduation collection: $2.50 for
+estimates and $0.89 for study facts.
+
+**Collection data built on 10 and 11 November.** These are for the graduation collection.
+
+- 20,465 grounded estimates from 90 of 97 documents (SE 78%, N 59%, page 100%).
+- Study facts for all 97 documents: 93 evaluations of about 41 programmes in 29 countries.
+
+#### Open issues
+
+- The benchmark gate on pull requests skips itself until four repository secrets are added
+  (`OPENROUTER_API_KEY`, `COHERE_API_KEY`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`).
+- The new Modal steps (estimates, study facts, programme groups) were checked for imports in the Modal
+  image, but no real upload has gone through them yet.
+- The answer model reasons for about 12 s before its first word. Test a lower reasoning effort on the
+  benchmark.
+- "Deeper answer" stays hidden until Opus 5.5 is benchmarked.
+- On 10 November a same-day benchmark run overwrote the results file of the baseline run. The
+  summary survives in `baseline.json`, and the full file only in OneDrive version history.
+  `run_benchmark.py` now adds a time suffix instead.
+
+**Suggested next steps, in order:** N6 follow-ups (an evidence table in the interface, costs in one price
+year, a better women-as-recipients flag), N5 questions in other languages, N7 collection-page design,
+then N9 to N12.
 
 ### ▶ Next up (after the model review, 10 November 2026)
 
