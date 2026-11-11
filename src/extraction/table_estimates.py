@@ -55,6 +55,8 @@ If it is a results table, list every estimate of a treatment effect on an outcom
 - p_cell: an exact p-value cell if the table has one, else ""
 - n: the number of observations for the estimate if the table gives it, else ""
 
+Do not include estimates the table reproduces from OTHER studies (for example a comparison with
+earlier evaluations): only this study's own estimates.
 Do not include control-group means, constants, covariates or controls, baseline levels,
 first-stage coefficients, R-squared or sample sizes as estimates.
 
