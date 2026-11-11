@@ -59,7 +59,7 @@
    - A Spanish question read only 2 studies against 3 Haku Wiñay documents held. Translate the question for
      retrieval (keep answering in the user's language), or retrieve with both versions.
 
-6. **N6. Effect sizes and pooled comparisons** - steps 1 and 2 done 10 Nov 2026, step 3 ⬅️ next
+6. **N6. Effect sizes and pooled comparisons** - steps 1 to 3 done 11 Nov 2026
    - Seven of the 49 gold claims need comparisons across studies, such as smaller income gains when women
      are the transfer recipients.
    - Step 1 (done, PR #21): the `effect_estimates` table, and 7,127 OM_QEX estimates for 77 studies imported
@@ -81,10 +81,27 @@
    - Known weaknesses: arm labels sometimes miss the column (three "Income, pooled panel" values from
      different specifications), a few values are column headers such as "0", and some N values are
      cluster counts. The lookup adds about 3 s, overlapped with the rerank.
-   - Still to do for step 2: run the extraction on new uploads in the Modal pipeline.
-   - Step 3: answers that compare studies by outcome and subgroup (counts by direction, sizes,
-     significance, standardised effects where SDs are reported), grouped by programme features such as
-     women as recipients, always flagged as not a meta-analysis.
+   - New uploads: the Modal pipeline extracts estimates and study facts for each processed document
+     (PR #23). Fixing its imports (PR #24) also restored the study-card rebuild on Modal, which had
+     been failing quietly since study cards shipped.
+   - Step 3 (done): study facts, one record per document (`src/extraction/study_facts.py`). One Haiku
+     call reads the whole paper and fills a form: programme, countries, women as main recipients,
+     components, total cost per beneficiary, transfer value, benefit-cost ratios and up to six
+     headline effects as a percentage change. Every figure needs a quote found in the paper that
+     contains it. One more call per collection groups name variants into programmes
+     (`programme_groups.py`). Cost: $0.89 for 97 documents.
+   - `src/agents/evidence_summary.py` computes figures across the collection in code, one figure per
+     programme, and the answer uses them when the question asks for them: coverage (93 evaluations of
+     about 41 programmes in 29 countries, against the review's 44 in 27), cost per beneficiary with
+     nominal and PPP dollars kept apart (medians 389 and 2,839), transfer share of cost (median 34%),
+     benefit-cost ratios (median 2.20), and headline effects grouped by women as main recipients.
+   - Benchmark (full gate): 0.545 against the 0.552 baseline, within noise. The coverage and
+     value-for-money answers now give counts and medians. The pooled gold claims stay hard because
+     they use the review's own conversions (2024 dollars, a 20-year cost-benefit model) and a
+     comparison of women-targeted programmes with others, where only one programme on the other side
+     reports a percentage income change. The answers say so rather than guess.
+   - Next: show the computed figures in the interface as an evidence table, convert costs to one price
+     year, and improve the women-as-recipients flag (19 of 41 programmes do not say).
 
 7. **N7. Design: collection pages** - 2-3 d
    - Documents and Settings next, following [DESIGN.md](../DESIGN.md). They hold most of the remaining
