@@ -204,7 +204,8 @@ def table_units(content_list: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
             except ValueError:
                 pass
         try:
-            page = int(item.get("page_idx")) if item.get("page_idx") not in (None, "") else None
+            # Docling's page_idx counts from 0; pages shown to users count from 1, as chunks do
+            page = int(item.get("page_idx")) + 1 if item.get("page_idx") not in (None, "") else None
         except (TypeError, ValueError):
             page = None
         units.append({"index": i, "page": page, "caption": caption or "", "text": text[:MAX_TABLE_CHARS],

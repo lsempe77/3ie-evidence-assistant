@@ -48,7 +48,7 @@ def test_table_units_carry_page_caption_and_context():
              {"type": "table", "text": TABLE, "page_idx": "11", "table_caption": "['Table 1. Impacts']"},
              {"type": "text", "text": "*** p<0.01"}]
     (u,) = table_units(items)
-    assert u["page"] == 11 and u["caption"] == "Table 1. Impacts" and "p<0.01" in u["context"]
+    assert u["page"] == 12 and u["caption"] == "Table 1. Impacts" and "p<0.01" in u["context"]
 
 
 def test_rows_for_keeps_grounded_numbers_and_cleans_values():
