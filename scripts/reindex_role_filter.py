@@ -15,6 +15,7 @@ Usage:
 
 import argparse
 import asyncio
+import json
 import logging
 import sys
 import time
@@ -57,21 +58,32 @@ async def main() -> None:
     embedder = None if args.dry_run else EmbeddingGenerator()
     start = time.time()
 
+    # A document is recorded as done only after its chunks are written, so a failure part-way
+    # through leaves the old chunks in place and a re-run picks the document up again.
+    done_path = Path(".cache") / f"reindex_done_{args.project}.json"
+    done = set(json.loads(done_path.read_text(encoding="utf-8"))) if done_path.exists() else set()
+    if done:
+        print(f"resuming: {len(done)} documents already done")
+
     for i, key in enumerate(keys, 1):
+        if key in done:
+            continue
         try:
             units = await filtered_units(args.project, key, DEFAULT_MODEL, settings.openrouter_api_key)
+            nodes = chunker.chunk(documents_from_units(units, key))
+            print(f"  [{i}/{len(keys)}] {key}: units {len(units)} -> chunks {len(nodes)}")
+            if args.dry_run:
+                continue
+            nodes = embedder.embed_nodes(nodes, show_progress=False)
+            indexer.delete_by_document_id(key)
+            indexer.index_nodes(nodes)
+            done.add(key)
+            done_path.parent.mkdir(parents=True, exist_ok=True)
+            done_path.write_text(json.dumps(sorted(done)), encoding="utf-8")
         except Exception as e:
             print(f"  [{i}/{len(keys)}] {key}: SKIPPED ({type(e).__name__}: {str(e)[:80]})")
-            continue
-        nodes = chunker.chunk(documents_from_units(units, key))
-        print(f"  [{i}/{len(keys)}] {key}: units {len(units)} -> chunks {len(nodes)}")
-        if args.dry_run:
-            continue
-        nodes = embedder.embed_nodes(nodes, show_progress=False)
-        indexer.delete_by_document_id(key)
-        indexer.index_nodes(nodes)
 
-    print(f"done in {time.time() - start:.0f}s")
+    print(f"done in {time.time() - start:.0f}s ({len(done)} documents recorded)")
 
 
 if __name__ == "__main__":
