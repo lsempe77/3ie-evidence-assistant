@@ -176,11 +176,13 @@ print(f"Citation Precision: {result.citation_precision:.2%}")
 
 The study ran 211 questions over the 97 papers of the graduation collection. Recomputed from the cached artifacts, the 27,335 labelled paragraphs hold 1,842,494 words, and 33,869 passages were shown to the reader. The findings:
 
-- Of the words shown to the reader, 31% are noise: other studies' findings (11%), background (9%) and boilerplate (11%). Those three roles supply 7% of the supporting quotes.
-- Of 27,335 paragraphs, 1,281 (4.7%) were ever used as a supporting quote.
-- 188 of 3,194 supporting quotes (6%) could not be found verbatim in any paragraph. A looser substring match finds 117 (3.7%), so treat 4% to 6% as the range.
-- The reader is tuned for effect questions. It marks 27 relevant studies per effects question, but 0.7 per implementation question.
-- The secondhand guard (`src/extraction/secondhand.py`) matches author-year citations only. 103 supporting quotes still came from paragraphs labelled as other studies' findings, and 75 of those were cited in answers.
+- Of the words shown to the reader, 31% are noise: other studies' findings (11%), background (9%) and boilerplate (11%). Those three roles supply 8% of the supporting quotes.
+- Of 27,335 paragraphs, 1,551 (5.7%) were ever used as a supporting quote.
+- 178 of 3,863 supporting quotes (4.6%) could not be found verbatim in any paragraph.
+- The reader judges relevance by the kind of question (`src/agents/study_synthesis.py`). It marks 30 relevant studies per effects question and 1.6 per implementation question.
+- The secondhand guard (`src/extraction/secondhand.py`) matches author-year citations only. 127 supporting quotes still came from paragraphs labelled as other studies' findings, and 91 of those were cited in answers.
+
+These figures come from the run after the reader was changed to judge relevance by question kind. An earlier run, before that change, had 1,281 of 27,335 paragraphs used (4.7%), 188 of 3,194 quotes not verbatim (5.9%), 27 relevant studies per effects question and 0.7 per implementation question.
 
 To reproduce, run `python evaluation/usage_study.py analyse --project-id <uuid>`. The aggregate report is committed at `evaluation/results/usage_study/<uuid>/report.md`. The run logs, cached content and labels hold text from the papers and stay local (see `.gitignore`).
 
