@@ -102,6 +102,21 @@ def keep_results_tables(units: List[Dict[str, Any]], labels: List[str], estimate
     return out
 
 
+def filter_units(
+    units: List[Dict[str, Any]],
+    labels: List[str],
+    estimate_tables: set = frozenset(),
+) -> List[Dict[str, Any]]:
+    """The units to keep for the index, in document order, with the table rule applied first.
+
+    Tables that report this study's own results are promoted to `own_finding` (see
+    `keep_results_tables`), then every unit whose role is not in `KEEP` is dropped. Kept units
+    are returned unchanged, so their text stays verbatim and still maps to a page.
+    """
+    resolved = keep_results_tables(units, labels, set(estimate_tables))
+    return [unit for unit, role in zip(units, resolved) if role in KEEP]
+
+
 def _title(units: List[Dict[str, Any]]) -> str:
     for u in units[:15]:
         if u["kind"] == "title" and len(u["text"]) > 15:
