@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Document, Page, pdfjs } from "react-pdf";
 import type { PDFDocumentProxy } from "pdfjs-dist";
 import "react-pdf/dist/Page/TextLayer.css";
@@ -44,6 +44,10 @@ const MIN_SCALE = 0.3;
 const MAX_SCALE = 4;
 const ZOOM_STEP = 1.25;
 const VIEW_PADDING = 24;
+// Only pages near the viewport are drawn. Rendering every page at once is what makes a
+// long PDF slow to open; the cited page stays mounted so its highlight is found on load.
+const WINDOW_BEHIND = 2;
+const WINDOW_AHEAD = 3;
 
 const CITE_CLASS = "pointer-events-none rounded-[3px] bg-highlight/60 text-transparent";
 const SEARCH_CLASS = "pointer-events-none rounded-[3px] bg-warning/25 text-transparent";
@@ -117,6 +121,19 @@ export default function PdfDocumentView({
       ? clampScale((containerWidth - VIEW_PADDING * 2) / pageSize.width)
       : null;
   const renderScale = fitScale ?? scale;
+
+  // Pages to mount: a window around the current page, plus the cited page so its highlight and
+  // the initial scroll work without waiting for the reader to scroll there.
+  const drawnPages = useMemo(() => {
+    const pages = new Set<number>();
+    const add = (page: number) => {
+      if (page >= 1 && page <= numPages) pages.add(page);
+    };
+    for (let page = currentPage - WINDOW_BEHIND; page <= currentPage + WINDOW_AHEAD; page += 1) add(page);
+    add(citePage);
+    add(initialPage);
+    return pages;
+  }, [citePage, currentPage, initialPage, numPages]);
 
   const scrollToPage = useCallback((page: number, smooth: boolean) => {
     const container = scrollRef.current;
@@ -495,17 +512,29 @@ export default function PdfDocumentView({
           >
             {Array.from({ length: numPages }, (_, pageIndex) => {
               const pageNumber = pageIndex + 1;
+              const drawn = drawnPages.has(pageNumber);
               return (
-                <Page
+                <div
                   key={pageNumber}
-                  pageNumber={pageNumber}
-                  scale={renderScale}
-                  renderAnnotationLayer={false}
-                  onRenderTextLayerSuccess={handleTextLayerRendered}
-                  inputRef={setPageElement}
-                  loading={null}
+                  ref={setPageElement}
+                  data-page-number={pageNumber}
                   className="overflow-hidden rounded-sm border border-hairline bg-canvas shadow-sm"
-                />
+                  style={
+                    pageSize
+                      ? { width: pageSize.width * renderScale, height: pageSize.height * renderScale }
+                      : undefined
+                  }
+                >
+                  {drawn && (
+                    <Page
+                      pageNumber={pageNumber}
+                      scale={renderScale}
+                      renderAnnotationLayer={false}
+                      onRenderTextLayerSuccess={handleTextLayerRendered}
+                      loading={null}
+                    />
+                  )}
+                </div>
               );
             })}
           </Document>
