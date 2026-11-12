@@ -61,9 +61,20 @@ ESTIMATES EXTRACTED FROM THIS STUDY'S TABLES (closest to the question; id | outc
 subgroup | estimate (SE), stars | N | table, page):
 {estimates}
 
+A passage is evidence when it comes from THIS study and answers what the question asks, whatever
+kind of question it is:
+- effect: this study's own results on the outcome, with direction and size.
+- implementation: what the programme delivered, to whom, how and for how long, take-up, fidelity,
+  and the problems reported. Relevant even with no effect size.
+- context: where and for whom, targeting rules, baseline conditions. Relevant even with no effect size.
+- design: how the evidence was produced: design, sampling, data, attrition, measurement.
+- cost: cost per beneficiary, cost-effectiveness, benefit-cost.
+- mechanism: the channels and constraints the study argues for, with or without results.
+
 Using ONLY these passages, return JSON:
-{{"relevant": true or false,           // does the study report its OWN evidence that answers the question?
-  "finding": "<one or two sentences: what this study found on the question, with direction and size as reported (units, %, SD), and the time point if given; empty if not relevant>",
+{{"relevant": true or false,           // does the study report its OWN evidence of one of those kinds that answers the question?
+  "kind": "effect" | "implementation" | "context" | "design" | "cost" | "mechanism" | "other",
+  "finding": "<one or two sentences answering the question from this study, with direction and size when the study reports them; empty if not relevant>",
   "direction": "positive" | "negative" | "null" | "mixed" | "not_applicable",
   "quote": "<a short exact quote from the passages that supports the finding>",
   "page": <page number of the quote, or null>,
@@ -71,10 +82,12 @@ Using ONLY these passages, return JSON:
   "estimate_ids": ["<ids of up to four extracted estimates above that directly answer the question, e.g. 'E2'; [] if none>"]}}
 If extracted estimates answer the question, use them in the finding with their numbers, and prefer
 them to vaguer statements in the passages. Never use an estimate that is not listed or quoted.
-Do not use outside knowledge. If the passages only mention the topic without results, relevant is false.
-Use only results THIS study produced from its own data. Passages that report what OTHER studies found
-(a literature review, "Banerjee et al. (2015) find...", comparisons with earlier evaluations) are never
-evidence: ignore them, never quote them, and if they are all the passages offer, relevant is false.
+Do not use outside knowledge. Use only evidence THIS study produced from its own data: its results,
+and its own statements about how it was done, what it delivered, where and to whom, and at what cost.
+Passages that report what OTHER studies found (a literature review, "Banerjee et al. (2015) find...",
+comparisons with earlier evaluations) are never evidence: ignore them, never quote them, and if they
+are all the passages offer, relevant is false. For a question about effects with no results, relevant
+is false; for the other kinds, a passage that answers the question is relevant with or without results.
 If the passages are garbled or unreadable (for example a broken table), relevant is false: never report
 on how the text looks."""
 
@@ -95,6 +108,9 @@ Write the answer:
 - Lead with the overall pattern across the studies, then the important exceptions. Say how
   many studies point each way (e.g. "12 of 15 studies found…") and their designs where it
   matters (RCTs vs quasi-experimental).
+- When the question is not about effects (how a programme was delivered, who it covered, where,
+  how the study was designed, or what it cost), answer in those terms. Do not count directions or
+  statistical significance, and do not force an effect framing. Still cite every factual sentence.
 - Where studies list estimates on the same outcome, compare them: how many are positive and
   statistically significant, how sizes compare (only within the same units), and whether
   subgroups such as women or the poorest differ. Say this is a comparison of reported
@@ -160,6 +176,7 @@ class StudyReading:
     passage: str = ""            # best passage, for highlighting in the PDF viewer
     passage_page: Optional[int] = None
     programme: str = ""          # programme or intervention evaluated, as the reader names it
+    kind: str = ""               # evidence kind the reader reports: effect, implementation, context, ...
     error: str = ""              # set when the reader call or its JSON failed
     estimates: List[Dict[str, Any]] = field(default_factory=list)  # extracted estimates the reader used
 
@@ -444,7 +461,7 @@ class StudySynthesisPipeline:
                             break
                         except Exception as e:
                             data = {"relevant": False, "finding": "", "direction": "not_applicable",
-                                    "quote": "", "page": None, "error": str(e)[:200]}
+                                    "kind": "", "quote": "", "page": None, "error": str(e)[:200]}
                 if data.get("relevant") and cites_other_study(data.get("quote")):
                     # The supporting quote reports another study: never evidence (rule, 11 Nov 2026)
                     data = {**data, "relevant": False, "finding": "", "estimate_ids": [],
@@ -453,6 +470,7 @@ class StudySynthesisPipeline:
                     number=number, study_id=sid, label=_label(meta), design=design, countries=countries,
                     relevant=bool(data.get("relevant")), finding=str(data.get("finding") or ""),
                     direction=str(data.get("direction") or ""), quote=str(data.get("quote") or ""),
+                    kind=str(data.get("kind") or ""),
                     page=data.get("page") if isinstance(data.get("page"), int) else None,
                     best_score=rows[0].score,
                     metadata=dict(meta),
@@ -480,7 +498,7 @@ class StudySynthesisPipeline:
         findings = "\n".join(
             f"[{numbered[r.study_id]}] {r.label} | design: {r.design} | countries: {r.countries}"
             f" | programme: {r.programme or 'not stated'}\n"
-            f"    finding ({r.direction}): {r.finding}"
+            f"    finding ({r.kind or 'effect'}; direction: {r.direction}): {r.finding}"
             + ("".join(f"\n    estimate: {_estimate_text(e)}" for e in r.estimates) if r.estimates else "")
             for r in relevant
         ) or "(none of the studies read reports evidence on this question)"
