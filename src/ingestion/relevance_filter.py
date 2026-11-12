@@ -79,7 +79,12 @@ async def filtered_units(
 
 
 def documents_from_units(units: Sequence[Dict[str, Any]], doc_key: str) -> List[Document]:
-    """One LlamaIndex Document per kept unit, carrying the page so highlighting still works."""
+    """One LlamaIndex Document per kept unit, carrying the page so highlighting still works.
+
+    The doc key goes in metadata, not in the Document `doc_id` argument: passing one `doc_id` for
+    every unit makes the chunker collapse the page metadata to the last page. Metadata is enough,
+    because `ChunkIndexer.node_to_row` reads `doc_id` or `pdf_name` from the node metadata.
+    """
     return [
         Document(
             text=unit["text"],
@@ -90,7 +95,6 @@ def documents_from_units(units: Sequence[Dict[str, Any]], doc_key: str) -> List[
                 "page_end": unit.get("page"),
                 "kind": unit.get("kind"),
             },
-            doc_id=doc_key,
         )
         for unit in units
     ]

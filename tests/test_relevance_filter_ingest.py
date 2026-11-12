@@ -58,3 +58,15 @@ def test_documents_carry_doc_key_and_page():
     assert docs[0].text == "some text"
     assert docs[0].metadata["doc_id"] == "doc1"
     assert docs[0].metadata["page_start"] == 7
+
+
+def test_chunking_keeps_each_units_page():
+    # Regression: giving every unit Document the same `doc_id` argument made the chunker
+    # collapse every page to the last one, which would break PDF highlighting.
+    from src.ingestion.chunking import get_chunker
+
+    units = [{"text": f"Paragraph {i} about results. " * 15, "page": i, "kind": "text"}
+             for i in range(1, 21)]
+    nodes = get_chunker("hybrid").chunk(rf.documents_from_units(units, "doc1"))
+
+    assert {n.metadata.get("page_start") for n in nodes} == set(range(1, 21))
