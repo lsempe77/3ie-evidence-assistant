@@ -98,3 +98,34 @@ def documents_from_units(units: Sequence[Dict[str, Any]], doc_key: str) -> List[
         )
         for unit in units
     ]
+
+
+async def filter_documents(
+    documents: Sequence[Document],
+    project_id: str,
+    model: str = "",
+) -> List[Document]:
+    """Replace each document with ones built from its own-evidence units.
+
+    One document per kept parser unit, so a chunk never mixes kept and dropped text. Fails open
+    per document: a missing content list or a labelling error keeps that document's original text.
+    The document key comes from its metadata (`pdf_name`, `file_name`, `study_id` or `doc_id`).
+    """
+    from src.config.settings import settings
+    from src.extraction.store_estimates import DEFAULT_MODEL
+    from src.ingestion.indexer import doc_key_from
+
+    chosen_model = model or DEFAULT_MODEL
+    kept_documents: List[Document] = []
+    for document in documents:
+        meta = document.metadata or {}
+        doc_key = doc_key_from(str(meta.get("pdf_name") or meta.get("file_name")
+                                    or meta.get("study_id") or document.doc_id or ""))
+        try:
+            units = await filtered_units(project_id, doc_key, chosen_model, settings.openrouter_api_key)
+        except Exception as e:
+            logger.warning(f"Role filter failed for {doc_key}: {e}; keeping its markdown")
+            units = []
+        built = documents_from_units(units, doc_key) if units else []
+        kept_documents.extend(built or [document])
+    return kept_documents

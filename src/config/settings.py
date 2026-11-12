@@ -210,8 +210,9 @@ class Settings(BaseSettings):
     parent_chunk_size: int = Field(default=1024, ge=256)  # Parent = 4x child
     use_semantic_chunking: bool = Field(default=True)
     # Drop paragraphs that are not a document's own evidence before embedding (role filter).
-    # Off by default: turning it on changes what is embedded, so the project must be re-indexed.
-    index_role_filter: bool = Field(default=False)
+    # On by default (12 Nov 2026, after the study and the benchmark gate): the collection is
+    # already re-indexed with it, so new ingests must match. Set INDEX_ROLE_FILTER=false to disable.
+    index_role_filter: bool = Field(default=True)
     
     # =========================================================================
     # Data Paths

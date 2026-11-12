@@ -268,33 +268,6 @@ async def sample_points(limit: int = 5):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-async def _filter_documents_by_role(documents, project_id: str):
-    """Replace each document with the ones built from its own-evidence units (`index_role_filter`).
-
-    The units come from the parser's content list in R2 and are labelled by role; noise roles are
-    dropped (see `src/ingestion/relevance_filter.py`). Any failure keeps the original markdown
-    document, so a missing content list or a model outage cannot drop a document from the index.
-    """
-    from src.extraction.store_estimates import DEFAULT_MODEL
-    from src.ingestion.indexer import doc_key_from
-    from src.ingestion.relevance_filter import documents_from_units, filtered_units
-
-    kept_documents = []
-    for document in documents:
-        meta = document.metadata or {}
-        doc_key = doc_key_from(str(meta.get("pdf_name") or meta.get("file_name")
-                                    or meta.get("study_id") or document.doc_id or ""))
-        try:
-            units = await filtered_units(project_id, doc_key, model=DEFAULT_MODEL,
-                                         api_key=settings.openrouter_api_key)
-        except Exception as e:
-            logger.warning(f"Role filter failed for {doc_key}: {e}; keeping its markdown")
-            units = []
-        built = documents_from_units(units, doc_key) if units else []
-        kept_documents.extend(built or [document])
-    return kept_documents
-
-
 @router.post("/ingest", response_model=IngestResponse)
 async def ingest_documents(request: IngestRequest):
     """
@@ -322,7 +295,8 @@ async def ingest_documents(request: IngestRequest):
         if not project_id:
             raise HTTPException(status_code=400, detail="Give a project id or set DEFAULT_PROJECT_ID")
         if settings.index_role_filter:
-            documents = await _filter_documents_by_role(documents, project_id)
+            from src.ingestion.relevance_filter import filter_documents
+            documents = await filter_documents(documents, project_id)
         nodes = chunker.chunk(documents)
 
         # Index

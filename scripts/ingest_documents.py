@@ -10,6 +10,7 @@ Usage:
 """
 
 import argparse
+import asyncio
 import sys
 import time
 from pathlib import Path
@@ -22,6 +23,7 @@ from src.ingestion.chunking import get_chunker
 from src.ingestion.document_loader import DocumentLoader
 from src.ingestion.embeddings import EmbeddingGenerator
 from src.ingestion.indexer import ChunkIndexer
+from src.ingestion.relevance_filter import filter_documents
 from src.utils.logging import get_logger, setup_logging
 
 setup_logging()
@@ -108,6 +110,12 @@ def main():
     if not documents:
         logger.error("❌ No documents found. Check source path.")
         sys.exit(1)
+
+    # Step 1b: keep only the study's own evidence (role filter, on by default)
+    if settings.index_role_filter:
+        logger.info("\n🧹 Step 1b: Dropping paragraphs that are not the study's own evidence...")
+        documents = asyncio.run(filter_documents(documents, args.collection))
+        logger.info(f"✅ Kept {len(documents)} documents after the role filter")
     
     # Step 2: Chunk documents
     logger.info("\n✂️ Step 2: Chunking documents...")

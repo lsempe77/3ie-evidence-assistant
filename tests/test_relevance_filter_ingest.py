@@ -70,3 +70,29 @@ def test_chunking_keeps_each_units_page():
     nodes = get_chunker("hybrid").chunk(rf.documents_from_units(units, "doc1"))
 
     assert {n.metadata.get("page_start") for n in nodes} == set(range(1, 21))
+
+
+def test_filter_documents_rebuilds_from_kept_units(monkeypatch):
+    from llama_index.core.schema import Document
+
+    async def fake(project_id, doc_key, model, api_key, cache_dir=None):
+        return [{"text": "the study's own evidence", "page": 3, "kind": "text"}]
+
+    monkeypatch.setattr(rf, "filtered_units", fake)
+    out = asyncio.run(rf.filter_documents([Document(text="raw markdown", metadata={"file_name": "abc.md"})], "p1"))
+
+    assert [d.text for d in out] == ["the study's own evidence"]
+    assert out[0].metadata["page_start"] == 3
+    assert out[0].metadata["doc_id"] == "abc"
+
+
+def test_filter_documents_keeps_the_markdown_when_labelling_fails(monkeypatch):
+    from llama_index.core.schema import Document
+
+    async def boom(*args, **kwargs):
+        raise RuntimeError("no content list")
+
+    monkeypatch.setattr(rf, "filtered_units", boom)
+    out = asyncio.run(rf.filter_documents([Document(text="raw markdown", metadata={"file_name": "abc.md"})], "p1"))
+
+    assert [d.text for d in out] == ["raw markdown"]
