@@ -10,6 +10,14 @@ How the app deploys, for reference:
 
 ---
 
+## Status log
+
+- 12 Nov 2026: Phase 0 done. Review fixes committed as `c7deee1` (viewer) and `3aaea00` (study), the plan as `04fd1f7`; `main` pushed. Vercel and Railway deployed and healthy (`/health` 200, all components true). The reader was confirmed working live.
+- 12 Nov 2026: slow PDF opening fixed in `1c5c685` by windowing page rendering. This also does Phase 5.
+- Unrelated: the "Deploy Sphinx Docs to GitHub Pages" job fails on any push because GitHub Pages is not enabled for the repo (404 from `actions/deploy-pages`).
+
+---
+
 ## Phase 0. Land the reader, do not let the fixes rot
 
 Status: the reader is committed on local `main` (`15b63b4`, `f8f4fb0`, `d47c85e`), the study is `ec24057`, and seven review fixes are uncommitted in the working tree.
