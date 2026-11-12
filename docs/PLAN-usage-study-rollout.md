@@ -16,7 +16,7 @@ How the app deploys, for reference:
 - 12 Nov 2026: slow PDF opening fixed in `1c5c685` by windowing page rendering. This also does Phase 5.
 - 12 Nov 2026: Phase 1 implemented in `67fbfd6` (reader relevance by question kind) and confirmed on the full 211-question set. Relevant studies per question rose from 15.2 to 18.3 overall and in every category (implementation 0.7 to 1.6, context 4.2 to 9.3, side effects 3.8 to 6.0, mechanisms 14.4 to 19.2, effects 27.0 to 29.7). Supporting quotes rose 3,194 to 3,863; quotes not verbatim fell 188 (5.9%) to 178 (4.6%); the noise share of quotes rose 7.1% to 8.6%. Full benchmark gate passed (0.567 vs 0.552). The re-run is in `report.md`; the previous run is `runs.baseline.jsonl`.
 - 12 Nov 2026: run infrastructure fixed. Non-ASCII characters in console output crashed the Windows cp1252 handler: the reranker log arrow (`b6ccdf0`) flooded output, and the study's failure marker (`762d80c`) aborted a run at 18 of 211. The study now logs ASCII and gathers with `return_exceptions=True` so one failed question cannot stop a batch.
-- 12 Nov 2026: Phase 2 re-indexed and measured. The filter was wired (`53cd1ef`), a page-metadata bug in the chunker path was fixed (`f1dba8c`), and the re-index made resumable (`a206625`). All 98 documents re-indexed with correct pages. In the study against the filtered index, noise roles fell to 6% of what the reader sees (from 31%) and to 1.2% of quotes (from 8.6%); own findings rose to 63% of quotes; quotes not verbatim fell to 2.6%. Relevant studies per question rose 18.3 to 25.5 but readings per question rose 43.8 to 52.4, so the jump is confounded by chunk granularity; relevance per study read rose 41.8% to 48.6%. Benchmark gate and a fixed-budget comparison are next.
+- 12 Nov 2026: Phase 2 re-indexed and measured, and both checks done. Against the filtered index, noise roles fell to 6% of what the reader sees (from 31%) and to 1.2% of quotes (from 8.6%); own findings rose to 63% of quotes; quotes not verbatim fell to 2.6%. Relevant studies per question rose 18.3 to 25.5 but readings rose 43.8 to 52.4, so the jump is confounded by chunk granularity. The full benchmark gate passed on the filtered index (0.566 vs 0.552), and a fixed-budget comparison (3 questions per category, capped to the unfiltered reading count) gave 21.3 vs 16.1 relevant per question, so a 32% gain at equal volume holds. Phase 2 is complete.
 - 12 Nov 2026: the Sphinx docs job now passes; GitHub Pages was not enabled, so it was enabled (custom domain `sempe.dev` was already configured).
 - Unrelated, resolved: the "Deploy Sphinx Docs to GitHub Pages" job failed on every push because GitHub Pages was not enabled (404 from `actions/deploy-pages`). Pages is now enabled and the job passes.
 
@@ -77,8 +77,8 @@ Steps:
 - [x] Decide the filter layer: parsed units, before chunking.
 - [x] Wire it into `/ingest` behind `settings.index_role_filter`, with a per-document label cache and fail-open on model failure.
 - [x] Re-index the collection (98 documents, `scripts/reindex_role_filter.py`) and re-run the study.
-- [ ] Confirm answer quality on the filtered index with the benchmark gate.
-- [ ] Isolate the filter from the granularity change (same reading budget) before trusting the relevant-per-question jump.
+- [x] Confirm answer quality on the filtered index with the benchmark gate.
+- [x] Isolate the filter from the granularity change (same reading budget) before trusting the relevant-per-question jump.
 - [ ] Keep: abstract (always), own findings, method, intervention, setting, cost, limitation. Drop: references, boilerplate, background, other studies' findings.
 - [ ] Never rewrite text: labels are per paragraph and text stays verbatim, so quotes still map to a page for citation and highlighting.
 - [ ] Store the per-document labels so re-indexing is deterministic and does not re-call the model.
