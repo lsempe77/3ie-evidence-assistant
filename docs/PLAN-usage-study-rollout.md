@@ -14,7 +14,9 @@ How the app deploys, for reference:
 
 - 12 Nov 2026: Phase 0 done. Review fixes committed as `c7deee1` (viewer) and `3aaea00` (study), the plan as `04fd1f7`; `main` pushed. Vercel and Railway deployed and healthy (`/health` 200, all components true). The reader was confirmed working live.
 - 12 Nov 2026: slow PDF opening fixed in `1c5c685` by windowing page rendering. This also does Phase 5.
-- Unrelated: the "Deploy Sphinx Docs to GitHub Pages" job fails on any push because GitHub Pages is not enabled for the repo (404 from `actions/deploy-pages`).
+- 12 Nov 2026: Phase 1 implemented in `67fbfd6` (reader relevance by question kind). Checked on 43 questions, 3 per category: every category rose or held versus the study baseline (context 8.0 to 15.3 relevant per question, mechanisms 9.7 to 15.7, gaps 5.7 to 9.3, implementation 0.3 to 0.7). Benchmark gate passed (claim score 0.677 vs 0.708). The full 211-question run (about $11) is still to do.
+- 12 Nov 2026: the Sphinx docs job now passes; GitHub Pages was not enabled, so it was enabled (custom domain `sempe.dev` was already configured).
+- Unrelated, resolved: the "Deploy Sphinx Docs to GitHub Pages" job failed on every push because GitHub Pages was not enabled (404 from `actions/deploy-pages`). Pages is now enabled and the job passes.
 
 ---
 
