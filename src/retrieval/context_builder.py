@@ -337,7 +337,7 @@ class ContextBuilder:
                 expanded.append(result)
         
         logger.debug(
-            f"Parent expansion: {len(results)} chunks → {len(expanded)} chunks"
+            f"Parent expansion: {len(results)} chunks -> {len(expanded)} chunks"
         )
         return expanded
     

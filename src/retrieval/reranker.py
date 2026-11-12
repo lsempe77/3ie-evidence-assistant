@@ -114,7 +114,7 @@ class CohereReranker(Reranker):
                 ))
             
             logger.info(
-                f"Reranked {len(results)} → {len(reranked)} results "
+                f"Reranked {len(results)} -> {len(reranked)} results "
                 f"(top score: {reranked[0].score:.3f})"
             )
             

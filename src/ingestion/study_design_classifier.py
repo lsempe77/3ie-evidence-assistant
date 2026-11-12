@@ -148,7 +148,7 @@ async def classify_and_update_document(
         logger.info(f"No abstract for {title[:40]}..., reading its chunks")
         abstract = await get_document_text_from_chunks(chunk_doc_id, project_id, max_chars=8000)
         if abstract:
-            logger.info(f"  → Got {len(abstract)} chars from stored chunks")
+            logger.info(f"  -> Got {len(abstract)} chars from stored chunks")
     
     if not title and not abstract:
         logger.warning(f"Document {doc_id} has no title or abstract for classification")

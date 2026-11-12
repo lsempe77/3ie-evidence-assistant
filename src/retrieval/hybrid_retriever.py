@@ -107,7 +107,7 @@ def mmr_diversity_filter(
     reordered = [results[i] for i in selected_indices]
     
     if len(reordered) < len(results):
-        logger.debug(f"MMR diversity: {len(results)} → {len(reordered)} results (lambda={lambda_param})")
+        logger.debug(f"MMR diversity: {len(results)} -> {len(reordered)} results (lambda={lambda_param})")
     else:
         logger.debug(f"MMR diversity reordering applied to {len(reordered)} results")
     
@@ -524,7 +524,7 @@ class HierarchicalRetriever(HybridRetriever):
             selected.extend(sorted_chunks[:self.chunks_per_study])
         
         logger.info(
-            f"Hierarchical retrieval: {len(by_study)} studies → "
+            f"Hierarchical retrieval: {len(by_study)} studies -> "
             f"{min(len(by_study), self.num_studies)} studies, "
             f"{len(selected)} chunks"
         )
