@@ -113,3 +113,10 @@ site/
 *.key
 secrets/
 credentials/
+
+# Usage study outputs hold paper text (evaluation/usage_study.py): keep the run logs,
+# cached content and labels local. Only the aggregate report.md is committed.
+evaluation/results/usage_study/*
+!evaluation/results/usage_study/*/
+evaluation/results/usage_study/*/*
+!evaluation/results/usage_study/*/report.md

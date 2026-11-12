@@ -170,6 +170,22 @@ print(f"Citation Precision: {result.citation_precision:.2%}")
 
 ---
 
+## Paragraph-role usage study (November 2026)
+
+`evaluation/usage_study.py` follows every passage from the index into the reader and the answer, and maps it back to the paragraph of the paper it came from. `src/extraction/relevance_labels.py` labels each paragraph by role with `anthropic/claude-haiku-5.5`, and never rewrites it, so kept text stays verbatim with its page.
+
+The study ran 211 questions over the 97 papers of the graduation collection. Recomputed from the cached artifacts, the 27,335 labelled paragraphs hold 1,842,494 words, and 33,869 passages were shown to the reader. The findings:
+
+- Of the words shown to the reader, 31% are noise: other studies' findings (11%), background (9%) and boilerplate (11%). Those three roles supply 7% of the supporting quotes.
+- Of 27,335 paragraphs, 1,281 (4.7%) were ever used as a supporting quote.
+- 188 of 3,194 supporting quotes (6%) could not be found verbatim in any paragraph. A looser substring match finds 117 (3.7%), so treat 4% to 6% as the range.
+- The reader is tuned for effect questions. It marks 27 relevant studies per effects question, but 0.7 per implementation question.
+- The secondhand guard (`src/extraction/secondhand.py`) matches author-year citations only. 103 supporting quotes still came from paragraphs labelled as other studies' findings, and 75 of those were cited in answers.
+
+To reproduce, run `python evaluation/usage_study.py analyse --project-id <uuid>`. The aggregate report is committed at `evaluation/results/usage_study/<uuid>/report.md`. The run logs, cached content and labels hold text from the papers and stay local (see `.gitignore`).
+
+---
+
 ## 🚀 Running Evaluations
 
 ### Quick Evaluation (Single Query)
