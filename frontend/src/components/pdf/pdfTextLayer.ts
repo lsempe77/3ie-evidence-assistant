@@ -186,6 +186,12 @@ export function applyHighlights(container: HTMLElement, index: TextLayerIndex, s
     if (!node || !node.parentNode) continue;
     segments.sort((left, right) => right.a - left.a);
     for (const segment of segments) {
+      // Wrapping a later segment splits this text node, so by the time an earlier segment is
+      // applied the node can be shorter than when the segments were computed. Clamp to what is
+      // left and keep the range calls inside the guard: without this, a search match that
+      // overlaps the cited passage throws IndexSizeError and aborts every highlight.
+      const b = Math.min(segment.b, node.data?.length ?? 0);
+      if (segment.a >= b) continue;
       const mark = document.createElement("mark");
       mark.setAttribute("data-pdf-mark", "");
       mark.setAttribute("data-pdf-group", segment.spec.group);
@@ -195,9 +201,9 @@ export function applyHighlights(container: HTMLElement, index: TextLayerIndex, s
       if (segment.spec.active) mark.setAttribute("data-pdf-active", "true");
       mark.className = segment.spec.className;
       const range = document.createRange();
-      range.setStart(node, segment.a);
-      range.setEnd(node, segment.b);
       try {
+        range.setStart(node, segment.a);
+        range.setEnd(node, b);
         range.surroundContents(mark);
       } catch {
         // A range that cannot be wrapped is skipped rather than breaking the rest.

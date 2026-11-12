@@ -2678,6 +2678,7 @@ async def get_highlighted_pdf(
     doc_id: str,
     page: int = 1,
     text: str = "",
+    highlight: bool = True,
     user: Optional[AuthenticatedUser] = Depends(get_optional_user),
 ):
     """
@@ -2699,11 +2700,12 @@ async def get_highlighted_pdf(
     import re
     from fastapi.responses import StreamingResponse
     
-    try:
-        import pymupdf
-    except ImportError:
-        logger.error("PyMuPDF not installed. Run: pip install pymupdf")
-        raise HTTPException(status_code=500, detail="PDF highlighting not available")
+    if highlight:
+        try:
+            import pymupdf
+        except ImportError:
+            logger.error("PyMuPDF not installed. Run: pip install pymupdf")
+            raise HTTPException(status_code=500, detail="PDF highlighting not available")
     
     client = get_supabase_client()
     
@@ -2816,6 +2818,18 @@ async def get_highlighted_pdf(
         # Download PDF content
         response = r2_client.get_object(Bucket=bucket_name, Key=r2_key)
         pdf_bytes = response['Body'].read()
+        
+        # The reader highlights the cited passage in the browser. The server annotation is only
+        # needed for surfaces that cannot run the client matcher, such as the open-in-new-tab link.
+        if not highlight:
+            return StreamingResponse(
+                io.BytesIO(pdf_bytes),
+                media_type="application/pdf",
+                headers={
+                    "Content-Disposition": f"inline; filename={doc_id}.pdf",
+                    "Cache-Control": "max-age=300",
+                },
+            )
         
         # Open PDF with PyMuPDF and add highlights
         pdf_doc = pymupdf.open(stream=pdf_bytes, filetype="pdf")

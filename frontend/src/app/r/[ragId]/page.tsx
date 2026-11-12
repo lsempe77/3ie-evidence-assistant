@@ -393,6 +393,8 @@ export default function RAGChatPage() {
   const openPdf = useCallback(
     (studyId: string, title: string, page: number, passage?: string) => {
       const text = encodeURIComponent(passage?.slice(0, 200) || "");
+      // The embedded reader highlights the passage itself, so it asks for the PDF without the
+      // server annotation (highlight=0). The new-tab link has no client matcher and keeps it.
       setPdfUrl(`${API_BASE_URL}/rags/${ragId}/documents/${studyId}/pdf-highlighted?page=${page}&text=${text}`);
       setPdfPage(page);
       setPdfTitle(title);
@@ -561,7 +563,7 @@ export default function RAGChatPage() {
           <Button
             variant="ghost"
             size="icon-sm"
-            onClick={() => openPdfInNewTab(pdfUrl, pdfPage)}
+            onClick={() => openPdfInNewTab(`${pdfUrl}&highlight=1`, pdfPage)}
             aria-label="Open the document in a new tab"
           >
             <ExternalLink aria-hidden="true" />
@@ -569,7 +571,7 @@ export default function RAGChatPage() {
         </div>
         {pdfSearchText && <PassageCard snippet={pdfSearchText} page={pdfPage} />}
         <div className="relative min-h-0 flex-1">
-          <PDFViewer url={pdfUrl} initialPage={pdfPage} searchText={pdfSearchText} hideToolbar />
+          <PDFViewer url={`${pdfUrl}&highlight=0`} initialPage={pdfPage} searchText={pdfSearchText} hideToolbar />
         </div>
       </div>
     ) : (

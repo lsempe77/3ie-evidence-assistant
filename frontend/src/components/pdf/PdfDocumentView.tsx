@@ -53,6 +53,11 @@ function clampScale(value: number): number {
   return Math.min(MAX_SCALE, Math.max(MIN_SCALE, value));
 }
 
+/** Flattened text of one page, kept while its text layer element is unchanged. Wrapping a
+ *  match in <mark> does not change the text or word boundaries, so this stays valid for search
+ *  even after highlights are painted; only char/node offsets are rebuilt, and only for paint. */
+type PageSearchIndex = { layer: HTMLElement; index: TextLayerIndex };
+
 export interface PdfDocumentViewProps {
   url: string;
   initialPage?: number;
@@ -99,6 +104,11 @@ export default function PdfDocumentView({
   const matchesRef = useRef<Array<{ page: number; start: number }>>([]);
   const scrollFrameRef = useRef(0);
   const citeScrolledRef = useRef("");
+  const pageInputRef = useRef<HTMLInputElement | null>(null);
+  // Per-page search index, keyed by page and invalidated when react-pdf replaces the text layer.
+  const searchRef = useRef<Map<number, PageSearchIndex>>(new Map());
+  // What each page's marks were painted for, so a page is only repainted when its marks change.
+  const paintedRef = useRef<Map<number, { layer: HTMLElement; sig: string }>>(new Map());
 
   // Fit-to-width is derived during render from the container width and page geometry, so the
   // last user-chosen zoom is kept as a fallback for when fit-to-width is off.
@@ -149,31 +159,33 @@ export default function PdfDocumentView({
     return () => observer.disconnect();
   }, []);
 
-  // Rebuild the text index, then paint the cited passage and the search matches.
+  // Index the rendered pages, find the cited passage and the search matches, then paint every
+  // page whose marks changed. Search only needs each page's flattened text, cached per text-layer
+  // element, so a new page is indexed once and existing pages are not reflattened on every step.
   useEffect(() => {
     const needle = normalizeForSearch(submittedQuery);
     const quote = searchText ?? "";
 
-    const layers = new Map<number, HTMLElement>();
-    const indexes = new Map<number, TextLayerIndex>();
+    const search = searchRef.current;
+    for (const page of Array.from(search.keys())) {
+      const element = pagesRef.current.get(page);
+      if (!element?.querySelector(".react-pdf__Page__textContent")) search.delete(page);
+    }
     for (const [page, element] of pagesRef.current) {
       const layer = element.querySelector<HTMLElement>(".react-pdf__Page__textContent");
       if (!layer) continue;
-      clearHighlights(layer);
-      layers.set(page, layer);
-      indexes.set(page, buildTextLayerIndex(layer));
+      const cached = search.get(page);
+      if (!cached || cached.layer !== layer) search.set(page, { layer, index: buildTextLayerIndex(layer) });
     }
 
-    const pages = Array.from(indexes.keys()).sort((left, right) => left - right);
+    const pages = Array.from(search.keys()).sort((left, right) => left - right);
 
     const matches: Array<{ page: number; start: number }> = [];
     if (needle) {
       for (const page of pages) {
-        const index = indexes.get(page);
+        const index = search.get(page)?.index;
         if (!index) continue;
-        for (const start of findMatches(index, submittedQuery, true)) {
-          matches.push({ page, start });
-        }
+        for (const start of findMatches(index, submittedQuery, true)) matches.push({ page, start });
       }
     }
     matchesRef.current = matches;
@@ -190,7 +202,7 @@ export default function PdfDocumentView({
         ? [initialPage, ...pages.filter((page) => page !== initialPage)]
         : pages;
       for (const page of order) {
-        const index = indexes.get(page);
+        const index = search.get(page)?.index;
         if (!index) continue;
         const found = findQuoteMatch(index, quote);
         if (found) {
@@ -209,12 +221,13 @@ export default function PdfDocumentView({
       searchByPage.set(match.page, list);
     });
 
-    const active = matches.length === 0 ? -1 : activeMatch < 0 ? 0 : Math.min(activeMatch, matches.length - 1);
-
+    // The active match is styled by the effect below, so it is kept out of the signature: a page
+    // is repainted only when its own marks change, not on every match step.
+    const sig = `${submittedQuery}\u0000${quote}\u0000${initialPage}\u0000${quotePage}`;
+    const painted = paintedRef.current;
     for (const page of pages) {
-      const index = indexes.get(page);
-      const layer = layers.get(page);
-      if (!index || !layer) continue;
+      const entry = search.get(page);
+      if (!entry) continue;
       const specs: HighlightSpec[] = [];
       if (quoteMatch && page === quotePage) {
         specs.push({
@@ -228,17 +241,19 @@ export default function PdfDocumentView({
         specs.push({
           start: item.start,
           end: item.start + needle.length,
-          className: item.global === active ? SEARCH_ACTIVE_CLASS : SEARCH_CLASS,
+          className: SEARCH_CLASS,
           group: "search",
           matchIndex: item.global,
-          active: item.global === active,
         });
       }
-      applyHighlights(layer, index, specs);
+      const previous = painted.get(page);
+      if (previous && previous.layer === entry.layer && previous.sig === sig) continue;
+      clearHighlights(entry.layer);
+      applyHighlights(entry.layer, buildTextLayerIndex(entry.layer), specs);
+      painted.set(page, { layer: entry.layer, sig });
     }
-
-    if (active !== activeMatch) setActiveMatch(active);
-  }, [activeMatch, indexVersion, initialPage, numPages, searchText, submittedQuery]);
+    for (const page of Array.from(painted.keys())) if (!search.has(page)) painted.delete(page);
+  }, [indexVersion, initialPage, numPages, searchText, submittedQuery]);
 
   useEffect(() => {
     const key = `${initialPage}|${searchText ?? ""}`;
@@ -248,11 +263,19 @@ export default function PdfDocumentView({
     scrollToPage(citePage, false);
   }, [citePage, indexVersion, initialPage, scrollToPage, searchText]);
 
+  // Move the active search highlight without rebuilding anything: only the class of the two
+  // affected marks changes. Runs again when a page renders, so the active mark is restyled.
   useEffect(() => {
-    if (activeMatch < 0) return;
-    const mark = scrollRef.current?.querySelector(`mark[data-pdf-match="${activeMatch}"]`);
-    mark?.scrollIntoView({ block: "center", behavior: "smooth" });
-  }, [activeMatch]);
+    const container = scrollRef.current;
+    if (!container || activeMatch < 0) return;
+    container.querySelectorAll<HTMLElement>('mark[data-pdf-group="search"]').forEach((mark) => {
+      const isActive = mark.getAttribute("data-pdf-match") === String(activeMatch);
+      mark.className = isActive ? SEARCH_ACTIVE_CLASS : SEARCH_CLASS;
+      if (isActive) mark.setAttribute("data-pdf-active", "true");
+      else mark.removeAttribute("data-pdf-active");
+    });
+    container.querySelector<HTMLElement>(`mark[data-pdf-match="${activeMatch}"]`)?.scrollIntoView({ block: "center", behavior: "smooth" });
+  }, [activeMatch, indexVersion]);
 
   useEffect(() => {
     return () => {
@@ -277,6 +300,8 @@ export default function PdfDocumentView({
         }
       });
       setCurrentPage(best);
+      // Keep the page field on the page the reader scrolled to, but not while it is being edited.
+      if (document.activeElement !== pageInputRef.current) setPageInput(String(best));
     });
   }, []);
 
@@ -345,6 +370,7 @@ export default function PdfDocumentView({
             <ChevronLeft aria-hidden="true" />
           </Button>
           <Input
+            ref={pageInputRef}
             aria-label="Page number"
             inputMode="numeric"
             value={pageInput}
