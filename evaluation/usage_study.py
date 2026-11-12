@@ -23,7 +23,6 @@ import asyncio
 import json
 import os
 import random
-import re
 import sys
 import time
 from collections import Counter, defaultdict
@@ -40,7 +39,7 @@ load_dotenv(ROOT / ".env")
 
 from src.extraction.relevance_labels import KEEP, keep_results_tables, label_units, units_from_content  # noqa: E402
 from src.extraction.store_estimates import DEFAULT_MODEL, _r2  # noqa: E402
-from src.extraction.table_estimates import _chat, _parse_json  # noqa: E402
+from src.extraction.table_estimates import _chat, _norm as _pipeline_norm, _parse_json  # noqa: E402
 
 CATEGORIES = {
     "effects": "effects of the programme on a specific outcome (income, consumption, assets, savings, food security, poverty, employment, health, education, psychosocial wellbeing, empowerment)",
@@ -106,18 +105,22 @@ def load_content(project_id: str, doc_key: str, cache: Path) -> List[Dict[str, A
 
 
 def _norm(s: str) -> str:
-    return re.sub(r"\s+", "", str(s or "")).replace("−", "-").replace("–", "-").lower()
+    """The pipeline's grounding normalizer (table_estimates) plus lowercase, so the study's
+    matching is case-insensitive while staying derived from the same definition the pipeline uses."""
+    return _pipeline_norm(s).lower()
 
 
 # ---------------------------------------------------------------- 1. labels
 
 def estimate_table_units(units: List[Dict[str, Any]], estimates: List[Dict[str, Any]]) -> set:
     found = set()
-    tables = [(k, u) for k, u in enumerate(units) if u["kind"] == "table"]
+    tables = [(k, units[k]["page"], _norm(u["text"])) for k, u in enumerate(units) if u["kind"] == "table"]
     for e in estimates:
         cell = _norm((e.get("literal_text") or "").split(" (")[0])
-        for k, u in tables:
-            if u["page"] == e.get("page") and cell and cell in u.setdefault("_norm", _norm(u["text"])):
+        if not cell:
+            continue
+        for k, page, text in tables:
+            if page == e.get("page") and cell in text:
                 found.add(k)
                 break
     return found
