@@ -65,16 +65,17 @@ Rollback: one file; revert the prompt change.
 
 Follows the study finding that other studies' findings (11%), background (9%) and boilerplate (11%) are 31% of what the reader sees but 7% of the quotes.
 
-Status (12 Nov 2026): the reusable core is in place and tested (`relevance_labels.filter_units`, `tests/test_relevance_filter.py`, 5 tests pass), with no change to production behaviour. The wiring and the re-index are pending the design decision below.
+Status (12 Nov 2026): done behind a flag. `relevance_labels.filter_units` and `src/ingestion/relevance_filter.py` select a document's own-evidence units, and `settings.index_role_filter` (off by default) makes the admin `/ingest` route build documents from those units instead of the raw markdown, failing open to the markdown per document. Nine tests pass (`tests/test_relevance_filter.py`, `tests/test_relevance_filter_ingest.py`). The collection has not been re-indexed, and nothing changes until the flag is set.
 
 Hook points found: the parser writes the content list to R2 at `rags/{project}/outputs/json/{doc_key}.json` (`src/ingestion/pdf_processor.py`), which is what `units_from_content` reads and what the study labelled. Chunks are written only by `ChunkIndexer.index_nodes`, and its only caller is the admin `/ingest` route (`api/routes/admin/collection.py:271`), which loads markdown from a directory and chunks that. Indexing is therefore a separate operator step, not part of upload.
 
 Decision needed: filter at the parsed-unit level (matches the study exactly, but the ingest route must be given the content list and build documents from kept units) or at the chunk level after markdown chunking (least invasive, but a chunk's role approximates a paragraph's). Either way the re-index must be run deliberately, and the labels should be cached per document so the re-index is deterministic and the model is not re-called.
 
 Steps:
-- [x] Add the reusable filter (`relevance_labels.filter_units`) with tests. Done.
-- [ ] Decide the filter layer (parsed units or chunks); see above.
-- [ ] Wire the chosen layer into ingestion before embedding, with the label cache, fail-open on model failure, and a setting to enable it.
+- [x] Add the reusable filter (`relevance_labels.filter_units`) with tests.
+- [x] Decide the filter layer: parsed units, before chunking.
+- [x] Wire it into `/ingest` behind `settings.index_role_filter`, with a per-document label cache and fail-open on model failure.
+- [ ] Re-index the collection with the flag on, then re-run the study and compare against the post-Phase-1 baseline (`runs.jsonl`).
 - [ ] Keep: abstract (always), own findings, method, intervention, setting, cost, limitation. Drop: references, boilerplate, background, other studies' findings.
 - [ ] Never rewrite text: labels are per paragraph and text stays verbatim, so quotes still map to a page for citation and highlighting.
 - [ ] Store the per-document labels so re-indexing is deterministic and does not re-call the model.

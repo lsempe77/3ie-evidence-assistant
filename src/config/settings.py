@@ -209,6 +209,9 @@ class Settings(BaseSettings):
     chunk_overlap: int = Field(default=50, ge=0)
     parent_chunk_size: int = Field(default=1024, ge=256)  # Parent = 4x child
     use_semantic_chunking: bool = Field(default=True)
+    # Drop paragraphs that are not a document's own evidence before embedding (role filter).
+    # Off by default: turning it on changes what is embedded, so the project must be re-indexed.
+    index_role_filter: bool = Field(default=False)
     
     # =========================================================================
     # Data Paths
