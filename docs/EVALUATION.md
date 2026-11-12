@@ -184,6 +184,8 @@ The study ran 211 questions over the 97 papers of the graduation collection. Rec
 
 These figures come from the run after the reader was changed to judge relevance by question kind. An earlier run, before that change, had 1,281 of 27,335 paragraphs used (4.7%), 188 of 3,194 quotes not verbatim (5.9%), 27 relevant studies per effects question and 0.7 per implementation question.
 
+The index was then filtered by paragraph role (`src/ingestion/relevance_filter.py`) and the collection re-indexed. In the run against the filtered index, noise roles fell to 6% of what the reader is shown (from 31%) and to 1.2% of quotes (from 8.6%); own findings rose to 48% of what is shown and 63% of quotes; quotes not verbatim fell to 141 (2.6%); 1,820 of 27,335 paragraphs were used (6.7%). Relevant studies per question rose from 18.3 to 25.5, but readings per question also rose from 43.8 to 52.4, because the filtered index holds one document per parser unit and therefore more, smaller chunks, which changes retrieval volume. Relevance per study read, which controls for that, rose from 41.8% to 48.6%. Passages that cannot be mapped back to a paragraph rose from 23 to 157, a measurement artifact of unit-based chunks not lining up with the parser paragraphs rather than an index defect.
+
 To reproduce, run `python evaluation/usage_study.py analyse --project-id <uuid>`. The aggregate report is committed at `evaluation/results/usage_study/<uuid>/report.md`. The run logs, cached content and labels hold text from the papers and stay local (see `.gitignore`).
 
 ---
