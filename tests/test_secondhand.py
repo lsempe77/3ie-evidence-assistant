@@ -17,6 +17,20 @@ def test_own_findings_are_not_flagged():
     assert not cites_other_study("In 2019, 88.8% of the participants were women.")
 
 
+def test_prose_attributions_to_other_work_are_flagged():
+    assert cites_other_study("Previous studies have found that the approach works.")
+    assert cites_other_study("The literature shows consistent gains from graduation programs.")
+    assert cites_other_study("A meta-analysis found a small positive effect.")
+    assert cites_other_study("Earlier evaluations report mixed results in Honduras.")
+
+
+def test_own_results_are_not_flagged_by_the_prose_rule():
+    assert not cites_other_study("We found that consumption increased by 12%.")
+    assert not cites_other_study("The results show a 12% increase over the control group.")
+    assert not cites_other_study("Our findings suggest the programme raised income.")
+    assert not cites_other_study("Consistent with prior research, our estimates are precise.")
+
+
 def test_study_facts_drop_figures_quoted_from_other_studies():
     doc = ("Our programme raised income by 12% relative to the control group. "
            "Banerjee et al. (2015) report a benefit-cost ratio of 133% in Ethiopia.")

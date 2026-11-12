@@ -79,16 +79,16 @@ Steps:
 - [x] Re-index the collection (98 documents, `scripts/reindex_role_filter.py`) and re-run the study.
 - [x] Confirm answer quality on the filtered index with the benchmark gate.
 - [x] Isolate the filter from the granularity change (same reading budget) before trusting the relevant-per-question jump.
-- [ ] Keep: abstract (always), own findings, method, intervention, setting, cost, limitation. Drop: references, boilerplate, background, other studies' findings.
-- [ ] Never rewrite text: labels are per paragraph and text stays verbatim, so quotes still map to a page for citation and highlighting.
-- [ ] Store the per-document labels so re-indexing is deterministic and does not re-call the model.
-- [ ] Fail open: keep text when the model call fails (the prototype returns `unlabelled`).
-- [ ] Re-index the collection (embed only the kept chunks). Labelling is about $0.50 for 97 papers; re-embedding is the main cost.
+- [x] Keep: abstract (always), own findings, method, intervention, setting, cost, limitation. Drop: references, boilerplate, background, other studies' findings.
+- [x] Never rewrite text: labels are per paragraph and text stays verbatim, so quotes still map to a page for citation and highlighting.
+- [x] Store the per-document labels so re-indexing is deterministic and does not re-call the model.
+- [x] Fail open: keep text when the model call fails (the prototype returns `unlabelled`).
+- [x] Re-index the collection (98 documents; labelling about $2, re-embedding the main cost).
 
 Test:
 - [ ] Spot-check retrieval for effects and non-effect questions: methods, intervention and setting must still be retrieved.
-- [ ] Re-run the noise share (other_study + background + boilerplate) and confirm it falls well below 31% while quotes from kept roles hold.
-- [ ] Benchmark gate quick and full.
+- [x] Re-run the noise share and confirm it falls well below 31% while quotes from kept roles hold (31% to 6% shown; 8.6% to 1.2% of quotes).
+- [x] Benchmark gate quick and full.
 
 Rollback: keep the previous index snapshot; re-index from the pre-filter config if quality drops.
 
@@ -98,10 +98,12 @@ Rollback: keep the previous index snapshot; re-index from the pre-filter config 
 
 The study found 188 of 3,194 supporting quotes (6%) are not verbatim in any paragraph; a looser match gives 117 (3.7%). This matters for citations and PDF highlighting.
 
+Status (12 Nov 2026): done. Inspecting the Phase 2 misses showed the reader rewrites its quote: it reflows table rows, joins sentences with an ellipsis, and inserts its own words. `src/extraction/quotes.py` (`verify_quote`) now keeps the quote if it appears in the passages (ignoring whitespace and case), replaces it with the source sentence it matches (requiring half of the quote's opening words, so a rewritten quote cannot be swapped for a different sentence), and drops it otherwise. Applied in `read_groups`, and the reader prompt now demands one contiguous copy with no ellipsis or rewording. Offline over the Phase 2 quotes: 94.7% already verbatim, 3.2% snapped to the source sentence, 2.0% dropped as unverifiable. Tests in `tests/test_quotes.py`.
+
 Steps:
-- [ ] Inspect a sample of the 188 quotes: are they paraphrases by the reader, or text the paragraph index missed?
-- [ ] If the reader paraphrases, tighten the reader's quote instruction and validate that the quote is a substring of the passages before accepting it.
-- [ ] Re-measure the non-verbatim rate on the 211-question set.
+- [x] Inspect a sample: the reader paraphrases and edits.
+- [x] Tighten the quote instruction and validate the quote against the passages.
+- [ ] Re-measure the non-verbatim rate on the 211-question set (a full run; the offline check already shows only verbatim quotes pass through).
 
 ---
 
@@ -109,8 +111,10 @@ Steps:
 
 103 quotes still came from other-study paragraphs because `cites_other_study` only matches author-year citations.
 
+Status (12 Nov 2026): done. `src/extraction/secondhand.py` now also flags prose attributions ("previous studies find", "the literature shows", "a meta-analysis found") by pairing a subject with a reporting verb in the next few words, so an own result that merely mentions prior work in passing is not caught. Tests in `tests/test_secondhand.py`. Phase 2 also removed other-study paragraphs from the index, so this is belt and braces.
+
 Steps:
-- [ ] If Phase 2 ships, other-study paragraphs are out of the index, so this guard matters less. Otherwise, strengthen `src/extraction/secondhand.py` or add a check that a quote exists in a kept paragraph.
+- [x] Strengthen `src/extraction/secondhand.py` with prose attributions.
 
 ---
 

@@ -34,6 +34,7 @@ from src.retrieval.hybrid_retriever import HybridRetriever, RetrievalResult
 from src.retrieval.reranker import CohereReranker
 from src.agents.evidence_summary import summary_block
 from src.extraction.secondhand import cites_other_study
+from src.extraction.quotes import verify_quote
 from src.retrieval.study_cards import embed_query
 from src.vectorstore.chunk_store import ChunkStore
 
@@ -76,7 +77,7 @@ Using ONLY these passages, return JSON:
   "kind": "effect" | "implementation" | "context" | "design" | "cost" | "mechanism" | "other",
   "finding": "<one or two sentences answering the question from this study, with direction and size when the study reports them; empty if not relevant>",
   "direction": "positive" | "negative" | "null" | "mixed" | "not_applicable",
-  "quote": "<a short exact quote from the passages that supports the finding>",
+  "quote": "<one contiguous span copied exactly from a single passage, character for character; no ellipsis, no square brackets, no rewording, no joining of separate sentences; empty if no exact span supports the finding>",
   "page": <page number of the quote, or null>,
   "programme": "<short name of the programme evaluated, with its country, e.g. 'BRAC TUP, Bangladesh' or 'Haku Wiñay, Peru'. At most eight words, no explanation. Empty if the passages do not say>",
   "estimate_ids": ["<ids of up to four extracted estimates above that directly answer the question, e.g. 'E2'; [] if none>"]}}
@@ -462,6 +463,10 @@ class StudySynthesisPipeline:
                         except Exception as e:
                             data = {"relevant": False, "finding": "", "direction": "not_applicable",
                                     "kind": "", "quote": "", "page": None, "error": str(e)[:200]}
+                # The quote has to be real text from the passages: a reformatted quote is replaced
+                # by its source sentence, and one that cannot be found is dropped, so a citation or
+                # PDF highlight never points at text the paper does not contain (Phase 3).
+                data = {**data, "quote": verify_quote(data.get("quote"), passages)}
                 if data.get("relevant") and cites_other_study(data.get("quote")):
                     # The supporting quote reports another study: never evidence (rule, 11 Nov 2026)
                     data = {**data, "relevant": False, "finding": "", "estimate_ids": [],
