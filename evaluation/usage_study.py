@@ -237,7 +237,7 @@ async def cmd_run(args) -> None:
                 pipe._facts = facts_cache["facts"]
                 result = await pipe.answer(q["question"], readings)
             except Exception as e:
-                print(f"  ✗ {q['id']}: {type(e).__name__}: {str(e)[:120]}", flush=True)
+                print(f"  x {q['id']}: {type(e).__name__}: {str(e)[:120]}", flush=True)
                 return
             cited = {c["study_id"] for c in result.citations}
             record = {
@@ -256,7 +256,12 @@ async def cmd_run(args) -> None:
             print(f"  {q['id']} {q['category']:14} read {len(readings):3} relevant "
                   f"{sum(r.relevant for r in readings):3} cited {len(cited):3} ({time.time() - t0:.0f}s)", flush=True)
 
-    await asyncio.gather(*(one(q) for q in todo))
+    # return_exceptions so one failed question cannot abort the batch; a failed question has no
+    # record, so a later run picks it up again (the run skips ids already in runs.jsonl).
+    outcomes = await asyncio.gather(*(one(q) for q in todo), return_exceptions=True)
+    for outcome in outcomes:
+        if isinstance(outcome, BaseException):
+            print(f"  x unexpected: {type(outcome).__name__}: {str(outcome)[:120]}", flush=True)
 
 
 # ---------------------------------------------------------------- 4. analyse
