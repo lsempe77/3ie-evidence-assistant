@@ -1,6 +1,6 @@
 # 3ie Evidence Assistant roadmap (formerly DevChat)
 
-**Last Updated:** 11 November 2026
+**Last Updated:** 13 November 2026
 
 > This document tracks **future features** and priorities.  
 > For current implementation status, see [SETUP_TRACKER.md](../SETUP_TRACKER.md).  
@@ -38,6 +38,7 @@ builds study cards, extracts estimates and study facts, and regroups programmes.
 | 10 Nov | Estimates from tables in the reader (N6 step 2) | 0.559 |
 | 11 Nov | Study facts and computed figures (N6 step 3) | 0.545 |
 | 11 Nov | Never use findings a paper reports from other studies | 0.564 |
+| 13 Nov | Role filter before embedding, quote verification | 0.566 |
 
 Single runs move by about 0.03, so the last four are level.
 
@@ -84,6 +85,19 @@ estimates and $0.89 for study facts.
 **Suggested next steps, in order:** N6 follow-ups (an evidence table in the interface, costs in one price
 year, a better women-as-recipients flag), N5 questions in other languages, N7 collection-page design,
 then N9 to N12.
+
+### Status on 13 November 2026
+
+The reader, the index and the citations changed over 12 and 13 November. The plan and the measurements are in [PLAN-usage-study-rollout.md](PLAN-usage-study-rollout.md) and [EVALUATION.md](EVALUATION.md); the summary:
+
+- **Relevance by question kind.** The reader judges relevance by the kind of question (effect, implementation, context, design, cost, mechanism) instead of requiring a result with direction and size. Relevant studies per question rose from 15.2 to 18.3 overall and implementation from 0.7 to 1.6, with no category falling.
+- **Role filter before embedding.** Paragraphs that are not the study's own evidence (references, boilerplate, background, other studies' findings) are dropped before embedding, with abstracts always kept. Both ingest paths apply it, and the graduation collection was re-indexed (98 documents). Noise fell from 31% to 6% of what the reader is shown and from 8.6% to 1.2% of quotes; relevant studies per question rose 32% at equal reading volume. The full gate scored 0.566 against the 0.552 baseline.
+- **Quote verification.** Every supporting quote is now a verbatim span of the passages: a reformatted quote is snapped to its source sentence, and an unverifiable one is dropped. Quotes not found in any paragraph fell from 141 (2.6%) to zero; cited readings rose from 3,392 to 3,448.
+- **Secondhand findings.** The guard now also catches prose attributions ("previous studies find", "the literature shows"), not only author-year citations.
+- **In-app PDF reader.** Citations open a client-side reader (react-pdf) with zoom, page navigation, full-text search, cited-passage highlighting and windowed page rendering, replacing the browser iframe viewer.
+- **Infrastructure.** Search RPCs retry with backoff, and the Supabase project moved to Pro on Micro compute, which took queries from 11 to 47 seconds during a disk-IO-exhausted window down to 0.1 to 0.3 seconds. The Sphinx docs workflow now passes (GitHub Pages enabled), closing that N8 item.
+
+The extraction side is unchanged in this period; the role filter and the quote work sit on the retrieval and reading side.
 
 ### ▶ Next up (after the model review, 10 November 2026)
 
@@ -171,8 +185,15 @@ then N9 to N12.
      they use the review's own conversions (2024 dollars, a 20-year cost-benefit model) and a
      comparison of women-targeted programmes with others, where only one programme on the other side
      reports a percentage income change. The answers say so rather than guess.
-   - Next: show the computed figures in the interface as an evidence table, convert costs to one price
-     year, and improve the women-as-recipients flag (19 of 41 programmes do not say).
+    - Next: show the computed figures in the interface as an evidence table, convert costs to one price
+      year, and improve the women-as-recipients flag (19 of 41 programmes do not say).
+    - Prior art for normalising table results across layouts, confidence intervals and p-values:
+      `pipelines/8w-sr/OM_QEX/om_qex_extraction_v2/` (outside this repo). Its six-phase pipeline records
+      `effect_size`, `ci_lower`, `ci_upper`, `p_value`, `standard_error` and `sample_size`, maps
+      significance stars to p-values, and runs a separate statistics-validation phase
+      (`phase7_qex_validation.py`); `phase5_pdf_vision.py` and `phase8_postprocessing.py` handle the
+      unstructured and export ends. Use it as the reference for the star, CI and p-value conventions
+      before extending our `table_estimates.py`.
 
 7. **N7. Design: collection pages** - 2-3 d
    - Documents and Settings next, following [DESIGN.md](../DESIGN.md). They hold most of the remaining
@@ -199,8 +220,10 @@ then N9 to N12.
    - Remove the old claim-ledger path (`ANSWER_PIPELINE=agent`) and LlamaIndex once the new path has run
      for two weeks without problems.
    - Decommission the old `devchat-mineru` Modal app. Rename the R2 bucket (on hold).
-   - Fix or remove the Sphinx docs workflow (GitHub Pages is not enabled). Check the unrelated
-     Vercel project `giving-adaptation` (web) attached to this repository.
+   - ~~Fix or remove the Sphinx docs workflow (GitHub Pages is not enabled)~~ done 13 Nov 2026:
+     GitHub Pages was enabled and the workflow passes. Still to check: the unrelated project
+     `giving-adaptation` (web) attached to this repository; it shows up as the Railway service name in
+     deploy statuses.
 
 ### 🚨 Critical Gaps (Must Fix Before Any Other Improvement)
 
