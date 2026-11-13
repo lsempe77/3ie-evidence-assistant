@@ -23,6 +23,10 @@ DEFAULT_TIMEOUT = 60.0
 UPSERT_BATCH = 50
 UPSERT_ATTEMPTS = 4
 UPSERT_BACKOFF_SECONDS = 2.0
+# Reads are safe to retry. The database has been seen to slow to tens of seconds per query for
+# minutes at a time (13 Nov 2026), so a search RPC gets a few attempts with backoff.
+RPC_ATTEMPTS = 3
+RPC_BACKOFF_SECONDS = 2.0
 PAGE_SIZE = 1000
 
 # Columns of public.chunks that callers may set directly; anything else in a row
@@ -131,7 +135,18 @@ class ChunkStore:
         return response
 
     def _rpc(self, name: str, params: Dict[str, Any]) -> Any:
-        return self._check(self._client.post(f"/rpc/{name}", json=params)).json()
+        """POST an RPC, retrying timeouts and server errors with backoff. RPCs here are reads."""
+        for attempt in range(RPC_ATTEMPTS):
+            last = attempt == RPC_ATTEMPTS - 1
+            try:
+                response = self._client.post(f"/rpc/{name}", json=params)
+            except httpx.TimeoutException:
+                if last:
+                    raise
+            else:
+                if response.status_code < 500 or last:
+                    return self._check(response).json()
+            time.sleep(RPC_BACKOFF_SECONDS * 2 ** attempt)
 
     @staticmethod
     def _count_from(response: httpx.Response) -> int:
