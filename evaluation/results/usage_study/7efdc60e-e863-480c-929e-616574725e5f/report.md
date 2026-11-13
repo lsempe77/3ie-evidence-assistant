@@ -2,39 +2,38 @@
 
 | Role | Stored text | Shown to the reader | Passages shown | Used when shown | Supporting quotes | Cited in answers |
 | --- | --- | --- | --- | --- | --- | --- |
-| abstract | 2% | 8% | 2831 | 22% | 638 (12%) | 410 (12%) |
-| own_finding | 42% | 48% | 17676 | 19% | 3379 (63%) | 2099 (62%) |
-| method | 18% | 14% | 6055 | 7% | 419 (8%) | 260 (8%) |
-| intervention | 6% | 13% | 5569 | 6% | 318 (6%) | 199 (6%) |
-| setting | 5% | 4% | 1197 | 7% | 77 (1%) | 54 (2%) |
-| cost | 1% | 3% | 937 | 17% | 163 (3%) | 132 (4%) |
-| limitation | 3% | 4% | 1736 | 9% | 149 (3%) | 92 (3%) |
-| other_study | 5% | 1% | 324 | 2% | 4 (0%) | 4 (0%) |
-| background | 6% | 2% | 525 | 6% | 34 (1%) | 23 (1%) |
-| boilerplate | 11% | 3% | 868 | 3% | 24 (0%) | 14 (0%) |
-| unlabelled | 1% | 0% | 144 | 13% | 21 (0%) | 13 (0%) |
-| quote_not_found | 0% | 0% | 0 | - | 141 (3%) | 87 (3%) |
+| abstract | 2% | 8% | 2839 | 21% | 617 (12%) | 402 (12%) |
+| own_finding | 42% | 48% | 17674 | 18% | 3239 (65%) | 2081 (64%) |
+| method | 18% | 14% | 6052 | 6% | 399 (8%) | 247 (8%) |
+| intervention | 6% | 13% | 5574 | 5% | 293 (6%) | 199 (6%) |
+| setting | 5% | 4% | 1197 | 7% | 74 (1%) | 53 (2%) |
+| cost | 1% | 3% | 937 | 16% | 150 (3%) | 129 (4%) |
+| limitation | 3% | 4% | 1741 | 9% | 148 (3%) | 88 (3%) |
+| other_study | 5% | 1% | 323 | 2% | 3 (0%) | 2 (0%) |
+| background | 6% | 2% | 524 | 6% | 30 (1%) | 19 (1%) |
+| boilerplate | 11% | 3% | 863 | 2% | 21 (0%) | 17 (1%) |
+| unlabelled | 1% | 0% | 145 | 9% | 17 (0%) | 14 (0%) |
 
-Paragraphs ever used as a supporting quote: 1820 of 27335 (6.7%).
-Passages that could not be mapped to a paragraph: 157.
+Paragraphs ever used as a supporting quote: 1774 of 27335 (6.5%).
+Passages that could not be mapped to a paragraph: 158.
 
 ## Supporting quotes by question category
 
 | Category | Quotes | abstract | own_finding | method | intervention | setting | cost | limitation | other_study | background | boilerplate |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| benchmark | 608 | 15% | 53% | 4% | 12% | 1% | 7% | 4% | 0% | 2% | 0% |
-| context | 182 | 7% | 27% | 18% | 28% | 15% |  | 1% |  |  | 1% |
-| costs | 124 | 3% | 29% | 1% | 8% |  | 58% | 1% |  |  |  |
-| design | 284 | 2% | 19% | 57% | 2% | 4% | 1% | 11% | 0% | 1% | 2% |
-| durability | 754 | 10% | 76% | 5% | 1% | 0% | 1% | 3% |  | 1% |  |
-| effects | 1873 | 16% | 71% | 3% | 3% | 1% | 1% | 1% | 0% | 0% | 0% |
-| employment | 100 | 15% | 72% | 1% | 5% | 1% |  |  |  | 1% |  |
-| food_security | 53 | 4% | 87% | 2% | 2% | 2% |  | 2% |  |  |  |
-| gaps | 300 | 10% | 47% | 14% | 8% | 3% | 6% | 7% |  | 0% | 2% |
-| implementation | 70 |  | 14% | 31% | 41% | 9% |  | 3% |  |  |  |
-| mechanisms | 545 | 9% | 74% | 3% | 8% | 0% | 1% | 1% |  | 1% | 1% |
-| side_effects | 165 | 9% | 75% | 4% | 1% | 1% | 1% | 6% |  | 1% | 1% |
-| spillover | 24 | 12% | 58% |  |  |  |  | 25% |  | 4% |  |
-| subgroups | 89 | 4% | 85% | 2% | 1% | 2% |  | 1% |  |  | 1% |
-| variants | 85 | 14% | 61% | 9% | 11% |  | 1% |  | 1% | 1% |  |
-| wellbeing | 111 | 17% | 76% | 3% |  |  |  |  |  | 2% | 1% |
+| benchmark | 546 | 15% | 55% | 4% | 11% | 1% | 7% | 4% | 0% | 2% | 1% |
+| context | 175 | 6% | 27% | 17% | 31% | 16% |  | 2% |  |  | 1% |
+| costs | 120 | 3% | 32% | 1% | 11% |  | 52% | 1% |  |  |  |
+| design | 281 | 1% | 16% | 60% | 3% | 5% | 1% | 11% | 0% | 1% | 2% |
+| durability | 717 | 12% | 77% | 4% | 1% | 0% | 2% | 4% |  | 0% |  |
+| effects | 1678 | 17% | 75% | 3% | 2% | 0% | 1% | 1% | 0% | 0% | 0% |
+| employment | 97 | 16% | 75% | 1% | 5% | 1% |  |  |  |  |  |
+| food_security | 48 | 6% | 90% |  |  | 2% |  | 2% |  |  |  |
+| gaps | 279 | 9% | 48% | 15% | 9% | 4% | 6% | 6% |  | 1% | 1% |
+| implementation | 73 |  | 10% | 37% | 41% | 4% |  | 5% |  | 1% | 1% |
+| mechanisms | 516 | 11% | 74% | 3% | 8% | 0% | 1% | 1% |  | 0% | 1% |
+| side_effects | 155 | 8% | 79% | 5% | 1% |  | 1% | 6% |  | 1% | 1% |
+| spillover | 25 | 4% | 68% |  |  |  |  | 24% |  | 4% |  |
+| subgroups | 84 | 4% | 92% | 2% |  | 1% |  |  |  |  | 1% |
+| variants | 91 | 13% | 62% | 10% | 12% |  | 2% |  |  | 1% |  |
+| wellbeing | 106 | 16% | 79% | 1% | 1% |  | 1% |  |  | 2% |  |

@@ -188,6 +188,8 @@ The index was then filtered by paragraph role (`src/ingestion/relevance_filter.p
 
 Two checks separate the filter from the volume change. The full benchmark gate passed on the filtered index (claim score 0.566 against 0.552), so effect answers did not regress. In a fixed-budget comparison over 3 questions per category, each capped to the number of studies the unfiltered run read, the filtered index found 21.3 relevant studies per question against 16.1 for the unfiltered index, a 32% gain at equal reading volume against the 39% uncapped gain. Most of the improvement therefore comes from the filter, not only from reading more studies.
 
+Quote verification (Phase 3) was then measured on the same 211 questions. Every supporting quote is now a verbatim span of the passages: the not-verbatim count fell from 141 (2.6%) to zero. Supporting quotes fell from 5,367 to 4,991 (7%), because a quote that could not be verified was dropped or snapped to its source sentence, and cited readings rose slightly from 3,392 to 3,448. Relevance per question held (25.5 to 25.2) and readings per question were unchanged.
+
 To reproduce, run `python evaluation/usage_study.py analyse --project-id <uuid>`. The aggregate report is committed at `evaluation/results/usage_study/<uuid>/report.md`. The run logs, cached content and labels hold text from the papers and stay local (see `.gitignore`).
 
 ---

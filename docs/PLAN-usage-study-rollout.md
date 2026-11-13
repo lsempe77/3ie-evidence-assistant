@@ -104,7 +104,7 @@ Status (12 Nov 2026): done. Inspecting the Phase 2 misses showed the reader rewr
 Steps:
 - [x] Inspect a sample: the reader paraphrases and edits.
 - [x] Tighten the quote instruction and validate the quote against the passages.
-- [ ] Re-measure the non-verbatim rate on the 211-question set (a full run; the offline check already shows only verbatim quotes pass through).
+- [x] Re-measure the non-verbatim rate on the 211-question set: fell from 141 (2.6%) to zero; supporting quotes 5,367 to 4,991; cited readings 3,392 to 3,448; relevance held at 25.2 per question.
 
 ---
 
