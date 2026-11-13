@@ -25,19 +25,19 @@ How the app deploys, for reference:
 
 ## Phase 0. Land the reader, do not let the fixes rot
 
-Status: the reader is committed on local `main` (`15b63b4`, `f8f4fb0`, `d47c85e`), the study is `ec24057`, and seven review fixes are uncommitted in the working tree.
+Status (12 Nov 2026): done. The reader and the seven review fixes are committed (`c7deee1`, `3aaea00`, `04fd1f7`), pushed and deployed, and the live app and a private collection were confirmed working.
 
 Steps:
-- [ ] Commit the seven review fixes (viewer: highlight-overlap crash, effect split, page-field sync; `page.tsx` and `rags.py` `highlight` flag; `usage_study.py` normalizer + cache; `relevance_labels.py` prompt boundary). Suggest two commits: one for the viewer, one for the study script and prompt.
-- [ ] Local checks: `pytest`, `ruff check .`, `mypy` (per `pyproject.toml`); frontend `npm run lint`, `npx tsc --noEmit`, `npm run build` in `frontend/`.
-- [ ] Smoke test the viewer in a browser: open a citation, confirm the passage highlights, search a word that appears inside the cited passage (this was the crash), step matches, scroll and confirm the page field tracks, open the new-tab link.
-- [ ] Push `main`. This deploys the API (Railway) and the frontend (Vercel).
-- [ ] Verify live at the Vercel URL on the graduation project: the reader appears inside the chat view instead of the browser's iframe viewer.
-- [ ] Check a private collection while signed in (the fetch uses the Authorization header; a blob URL is required).
+- [x] Commit the seven review fixes (viewer: highlight-overlap crash, effect split, page-field sync; `page.tsx` and `rags.py` `highlight` flag; `usage_study.py` normalizer + cache; `relevance_labels.py` prompt boundary) as `c7deee1` and `3aaea00`.
+- [x] Local checks: pytest (150 passed), ruff on the changed files, eslint, `tsc --noEmit` and `next build`. mypy is not installed in `.venv`, so it was not run.
+- [x] Smoke test the viewer in a browser: open a citation, confirm the passage highlights, search a word that appears inside the cited passage, step matches, scroll and confirm the page field tracks, open the new-tab link.
+- [x] Push `main` (`04fd1f7`), deploying the API (Railway) and the frontend (Vercel).
+- [x] Verify live at the Vercel URL on the graduation project; the reader appears in the chat view.
+- [x] Check a private collection while signed in; citations and the blob fetch work.
 
 Rollback: revert the commit and push, Vercel and Railway redeploy the previous build.
 
-Open item carried from review: page virtualization (`#5`) was deferred. The client finds the cited passage by searching every page's text, so windowing cannot be done safely without a different source for the cite page. Decide later (see Phase 5).
+Page virtualization (`#5`) was deferred here and later shipped as Phase 5 (windowing, with the cited page always drawn).
 
 ---
 
@@ -48,16 +48,16 @@ This is the study's highest-value fix and needs no re-index. It is a prompt chan
 Problem (with lines): `READER_PROMPT` requires "direction and size" (`:66`) and says a passage that mentions the topic without results is not relevant (`:74`); `ANSWER_PROMPT` counts studies by direction (`:95-101`). Result: 27 relevant studies per effects question, 0.7 per implementation question.
 
 Steps:
-- [ ] Classify the question kind (effects, subgroups, durability, costs, implementation, mechanisms, design, context, variants, side effects, gaps). Either a small-model call or a keyword classifier; or write one type-aware prompt that never closes the door on non-effect evidence (more robust, slightly less sharp).
-- [ ] Rewrite `READER_PROMPT`: add the question kind and a per-kind definition of what counts as evidence; state that an implementation, context, design, cost or mechanism passage is relevant even with no effect size; add a `kind` field to the reader JSON; drop the effect-only relevance rule for non-effect questions. Keep the own-evidence and secondhand rules.
-- [ ] Adapt `ANSWER_PROMPT`: for non-effect questions, answer in their own terms (how, to whom, how much, at what cost) and do not force counts by direction. Keep the citation rule.
-- [ ] If breadth alone is not enough, check the actual passages sent for a few implementation questions. Retrieval sends at most 4 passages per study (`PASSAGES_PER_STUDY`, `:47`); if the delivery or design text is crowded out, raise the cap or retrieve by the question's own terms.
+- [x] Make the reader type-aware with one prompt rather than a classifier: a per-kind definition of evidence plus a `kind` field, which never closes the door on non-effect evidence.
+- [x] Rewrite `READER_PROMPT` with the per-kind definition and the `kind` field, dropping the effect-only relevance rule for non-effect questions and keeping the own-evidence and secondhand rules.
+- [x] Adapt `ANSWER_PROMPT`: for non-effect questions, answer in their terms and do not force counts by direction.
+- [x] Passage check: not needed. Relevance rose without touching `PASSAGES_PER_STUDY` (see the status log).
 
 Test:
-- [ ] `pytest` and the quick gate locally on a small subset.
-- [ ] Full re-run on the same 211 questions: `python evaluation/usage_study.py run --project-id <uuid>` then `analyse`. Cost about $11.
-- [ ] Target: implementation relevant-studies-per-question rises from 0.7; effects and other categories do not fall.
-- [ ] Run the benchmark gate (`python evaluation/gate.py --mode quick` then `--mode full`) to confirm no regression against `evaluation/benchmark/baseline.json`.
+- [x] pytest and the quick gate.
+- [x] Full re-run on the same 211 questions (about $11).
+- [x] Target met: implementation 0.7 to 1.6 relevant per question, no category fell, overall 15.2 to 18.3.
+- [x] Benchmark gate quick and full: passed (0.567 then 0.566 against the 0.552 baseline).
 
 Rollback: one file; revert the prompt change.
 
@@ -67,11 +67,11 @@ Rollback: one file; revert the prompt change.
 
 Follows the study finding that other studies' findings (11%), background (9%) and boilerplate (11%) are 31% of what the reader sees but 7% of the quotes.
 
-Status (12 Nov 2026): done behind a flag. `relevance_labels.filter_units` and `src/ingestion/relevance_filter.py` select a document's own-evidence units, and `settings.index_role_filter` (off by default) makes the admin `/ingest` route build documents from those units instead of the raw markdown, failing open to the markdown per document. Nine tests pass (`tests/test_relevance_filter.py`, `tests/test_relevance_filter_ingest.py`). The collection has not been re-indexed, and nothing changes until the flag is set.
+Status (13 Nov 2026): done. The filter is on by default (`settings.index_role_filter`) and both ingest paths apply it (`src/ingestion/relevance_filter.filter_documents`, used by the admin `/ingest` route and `scripts/ingest_documents.py`); the collection was re-indexed (98 documents) with `scripts/reindex_role_filter.py`.
 
 Hook points found: the parser writes the content list to R2 at `rags/{project}/outputs/json/{doc_key}.json` (`src/ingestion/pdf_processor.py`), which is what `units_from_content` reads and what the study labelled. Chunks are written only by `ChunkIndexer.index_nodes`, and its only caller is the admin `/ingest` route (`api/routes/admin/collection.py:271`), which loads markdown from a directory and chunks that. Indexing is therefore a separate operator step, not part of upload.
 
-Decision needed: filter at the parsed-unit level (matches the study exactly, but the ingest route must be given the content list and build documents from kept units) or at the chunk level after markdown chunking (least invasive, but a chunk's role approximates a paragraph's). Either way the re-index must be run deliberately, and the labels should be cached per document so the re-index is deterministic and the model is not re-called.
+Decision: filter at the parsed-unit level, before chunking, with labels cached per document so the re-index is deterministic and the model is not re-called.
 
 Steps:
 - [x] Add the reusable filter (`relevance_labels.filter_units`) with tests.
@@ -87,7 +87,7 @@ Steps:
 - [x] Re-index the collection (98 documents; labelling about $2, re-embedding the main cost).
 
 Test:
-- [ ] Spot-check retrieval for effects and non-effect questions: methods, intervention and setting must still be retrieved.
+- [x] Spot-check retrieval for effects and non-effect questions: methods, intervention and setting are still retrieved (the Phase 2 report shows method 14%, intervention 13% and setting 4% of what the reader is shown).
 - [x] Re-run the noise share and confirm it falls well below 31% while quotes from kept roles hold (31% to 6% shown; 8.6% to 1.2% of quotes).
 - [x] Benchmark gate quick and full.
 
