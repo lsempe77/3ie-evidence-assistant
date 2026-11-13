@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Paper vs extraction</title>
+<style>
+:root {
+  --bg: #f7f8fa; --surface: #ffffff; --ink: #1b2330; --muted: #5b6676; --hairline: #dde2ea;
+  --accent: #153a80; --accent-tint: #e8eef9; --gap: repeating-linear-gradient(45deg, #eef0f4 0 6px, #f7f8fa 6px 12px);
+  --l-own_finding: #1f7a4d; --l-method: #2b5fb3; --l-intervention: #0f7b85; --l-setting: #5a6577;
+  --l-cost: #a35f00; --l-limitation: #7a4bb0; --l-other_study: #b3261e; --l-background: #8a8f98;
+  --l-boilerplate: #b4b9c2; --l-unlabelled: #d0d4da;
+  --useful: #1f7a4d; --noise: #b3261e;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0f141b; --surface: #171e28; --ink: #e6eaf0; --muted: #9aa5b5; --hairline: #2a3442;
+    --accent: #8fb0ef; --accent-tint: #1d2a40; --gap: repeating-linear-gradient(45deg, #1a212c 0 6px, #141a23 6px 12px);
+    --l-own_finding: #4cc38a; --l-method: #6b9cf0; --l-intervention: #3fb7c2; --l-setting: #93a0b4;
+    --l-cost: #e0a040; --l-limitation: #b18ae6; --l-other_study: #ef6b62; --l-background: #7d8592;
+    --l-boilerplate: #5b6270; --l-unlabelled: #444b57; --useful: #4cc38a; --noise: #ef6b62;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif; }
+header { position: sticky; top: 0; z-index: 5; background: var(--surface); border-bottom: 1px solid var(--hairline); padding: 12px 16px; }
+.bar { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; }
+h1 { font-size: 16px; margin: 0 12px 0 0; }
+select, button { font: inherit; color: inherit; }
+select { background: var(--surface); border: 1px solid var(--hairline); border-radius: 6px; padding: 6px 8px; max-width: 100%; }
+.chip { border: 1px solid var(--hairline); background: var(--surface); border-radius: 999px; padding: 4px 10px; cursor: pointer; font-size: 13px; min-height: 32px; }
+.chip[aria-pressed="true"] { background: var(--accent-tint); border-color: var(--accent); color: var(--accent); }
+.chip:focus-visible, button:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.meta { color: var(--muted); font-size: 13px; }
+.stack { display: flex; height: 10px; border-radius: 5px; overflow: hidden; margin-top: 8px; background: var(--hairline); }
+.stack span { display: block; height: 100%; }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 6px; font-size: 12px; color: var(--muted); }
+.dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 5px; vertical-align: baseline; }
+main { padding: 12px 16px 64px; max-width: 1500px; margin: 0 auto; }
+.colheads { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); padding: 4px 2px 8px; }
+.row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; padding: 10px 0; border-top: 1px solid var(--hairline); }
+.cell { min-width: 0; }
+.left { border-left: 4px solid var(--lc); padding-left: 10px; }
+.head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; margin-bottom: 4px; font-size: 12px; color: var(--muted); }
+.badge { color: #fff; background: var(--lc); border-radius: 4px; padding: 1px 6px; font-weight: 600; }
+.row[data-l="boilerplate"] .badge, .row[data-l="unlabelled"] .badge { color: #1b2330; }
+@media (prefers-color-scheme: dark) { .row[data-l="boilerplate"] .badge, .row[data-l="unlabelled"] .badge, .row[data-l="background"] .badge { color: #fff; } }
+.text { white-space: pre-wrap; overflow-wrap: anywhere; }
+.title { font-weight: 650; }
+pre.table { margin: 0; font: 12px/1.4 ui-monospace, Consolas, monospace; overflow-x: auto; background: var(--bg); border: 1px solid var(--hairline); border-radius: 6px; padding: 8px; max-height: 360px; }
+.clamp { display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
+.dropped { background: var(--gap); border-radius: 6px; padding: 8px 10px; color: var(--muted); font-size: 13px; min-height: 40px; }
+.kept { color: var(--ink); opacity: .85; }
+.card { margin-top: 6px; border: 1px solid var(--hairline); background: var(--surface); border-radius: 6px; padding: 6px 8px; font-size: 13px; }
+.card b { font-weight: 600; }
+.card.fact { border-left: 3px solid var(--accent); }
+.card.estimate { border-left: 3px solid var(--l-own_finding); }
+.judge { margin-left: auto; display: inline-flex; gap: 4px; }
+.judge button { border: 1px solid var(--hairline); background: var(--surface); border-radius: 6px; padding: 2px 8px; cursor: pointer; font-size: 12px; min-height: 28px; }
+.judge button[aria-pressed="true"].u { background: var(--useful); border-color: var(--useful); color: #fff; }
+.judge button[aria-pressed="true"].n { background: var(--noise); border-color: var(--noise); color: #fff; }
+.more { background: none; border: 0; color: var(--accent); cursor: pointer; padding: 2px 0; font-size: 13px; }
+.empty { padding: 40px; text-align: center; color: var(--muted); }
+@media (max-width: 860px) {
+  .row, .colheads { grid-template-columns: 1fr; }
+  .colheads span:last-child { display: none; }
+  .right { padding-left: 14px; }
+  header { position: static; }  /* a sticky header would cover half a phone screen */
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+<header>
+  <div class="bar">
+    <h1>Paper vs extraction</h1>
+    <label class="meta" for="doc">Paper</label>
+    <select id="doc"></select>
+    <span class="meta" id="stats"></span>
+  </div>
+  <div class="stack" id="stack" aria-hidden="true"></div>
+  <div class="legend" id="legend"></div>
+  <div class="bar" style="margin-top:8px" role="group" aria-label="Filters">
+    <button class="chip" data-f="all" aria-pressed="true">All</button>
+    <button class="chip" data-f="kept" aria-pressed="false">Kept</button>
+    <button class="chip" data-f="dropped" aria-pressed="false">Dropped</button>
+    <button class="chip" data-f="extra" aria-pressed="false">With extractions</button>
+    <button class="chip" data-f="unjudged" aria-pressed="false">Not yet judged</button>
+    <button class="chip" data-f="disagree" aria-pressed="false">My judgement disagrees</button>
+    <span class="meta" id="agree"></span>
+    <button class="chip" id="export" style="margin-left:auto">Export my judgements</button>
+  </div>
+</header>
+<main>
+  <div class="colheads"><span>Full parsed paper</span><span>Kept for the index, and what was extracted</span></div>
+  <div id="rows"></div>
+</main>
+<script>
+const DOCS = /*__DATA__*/[];
+const LABELS = ["own_finding","method","intervention","setting","cost","limitation","other_study","background","boilerplate","unlabelled"];
+const NAMES = {own_finding:"own finding", method:"method", intervention:"intervention", setting:"setting",
+  cost:"cost", limitation:"limitation", other_study:"other study's finding", background:"background",
+  boilerplate:"boilerplate", unlabelled:"unlabelled"};
+const store = {
+  get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
+  set(k, v) { try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch (e) {} }
+};
+let doc = DOCS[0], filter = "all";
+const el = (tag, cls, text) => { const n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; return n; };
+const words = t => (t.match(/\S+/g) || []).length;
+const jKey = (d, i) => `judge:${d.key}:${i}`;
+
+function stats() {
+  const by = {}; let total = 0, kept = 0;
+  for (const u of doc.units) { const w = words(u.text); total += w; by[u.label] = (by[u.label] || 0) + w; if (u.kept) kept += w; }
+  document.getElementById("stats").textContent =
+    `${doc.units.length} paragraphs · ${total.toLocaleString("en-GB")} words · kept ${Math.round(100 * kept / total)}%` +
+    (doc.programme ? ` · ${doc.programme}` : "");
+  const stack = document.getElementById("stack"), legend = document.getElementById("legend");
+  stack.replaceChildren(); legend.replaceChildren();
+  for (const l of LABELS) {
+    if (!by[l]) continue;
+    const s = el("span"); s.style.width = (100 * by[l] / total) + "%"; s.style.background = `var(--l-${l})`; s.title = NAMES[l]; stack.append(s);
+    const g = el("span"); const d = el("span", "dot"); d.style.background = `var(--l-${l})`;
+    g.append(d, `${NAMES[l]} ${Math.round(100 * by[l] / total)}%`); legend.append(g);
+  }
+  let judged = 0, agree = 0;
+  for (const u of doc.units) { const j = store.get(jKey(doc, u.i)); if (j) { judged++; if ((j === "useful") === u.kept) agree++; } }
+  document.getElementById("agree").textContent = judged ? `You judged ${judged}: you agree with the labeller on ${Math.round(100 * agree / judged)}%` : "";
+}
+
+function textBlock(u, clamp) {
+  if (u.kind === "table") return el("pre", "table", u.text);
+  const t = el("div", "text" + (u.kind === "title" ? " title" : "") + (clamp ? " clamp" : ""), u.text);
+  return t;
+}
+
+function row(u) {
+  const r = el("div", "row"); r.style.setProperty("--lc", `var(--l-${u.label})`); r.dataset.l = u.label;
+  const left = el("div", "cell left");
+  const head = el("div", "head");
+  head.append(el("span", "badge", NAMES[u.label]), el("span", null, `p. ${u.page ?? "?"} · ${u.kind} · #${u.i + 1}`));
+  const judge = el("span", "judge"); const cur = store.get(jKey(doc, u.i));
+  for (const [v, cls, label] of [["useful", "u", "Useful"], ["noise", "n", "Noise"]]) {
+    const b = el("button", cls, label); b.type = "button"; b.setAttribute("aria-pressed", String(cur === v));
+    b.setAttribute("aria-label", `${label}: paragraph ${u.i + 1}`);
+    b.onclick = () => { store.set(jKey(doc, u.i), cur === v ? null : v); render(); };
+    judge.append(b);
+  }
+  head.append(judge); left.append(head, textBlock(u, false));
+  const right = el("div", "cell right");
+  if (u.kept) {
+    const k = el("div", "kept"); const t = textBlock(u, u.kind !== "table"); k.append(t);
+    if (u.kind !== "table" && words(u.text) > 60) {
+      const more = el("button", "more", "Show all"); more.type = "button";
+      more.onclick = () => { t.classList.toggle("clamp"); more.textContent = t.classList.contains("clamp") ? "Show all" : "Show less"; };
+      k.append(more);
+    }
+    right.append(k);
+  } else {
+    right.append(el("div", "dropped", `Dropped as ${NAMES[u.label]}` + (u.label === "other_study" ? " (never cited)" : "")));
+  }
+  for (const x of u.extra) {
+    const c = el("div", "card " + x.kind); c.append(el("b", null, x.kind === "fact" ? "Study fact: " : "Estimate: "), x.text); right.append(c);
+  }
+  r.append(left, right); return r;
+}
+
+function visible(u) {
+  const j = store.get(jKey(doc, u.i));
+  switch (filter) {
+    case "kept": return u.kept;
+    case "dropped": return !u.kept;
+    case "extra": return u.extra.length > 0;
+    case "unjudged": return !j;
+    case "disagree": return j && (j === "useful") !== u.kept;
+    default: return true;
+  }
+}
+
+function render() {
+  const rows = document.getElementById("rows"); const y = window.scrollY;
+  const shown = doc.units.filter(visible);
+  rows.replaceChildren(...(shown.length ? shown.map(row) : [el("div", "empty", "No paragraphs match this filter.")]));
+  stats(); window.scrollTo(0, y);
+}
+
+const sel = document.getElementById("doc");
+DOCS.forEach((d, k) => { const o = el("option", null, `${d.programme || d.title}`.slice(0, 90)); o.value = k; sel.append(o); });
+sel.onchange = () => { doc = DOCS[+sel.value]; window.scrollTo(0, 0); render(); };
+document.querySelectorAll(".chip[data-f]").forEach(b => b.onclick = () => {
+  filter = b.dataset.f; document.querySelectorAll(".chip[data-f]").forEach(x => x.setAttribute("aria-pressed", String(x === b))); render();
+});
+document.getElementById("export").onclick = () => {
+  const out = [];
+  for (const d of DOCS) for (const u of d.units) { const j = store.get(jKey(d, u.i)); if (j) out.push({doc: d.key, paragraph: u.i, page: u.page, model_label: u.label, kept: u.kept, judgement: j}); }
+  const a = el("a"); a.href = URL.createObjectURL(new Blob([JSON.stringify(out, null, 1)], {type: "application/json"}));
+  a.download = "paragraph_judgements.json"; a.click();
+};
+if (DOCS.length) render(); else document.getElementById("rows").append(el("div", "empty", "No papers in this file."));
+</script>
+</body>
+</html>
