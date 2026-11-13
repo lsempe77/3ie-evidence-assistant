@@ -54,6 +54,18 @@ Each variant needs a detector, a parser, and a test. Real forms from the corpus:
 8. **Sign and direction.** `reverse_sign` for outcomes where a fall is good, and the sign convention of the printed coefficient.
 9. **Table layouts.** Treatments in columns, SE in the row below the coefficient, transposed, multi-panel (Panel A/B), multi-arm, subgroup rows, rotated and borderless tables. `results_tables_*.csv` already flags `has_stars`/`has_se`/`has_pvalue`, rows and columns.
 
+## Table interpretation
+
+Reading the structure is separate from reading the values. `src/extraction/table_structure.py` does the structure deterministically, with tests in `tests/test_table_structure.py` (10 pass):
+
+- **Multi-page stitching.** `stitch_units` merges a table continued on the next page when the header repeats or the caption says "continued", and the pages are adjacent. The pipeline sends one Markdown item per parsed table, so this runs before extraction.
+- **Grid and notes.** `parse_markdown_table` splits header, body and note lines using the Markdown separator. `parse_conventions` reads the notes for "standard errors in parentheses", "t-statistics in brackets", "95% CI" and the star map (`*** p<0.01, ** p<0.05, * p<0.1`).
+- **Column roles.** `infer_columns` assigns estimate, SE, t, z, p, CI bounds, N, mean and SD from the header, the notes and a value profile, after expanding abbreviations (ATT, ATE, ITT, s.e., obs, sd, pp), so "ATT" and "confidence interval upper" both resolve.
+- **Arithmetic resolution.** `resolve_consistency` labels an unlabelled numeric column when the estimate divided by it is a whole t-like ratio, which separates an SE column from a differently scaled one.
+- **Confidence and warnings.** `interpret_table` returns the roles, the combined-cell flag (`0.52*** (0.12)`), the star map, a confidence and warnings, so a low-confidence table is flagged for review instead of trusted.
+
+Deliberate limit: a small decimal column is not guessed to be a p-value from its values alone, because an SE, a coefficient and an elasticity look alike. A column stays unknown until a header, a note or the arithmetic decides it. The module interprets structure only and does not call a model. Remaining work is to run it inside `table_estimates.py` before the model call, pass the surrounding notes as a separate input, and add a row-label glossary and a review queue for low-confidence tables.
+
 ## Derivation and consistency rules
 
 - `t = estimate / se`; `se` from a CI as `(high - low) / (2 * z)` at the stated level; `p` from `t` and df when df is known; stars to a p-bound otherwise.
@@ -77,7 +89,7 @@ So P1 (deterministic parsers) is low value now. The next move is to diagnose the
 
 1. **P0, audit.** Done (`evaluation/normalisation_audit.py`, report in `evaluation/results/`). Parsing is not the gap; value recall is 39% of the human-key rows, and outcome-label alignment is weak.
 2. **P1, diagnose value recall.** For a sample of the unmatched human rows, decide whether the value is missed (a table we did not read), rounded or in different units, or the sign differs. Improve alignment on outcome and arm with token overlap. This replaces the parser work.
-3. **P2, parsers and derivations.** With recall understood, implement the deterministic parsers for the variants that remain, then `d`, `yi`, `var_d`, `vi`, `se_g` with `formula_used`, and reproduce the 8WR key on its 443 rows.
+3. **P2, parsers and derivations.** The structure interpreter is built (`src/extraction/table_structure.py`, tested); next, run it inside `table_estimates.py` before the model call, then implement the derivations `d`, `yi`, `var_d`, `vi`, `se_g` with `formula_used`, and reproduce the 8WR key on its 443 rows.
 4. **P3, layouts.** Add the layout detectors (multi-arm, multi-panel, SE-below-row, transposed) and the dedupe and sign rules. Re-run the audit.
 5. **P4, validation and gate.** Wire the per-field report into `evaluation/`, publish coverage and accuracy, and gate prompt or parser changes on it.
 
