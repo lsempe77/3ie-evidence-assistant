@@ -194,6 +194,10 @@ The extraction side is unchanged in this period; the role filter and the quote w
       (`phase7_qex_validation.py`); `phase5_pdf_vision.py` and `phase8_postprocessing.py` handle the
       unstructured and export ends. Use it as the reference for the star, CI and p-value conventions
       before extending our `table_estimates.py`.
+    - Normalisation is scoped in [NORMALISATION.md](NORMALISATION.md): the measured field coverage (CI
+      bounds, t statistic and effect-size assumption are 0% filled across 10,014 rows), the target record
+      aligned to `data/8WR QEX Combined.xlsx`, the taxonomy of presentation variants, the derivation rules
+      for d, yi and se(g), and a staged plan starting with a P0 audit of the 443 human-key rows.
 
 7. **N7. Design: collection pages** - 2-3 d
    - Documents and Settings next, following [DESIGN.md](../DESIGN.md). They hold most of the remaining
