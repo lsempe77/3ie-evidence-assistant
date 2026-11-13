@@ -120,3 +120,8 @@ evaluation/results/usage_study/*
 !evaluation/results/usage_study/*/
 evaluation/results/usage_study/*/*
 !evaluation/results/usage_study/*/report.md
+
+# Local agent state. Project config (kilo.jsonc, command/, agent/) stays trackable; worktrees
+# and the Agent Manager state file are local.
+.kilo/worktrees/
+.kilo/agent-manager.json
