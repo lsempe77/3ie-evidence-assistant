@@ -190,6 +190,8 @@ Two checks separate the filter from the volume change. The full benchmark gate p
 
 Quote verification (Phase 3) was then measured on the same 211 questions. Every supporting quote is now a verbatim span of the passages: the not-verbatim count fell from 141 (2.6%) to zero. Supporting quotes fell from 5,367 to 4,991 (7%), because a quote that could not be verified was dropped or snapped to its source sentence, and cited readings rose slightly from 3,392 to 3,448. Relevance per question held (25.5 to 25.2) and readings per question were unchanged.
 
+The study runs against the project's live database. Supabase warned on 13 November 2026 that the project was depleting its disk IO budget; during that window even a one-row select took 11 to 22 seconds and retrieval calls timed out. The `chunks` table is wide (1,536-dimension embeddings), so vector search and any scan of it use disk IO quickly, and the re-index and the 211-question runs are the heaviest consumers. Run studies and re-indexes off-peak or against a copy, raise the compute add-on if slowness recurs (the disk IO budget scales with it), and prefer fewer or narrower chunks. Search RPCs now retry with backoff, which rides out short slow windows but does not replace the budget.
+
 To reproduce, run `python evaluation/usage_study.py analyse --project-id <uuid>`. The aggregate report is committed at `evaluation/results/usage_study/<uuid>/report.md`. The run logs, cached content and labels hold text from the papers and stay local (see `.gitignore`).
 
 ---
