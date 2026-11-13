@@ -2,6 +2,29 @@
 
 All notable changes to DevChat v2.0 are documented in this file.
 
+## [2.0.11] - 2026-11-13
+
+### Added
+- **In-app PDF reader** (`react-pdf` + `pdfjs-dist`), replacing the browser iframe viewer: zoom, page navigation, full-text search, cited-passage highlighting, and windowed page rendering so long PDFs open quickly. Loaded client-side only.
+- **Role filter before embedding**: paragraphs that are not a document's own evidence (references, boilerplate, background, other studies' findings) are dropped, and each abstract is always kept. Applied on the admin ingest route and on `scripts/ingest_documents.py`; `INDEX_ROLE_FILTER` now defaults on. The graduation collection was re-indexed (98 documents).
+- **Quote verification**: a supporting quote must be a verbatim span of the passages. A reformatted quote is snapped to its source sentence, and one that cannot be found is dropped, so a citation or PDF highlight never points at text the paper does not contain.
+- Retry with backoff for search RPCs, so a slow database delays a query instead of failing it.
+
+### Changed
+- The reader judges relevance by the kind of question (effect, implementation, context, design, cost, mechanism), not only by reported results, so questions that are not about effects return evidence.
+- The secondhand guard also flags prose attributions ("previous studies find", "the literature shows").
+
+### Fixed
+- Page metadata collapsed to the last page in the role-filtered chunking path, which would have broken PDF highlighting.
+- Console crash on non-ASCII log output on Windows (cp1252).
+
+### Measured (211-question usage study)
+- Kind-aware reader: relevant studies per question 15.2 to 18.3 overall, implementation 0.7 to 1.6.
+- Filtered index: noise paragraphs 31% to 6% of what the reader is shown and 8.6% to 1.2% of quotes; relevant studies per question up 32% at equal reading volume; benchmark gate passed (0.566 vs 0.552).
+- Quote verification: quotes not verbatim 141 (2.6%) to 0; supporting quotes 5,367 to 4,991; cited readings 3,392 to 3,448.
+
+---
+
 ## [2.0.10] - 2026-01-15
 
 ### Changed

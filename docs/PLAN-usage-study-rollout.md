@@ -119,9 +119,9 @@ Steps:
 
 ---
 
-## Phase 5. Page virtualization (deferred, product decision)
+## Phase 5. Page windowing (done)
 
-- [ ] Decide whether to window page rendering. Safe only with a different source for the cite page (for example the API returning the matched page) or a progressive render-and-search loop. Requires browser testing.
+- [x] Window page rendering: only pages near the viewport plus the cited page are drawn, with sized placeholders, so a long PDF opens quickly. Shipped with the reader (`1c5c685`).
 
 ---
 
