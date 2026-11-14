@@ -76,6 +76,21 @@ The p-value figure is low because p is usually stated once in the notes as a sta
 
 Next: use these roles inside `table_estimates.py` before the model call, and treat a low-confidence table as a review flag rather than trusting it.
 
+### Using TVET's table typing and row rules
+
+TVET already solved two adjacent problems (`pipelines/TVET/pipeline/`, outside this repo): telling a results table from a descriptive one (`prompts/phase2_table_filtering.txt`), and excluding rows and columns that are not outcomes (`validation_rules.py`, `validation_rules.yaml`). `src/extraction/table_rules.py` ports both as pure functions with the provenance in its docstring: `classify_table` returns results, descriptive or unknown from the caption and the table's own notes; `is_non_outcome_label` catches Observations, R², Constant, Controls, SD, clusters and similar; `is_descriptive_column` catches columns of means and standard deviations.
+
+Applied to the corpus, with the two fixes it exposed in our own reader:
+
+- Results by caption: 456 tables (28%). Descriptive: 210 (13%). Unknown: 951 (59%), mostly tables with no caption.
+- With the extra layouts (a row labelled "Treatment" plus a parenthesised standard-error row, and combined cells on half the rows), an estimate is now found in 556 tables (34%, up from 460), and a standard error in 378 of them (68%, up from 60%).
+- The caption and the reader disagree in two useful ways. In 93 tables the caption says descriptive while the reader read an estimate; inspection shows these are attrition and baseline-mean tables, so the reader over-reads and the caption should veto it. In 182 tables the caption says results while no estimate was read; these are the remaining misses to close.
+- Non-outcome rows: 514 of the 10,014 extracted rows (5.1%) carry a non-outcome label, mostly control-group means ("Mean in pure control", 258) and "Constant" (21). An early version also flagged "Average effect of T1" because of the word "average"; that false positive is fixed.
+
+Two behaviours were corrected by testing against the data: classification was reading the surrounding paragraphs (so a nearby "baseline" made a results table look descriptive), and the word "matching" made "propensity score matching results" look like a balance table. Classification now reads only the caption and the table's notes, and "matching" and "propensity" are no longer standalone descriptive cues.
+
+Next: apply the caption as a veto (descriptive caption over a read estimate becomes a review flag), close the 182 missed results tables, and run the roles inside `table_estimates.py`.
+
 ## Derivation and consistency rules
 
 - `t = estimate / se`; `se` from a CI as `(high - low) / (2 * z)` at the stated level; `p` from `t` and df when df is known; stars to a p-bound otherwise.

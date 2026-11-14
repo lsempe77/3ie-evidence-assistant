@@ -263,8 +263,9 @@ def infer_columns(grid: TableGrid, notes: str = "") -> List[Column]:
         values = grid.column(index)
         if role is None and conventions["se_in_parens"] and _looks_like_estimate_column(values):
             role, evidence = SE, "notes: standard errors in parentheses"
-        if role is None and _combined_share(values) >= 0.6:
-            # Outcomes in columns, each cell "estimate*** (SE)" with no role labels at all.
+        if role is None and _combined_share(values) >= 0.5:
+            # Outcomes in columns, each cell "estimate*** (SE)" with no role labels at all. Half the
+            # rows are enough, because one row may print "[p] estimate" instead of "estimate (SE)".
             role, evidence = ESTIMATE, "cells look like an estimate with its standard error"
         if role is None:
             hint, why = _profile_hint(_profile(values))
@@ -306,11 +307,26 @@ def resolve_consistency(columns: List[Column], grid: TableGrid) -> Tuple[List[Co
     return columns, warnings
 
 
+_PAREN_ONLY = re.compile(r"^\s*[(\[]\s*[-−–]?\d[\d.,]*\s*[)\]]\s*$")
+
+
+def _all_parenthesised(cells: Sequence[str]) -> bool:
+    present = [c for c in cells if str(c).strip()]
+    return bool(present) and all(_PAREN_ONLY.match(str(c)) for c in present)
+
+
 def _row_roles(grid: TableGrid) -> Dict[str, int]:
     """Roles carried by the first column, for the statistics-in-rows layout."""
     roles: Dict[str, int] = {}
     for i, row in enumerate(grid.body):
-        role, _ = _role_from_header(row[0] if row else "")
+        label = row[0] if row else ""
+        role, _ = _role_from_header(label)
+        key = _norm(label)
+        if role is None and key in ("treatment", "treat", "program", "programme", "impact", "effect"):
+            role = ESTIMATE
+        if role is None and ESTIMATE in roles and SE not in roles and _all_parenthesised(row[1:]):
+            # The row under the coefficient row prints only "(SE)" in each outcome column.
+            role = SE
         if role in (ESTIMATE, SE, T, P, N, CI_LOW, CI_HIGH) and role not in roles:
             roles[role] = i
     return roles

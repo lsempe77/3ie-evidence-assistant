@@ -24,6 +24,27 @@ def test_header_roles_for_a_plain_results_table():
     assert result.confidence >= 0.6
 
 
+def test_outcomes_in_columns_with_combined_cells():
+    table = """| | (1) Consumption | (2) Food security |
+| --- | --- | --- |
+| T1: Grp LH | 311** (119) | 0.20*** (0.05) |
+| T2: Ind LH | [0.01] 342*** | [<0.01] 0.26*** |"""
+    result = interpret_table(table)
+    assert result.estimate is not None
+
+
+def test_treatment_row_with_a_parenthesised_se_row():
+    table = """| | Bridging | Linking |
+| --- | --- | --- |
+| Treatment | -0.01 | 0.45*** |
+| | (0.05) | (0.05) |
+| Control mean | 2.26 | 1.10 |"""
+    result = interpret_table(table)
+    assert result.layout == LAYOUT_ROWS
+    assert result.row_roles.get(ESTIMATE) == 0
+    assert result.row_roles.get(SE) == 1
+
+
 def test_statistics_in_rows_with_outcomes_in_columns():
     table = """| | (1) | (2) |
 | --- | --- | --- |
