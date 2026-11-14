@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import re
 import sys
 from collections import Counter
 from datetime import date
@@ -70,6 +71,10 @@ def recall(human: list, ours: list, tol: float = 1e-6) -> tuple:
     return found, len(human)
 
 
+def _n(value) -> str:
+    return re.sub(r"[^a-z0-9]+", " ", str(value or "").lower()).strip()
+
+
 def old_rows(sid: str) -> pd.DataFrame:
     path = OUT / sid / "extracted_data.csv"
     return pd.read_csv(path) if path.exists() else pd.DataFrame()
@@ -102,8 +107,8 @@ def main() -> None:
 
     agg = Counter()
     lines = ["# Extraction A/B: old rows against the new reader", "",
-             "| Study | Est recall old | Est recall new | SE recall old | SE recall new | non-outcome old | non-outcome new | rows old | rows new | skipped | review |",
-             "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |"]
+             "| Study | Tables | Results | Skipped | Rows new | Outcomes new | Out+arm new | Dups | Rows old | Outcomes old | Est old | Est new | SE old | SE new |",
+             "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |"]
     for sid, new in new_results:
         old = old_rows(sid)
         h = human.get(sid, {"estimate": [], "se": []})
@@ -119,25 +124,40 @@ def main() -> None:
         new_non = sum(int(t.get("non_outcome_rows") or 0) for t in new["tables"])
         skipped = sum(1 for t in new["tables"] if t.get("skipped"))
         review = sum(1 for t in new["tables"] if t.get("review"))
+        tables = len(new["tables"])
+        results_tables = sum(1 for t in new["tables"] if t.get("results_table"))
+        new_outcomes = len({_n(r.get("outcome")) for r in new["estimates"] if _n(r.get("outcome"))})
+        new_pairs = len({(_n(r.get("outcome")), _n(r.get("arm"))) for r in new["estimates"] if _n(r.get("outcome"))})
+        old_names = list(old.get("outcome_name", []))
+        old_arms = list(old.get("treatment_arm", []))
+        old_outcomes = len({_n(x) for x in old_names if _n(x)})
         agg.update({"old_est": oe, "new_est": ne, "old_se": os_, "new_se": ns,
                     "old_est_t": ot, "new_est_t": len(h["estimate"]), "old_se_t": ost,
                     "new_se_t": len(h["se"]), "old_non": old_non, "new_non": new_non,
                     "old_rows": len(old), "new_rows": len(new["estimates"]),
-                    "dups": new.get("duplicates", 0),
-                    "skipped": skipped, "review": review})
-        lines.append(f"| {sid} | {oe}/{ot} | {ne}/{len(h['estimate'])} | {os_}/{ost} | {ns}/{len(h['se'])} | "
-                     f"{old_non} | {new_non} | {len(old)} | {len(new['estimates'])} | {skipped} | {review} |")
+                    "dups": new.get("duplicates", 0), "tables": tables, "results": results_tables,
+                    "outcomes_new": new_outcomes, "pairs_new": new_pairs,
+                    "outcomes_old": old_outcomes, "skipped": skipped, "review": review})
+        lines.append(
+            f"| {sid} | {tables} | {results_tables} | {skipped} | {len(new['estimates'])} | {new_outcomes} | "
+            f"{new_pairs} | {new.get('duplicates', 0)} | {len(old)} | {old_outcomes} | "
+            f"{oe}/{ot} | {ne}/{len(h['estimate'])} | {os_}/{ost} | {ns}/{len(h['se'])} |")
 
-    lines += ["", "## Totals", "",
-              f"Estimate value recall: old {agg['old_est']}/{agg['old_est_t']} "
-              f"({100 * agg['old_est'] / max(1, agg['old_est_t']):.0f}%), "
-              f"new {agg['new_est']}/{agg['new_est_t']} ({100 * agg['new_est'] / max(1, agg['new_est_t']):.0f}%).",
-              f"SE value recall: old {agg['old_se']}/{agg['old_se_t']} "
-              f"({100 * agg['old_se'] / max(1, agg['old_se_t']):.0f}%), "
-              f"new {agg['new_se']}/{agg['new_se_t']} ({100 * agg['new_se'] / max(1, agg['new_se_t']):.0f}%).",
-              f"Non-outcome rows: old {agg['old_non']}, new {agg['new_non']} (dropped before output).",
-              f"Rows: old {agg['old_rows']}, new {agg['new_rows']}. Duplicate rows removed: {agg['dups']}. "
-              f"Tables skipped as descriptive: {agg['skipped']}. Tables flagged for review: {agg['review']}."]
+    lines += [
+        "", "## Totals", "",
+        f"Tables parsed: {agg['tables']}, of which results tables (the reader returned an estimate) "
+        f"{agg['results']}. Skipped as descriptive: {agg['skipped']}. Flagged for review: {agg['review']}.",
+        f"Rows: old {agg['old_rows']}, new {agg['new_rows']} (duplicates removed {agg['dups']}).",
+        f"Distinct outcomes: old {agg['outcomes_old']}, new {agg['outcomes_new']}. "
+        f"Distinct outcome and arm pairs: new {agg['pairs_new']}.",
+        f"Estimate value recall: old {agg['old_est']}/{agg['old_est_t']} "
+        f"({100 * agg['old_est'] / max(1, agg['old_est_t']):.0f}%), "
+        f"new {agg['new_est']}/{agg['new_est_t']} ({100 * agg['new_est'] / max(1, agg['new_est_t']):.0f}%).",
+        f"SE value recall: old {agg['old_se']}/{agg['old_se_t']} "
+        f"({100 * agg['old_se'] / max(1, agg['old_se_t']):.0f}%), "
+        f"new {agg['new_se']}/{agg['new_se_t']} ({100 * agg['new_se'] / max(1, agg['new_se_t']):.0f}%).",
+        f"Non-outcome rows: old {agg['old_non']}, new {agg['new_non']} (dropped before output).",
+    ]
     REPORT.write_text("\n".join(lines), encoding="utf-8")
     print("\n".join(lines).encode("ascii", "replace").decode("ascii"))
     print(f"\nwritten to {REPORT}")

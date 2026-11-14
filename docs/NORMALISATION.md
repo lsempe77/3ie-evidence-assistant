@@ -107,14 +107,16 @@ Next: close the remaining missed results tables, and measure the reader end to e
 | Estimate value recall, 12 studies | 66 of 149 (44%) | 137 of 149 (92%) |
 | SE value recall, 12 studies | 63 of 134 (47%) | 121 of 134 (90%) |
 | Estimate value recall, first 6 studies | 51 of 84 (61%) | 84 of 84 (100%) |
-| Rows, 12 studies | 1,816 | 4,679 |
-| Duplicate rows removed | 0 | 91 |
+| Rows, 12 studies | 1,816 | 4,688 |
+| Duplicate rows removed | 0 | 93 |
+| Distinct outcomes | 372 | 993 |
+| Distinct outcome and arm pairs | | 3,014 |
 | Descriptive tables skipped | 0 | 24 |
-| Non-outcome rows dropped | 12 | 37 |
+| Non-outcome rows dropped | 12 | 39 |
 
-The new reader finds about twice as many of the hand-typed numbers, which is the coverage gap this work targeted. The first six studies reached 100%; the 12-study sample is 92%, so a few numbers are still missed and the gap is not closed everywhere.
+Across the 12 studies the reader parsed 388 tables, read 265 of them as results tables, skipped 24 as descriptive and flagged none for review. Recall rose from 44% to 92% for estimates and from 47% to 90% for standard errors. The two runs are not identical samples of tables, so the comparison is indicative.
 
-The cost is size. Deduplication removed only 91 rows, and the reader produces 2.6 times as many rows as the old pipeline, from 1,816 to 4,679 on the sample. Part of that is genuinely more estimates read from wide tables (one study goes from 657 to 2,246 rows), not duplicates. Extrapolated, a full re-extraction would grow the estimates table from about 20,000 rows to something like 40,000 to 50,000.
+The growth is not mostly duplicates. Distinct outcomes rose from 372 to 993, and exact dedupe removed only 93 rows, so the reader is genuinely finding more outcomes, not copying the same ones. Because 4,688 rows map to 3,014 outcome-and-arm pairs, about 1,674 rows repeat the same outcome and arm across specifications or tables. Keeping one best row per outcome and arm would cut the new side to about 3,014 rows, roughly 1.7 times the old 1,816 before any per-study ceiling. That is the cap to implement.
 
 That is why the collection has not been re-extracted. The estimates carry embeddings, and the disk-IO budget was only just fixed by moving the project to Pro on Micro. Nearly doubling the table would put that budget under pressure again for a coverage gain. The pipeline change is kept (new documents benefit), and a full re-extraction waits for one of two things: a cap on estimates per study, or a compute step-up so the larger table fits the IO budget.
 
