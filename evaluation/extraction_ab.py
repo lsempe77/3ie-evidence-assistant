@@ -129,7 +129,6 @@ def main() -> None:
         new_outcomes = len({_n(r.get("outcome")) for r in new["estimates"] if _n(r.get("outcome"))})
         new_pairs = len({(_n(r.get("outcome")), _n(r.get("arm"))) for r in new["estimates"] if _n(r.get("outcome"))})
         old_names = list(old.get("outcome_name", []))
-        old_arms = list(old.get("treatment_arm", []))
         old_outcomes = len({_n(x) for x in old_names if _n(x)})
         agg.update({"old_est": oe, "new_est": ne, "old_se": os_, "new_se": ns,
                     "old_est_t": ot, "new_est_t": len(h["estimate"]), "old_se_t": ost,
