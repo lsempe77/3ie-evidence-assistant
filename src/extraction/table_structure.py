@@ -19,6 +19,7 @@ interprets structure; it does not call a model or read values.
 from __future__ import annotations
 
 import re
+import unicodedata
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Sequence, Tuple
 
@@ -36,22 +37,36 @@ SD = "sd"
 STARS = "stars"
 UNKNOWN = "unknown"
 
+# Two layouts cover most economics tables: statistics in columns (one column per statistic) and
+# statistics in rows (one row per statistic, one column per outcome or model).
+LAYOUT_COLUMNS = "roles_in_columns"
+LAYOUT_ROWS = "roles_in_rows"
+
 _HEADER_ROLES: List[Tuple[str, Tuple[str, ...]]] = [
     (ESTIMATE, ("coefficient", "coef", "estimate", "beta", "point estimate", "treatment effect",
                 "att", "ate", "itt", "impact", "effect size", "marginal effect", "dy/dx",
-                "odds ratio", "hazard ratio", "exp(b)", "exp(b)")),
+                "odds ratio", "hazard ratio", "exp(b)",
+                # Spanish, Portuguese, French
+                "efecto", "impacto", "coeficiente", "estimacion", "efeito", "effet")),
     (CI_LOW, ("ci lower", "ci_low", "lower bound", "lower ci", "ll", "lb", "ci lb", "2.5%", "low",
-              "confidence interval lower", "confidence interval low")),
+              "confidence interval lower", "confidence interval low",
+              "intervalo de confianza inferior", "limite inferior", "ic inferior",
+              "intervalo de confianca inferior")),
     (CI_HIGH, ("ci upper", "ci_up", "upper bound", "upper ci", "ul", "ub", "ci ub", "97.5%", "high",
-               "confidence interval upper", "confidence interval high")),
-    (SE, ("std err", "std. err", "standard error", "robust se", "clustered se", "s.e.", "s.e", "se")),
+               "confidence interval upper", "confidence interval high",
+               "intervalo de confianza superior", "limite superior", "ic superior",
+               "intervalo de confianca superior")),
+    (SE, ("std err", "std. err", "standard error", "robust se", "clustered se", "s.e.", "s.e", "se",
+          "error estandar", "erro padrao", "erreur standard", "ee")),
     (T, ("t-stat", "t stat", "t statistic", "tstat", "z-stat", "z stat", "z statistic", "zscore",
-         "z-score", "t value", "t-value", "z value")),
-    (P, ("p-value", "p value", "pvalue", "pval", "prob", "significance level", "sig")),
+         "z-score", "t value", "t-value", "z value", "estadistico t", "estatistica t", "statistique t")),
+    (P, ("p-value", "p value", "pvalue", "pval", "prob", "significance level", "sig",
+         "valor p", "p valor", "p-valor", "significancia", "probabilidad", "probabilidade", "probabilite")),
     (N, ("observations", "n obs", "num obs", "sample size", "number of observations", "clusters",
-         "cluster", "n")),
-    (MEAN, ("control mean", "mean", "average", "avg", "baseline mean")),
-    (SD, ("std dev", "std. dev", "standard deviation", "sigma", "sd")),
+         "cluster", "n", "observaciones", "observacoes", "numero de observaciones")),
+    (MEAN, ("control mean", "mean", "average", "avg", "baseline mean", "media", "promedio", "moyenne")),
+    (SD, ("std dev", "std. dev", "standard deviation", "sigma", "sd",
+          "desviacion estandar", "desvio padrao", "ecart type")),
 ]
 
 _NOTES = {
@@ -62,6 +77,10 @@ _NOTES = {
     "percent": re.compile(r"percent|%", re.I),
 }
 _STAR_NOTE = re.compile(r"(\*{1,3})\s*(?:for|:|=)?\s*(?:p\s*[<>=]?\s*)?0?\.(\d+)", re.I)
+# "0.15*** (0.05)" or "[0.31] (0.10)": an estimate with stars and its standard error in one cell.
+COMBINED_CELL = re.compile(
+    r"^\s*[-−–]?\d[\d.,]*\s*(?:\*{1,3}|†{1,2})?\s*[(\[]\s*[-−–]?\d[\d.,]*\s*[)\]]\s*$"
+)
 
 # Header and label abbreviations expanded before matching, so "ATT" and "s.e." read as phrases.
 _ABBREV = {
@@ -91,12 +110,16 @@ def expand_abbreviations(text: str) -> str:
     return " ".join(expanded)
 
 
+def _fold(text: object) -> str:
+    return "".join(c for c in unicodedata.normalize("NFKD", str(text or "")) if not unicodedata.combining(c))
+
+
 def _flat(text: object) -> str:
     return re.sub(r"\s+", " ", str(text or "")).strip()
 
 
 def _norm(text: object) -> str:
-    return re.sub(r"[^a-z0-9%./]+", " ", _flat(text).lower()).strip()
+    return re.sub(r"[^a-z0-9%./]+", " ", _fold(text).lower()).strip()
 
 
 @dataclass
@@ -137,6 +160,8 @@ class Interpretation:
     stars_map: Dict[int, float]
     confidence: float
     warnings: List[str] = field(default_factory=list)
+    layout: str = LAYOUT_COLUMNS
+    row_roles: Dict[str, int] = field(default_factory=dict)
 
 
 def _split_row(line: str) -> List[str]:
@@ -221,6 +246,13 @@ def _profile_hint(profile: Dict[str, float]) -> Tuple[Optional[str], str]:
     return None, ""
 
 
+def _combined_share(values: Sequence[str]) -> float:
+    present = [v for v in values if str(v).strip()]
+    if not present:
+        return 0.0
+    return sum(1 for v in present if COMBINED_CELL.match(str(v))) / len(present)
+
+
 def infer_columns(grid: TableGrid, notes: str = "") -> List[Column]:
     conventions, _ = parse_conventions(notes)
     headers = [_flat(c) for c in (grid.headers[-1] if grid.headers else [])]
@@ -228,13 +260,17 @@ def infer_columns(grid: TableGrid, notes: str = "") -> List[Column]:
     for index in range(grid.ncols):
         header = headers[index] if index < len(headers) else ""
         role, evidence = _role_from_header(header)
-        if role is None and conventions["se_in_parens"] and _looks_like_estimate_column(grid.column(index)):
+        values = grid.column(index)
+        if role is None and conventions["se_in_parens"] and _looks_like_estimate_column(values):
             role, evidence = SE, "notes: standard errors in parentheses"
+        if role is None and _combined_share(values) >= 0.6:
+            # Outcomes in columns, each cell "estimate*** (SE)" with no role labels at all.
+            role, evidence = ESTIMATE, "cells look like an estimate with its standard error"
         if role is None:
-            hint, why = _profile_hint(_profile(grid.column(index)))
+            hint, why = _profile_hint(_profile(values))
             if hint:
                 role, evidence = hint, why
-        columns.append(Column(index, header, role or UNKNOWN, evidence or "no evidence", _profile(grid.column(index))))
+        columns.append(Column(index, header, role or UNKNOWN, evidence or "no evidence", _profile(values)))
     return columns
 
 
@@ -270,12 +306,24 @@ def resolve_consistency(columns: List[Column], grid: TableGrid) -> Tuple[List[Co
     return columns, warnings
 
 
+def _row_roles(grid: TableGrid) -> Dict[str, int]:
+    """Roles carried by the first column, for the statistics-in-rows layout."""
+    roles: Dict[str, int] = {}
+    for i, row in enumerate(grid.body):
+        role, _ = _role_from_header(row[0] if row else "")
+        if role in (ESTIMATE, SE, T, P, N, CI_LOW, CI_HIGH) and role not in roles:
+            roles[role] = i
+    return roles
+
+
 def interpret_table(text: str, notes: str = "") -> Interpretation:
     grid = parse_markdown_table(text)
     note_text = " ".join([notes] + grid.notes) if notes else " ".join(grid.notes)
     conventions, stars_map = parse_conventions(note_text)
     columns = infer_columns(grid, note_text)
     columns, warnings = resolve_consistency(columns, grid)
+    row_roles = _row_roles(grid)
+    layout = LAYOUT_ROWS if ESTIMATE in row_roles and len(row_roles) >= 2 else LAYOUT_COLUMNS
 
     def index_of(role: str) -> Optional[int]:
         return next((c.index for c in columns if c.role == role), None)
@@ -292,7 +340,10 @@ def interpret_table(text: str, notes: str = "") -> Interpretation:
             confidence += 0.15
     if conventions.get("se_in_parens") or conventions.get("ci"):
         confidence += 0.1
-    if index_of(ESTIMATE) is None:
+    if layout == LAYOUT_ROWS:
+        confidence += 0.2
+        warnings.append("statistics in rows: outcomes or models are columns, roles are rows")
+    if estimate is None and layout == LAYOUT_COLUMNS:
         warnings.append("no estimate column identified")
     return Interpretation(
         roles=columns,
@@ -307,6 +358,8 @@ def interpret_table(text: str, notes: str = "") -> Interpretation:
         stars_map=stars_map,
         confidence=min(0.95, confidence),
         warnings=warnings,
+        layout=layout,
+        row_roles=row_roles,
     )
 
 

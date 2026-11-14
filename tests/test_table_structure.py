@@ -1,7 +1,7 @@
 """Table structure interpretation: roles, notes, consistency, and multi-page stitching."""
 
 from src.extraction.table_structure import (
-    ESTIMATE, SE,
+    ESTIMATE, LAYOUT_ROWS, SE,
     interpret_table, parse_conventions, parse_markdown_table, stitch_units,
 )
 
@@ -22,6 +22,28 @@ def test_header_roles_for_a_plain_results_table():
     assert result.se == 1
     assert result.p == 2
     assert result.confidence >= 0.6
+
+
+def test_statistics_in_rows_with_outcomes_in_columns():
+    table = """| | (1) | (2) |
+| --- | --- | --- |
+| Coefficient | 0.52 | 0.31 |
+| Standard error | 0.12 | 0.10 |
+| Observations | 400 | 400 |"""
+    result = interpret_table(table)
+    assert result.layout == LAYOUT_ROWS
+    assert result.row_roles.get(ESTIMATE) == 0
+    assert result.row_roles.get(SE) == 1
+
+
+def test_spanish_headers_are_read():
+    table = """| Efecto | Error estándar | Valor p |
+| --- | --- | --- |
+| 0.52 | 0.12 | 0.001 |"""
+    result = interpret_table(table)
+    assert result.estimate == 0
+    assert result.se == 1
+    assert result.p == 2
 
 
 def test_header_abbreviations_are_expanded():

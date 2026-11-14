@@ -64,7 +64,17 @@ Reading the structure is separate from reading the values. `src/extraction/table
 - **Arithmetic resolution.** `resolve_consistency` labels an unlabelled numeric column when the estimate divided by it is a whole t-like ratio, which separates an SE column from a differently scaled one.
 - **Confidence and warnings.** `interpret_table` returns the roles, the combined-cell flag (`0.52*** (0.12)`), the star map, a confidence and warnings, so a low-confidence table is flagged for review instead of trusted.
 
-Deliberate limit: a small decimal column is not guessed to be a p-value from its values alone, because an SE, a coefficient and an elasticity look alike. A column stays unknown until a header, a note or the arithmetic decides it. The module interprets structure only and does not call a model. Remaining work is to run it inside `table_estimates.py` before the model call, pass the surrounding notes as a separate input, and add a row-label glossary and a review queue for low-confidence tables.
+Deliberate limit: a small decimal column is not guessed to be a p-value from its values alone, because an SE, a coefficient and an elasticity look alike. A column stays unknown until a header, a note or the arithmetic decides it. The module interprets structure only and does not call a model.
+
+### Coverage on the corpus
+
+Run over the 1,617 parsed tables in the collection (`evaluation/table_structure_audit.py`, report in `evaluation/results/table_structure_audit_2026-11-14.md`), the interpreter reads 460 as results tables (28%). Of those, it finds a standard error, in a column or inside the estimate cell, for 275 (60%), and a p-value for 75 (16%); a confidence interval for only 4 (1%). It leaves 39% of the result-table columns unknown. Layouts split 1,545 statistics in columns to 72 statistics in rows.
+
+Three layout classes were found in the data, and the third was added after the first run. Most tables put one statistic per column. A second class puts outcomes or models in the columns and `Coefficient`, `Standard error` and `Observations` in the first column as rows, which is now detected as the statistics-in-rows layout. A third class has outcomes in the columns with each cell holding `estimate*** (SE)` and no role labels at all, which raised the results-table count from 410 to 460 once detected. Spanish, Portuguese and French headers are folded and matched.
+
+The p-value figure is low because p is usually stated once in the notes as a star map rather than in its own column; the star map is parsed (305 tables, 19%), so the value is available even when there is no p column. Closing the remaining 39% of unknown columns needs a row-label glossary (outcome labels such as `(1) Assets`) rather than more header terms.
+
+Next: use these roles inside `table_estimates.py` before the model call, and treat a low-confidence table as a review flag rather than trusting it.
 
 ## Derivation and consistency rules
 
@@ -89,7 +99,7 @@ So P1 (deterministic parsers) is low value now. The next move is to diagnose the
 
 1. **P0, audit.** Done (`evaluation/normalisation_audit.py`, report in `evaluation/results/`). Parsing is not the gap; value recall is 39% of the human-key rows, and outcome-label alignment is weak.
 2. **P1, diagnose value recall.** For a sample of the unmatched human rows, decide whether the value is missed (a table we did not read), rounded or in different units, or the sign differs. Improve alignment on outcome and arm with token overlap. This replaces the parser work.
-3. **P2, parsers and derivations.** The structure interpreter is built (`src/extraction/table_structure.py`, tested); next, run it inside `table_estimates.py` before the model call, then implement the derivations `d`, `yi`, `var_d`, `vi`, `se_g` with `formula_used`, and reproduce the 8WR key on its 443 rows.
+3. **P2, use the interpreter and derive.** Coverage is measured (28% of tables read as results, 60% of those with an SE). Next, run the interpreter inside `table_estimates.py` before the model call and treat low confidence as a review flag, then implement the derivations `d`, `yi`, `var_d`, `vi`, `se_g` with `formula_used`, and reproduce the 8WR key on its 443 rows.
 4. **P3, layouts.** Add the layout detectors (multi-arm, multi-panel, SE-below-row, transposed) and the dedupe and sign rules. Re-run the audit.
 5. **P4, validation and gate.** Wire the per-field report into `evaluation/`, publish coverage and accuracy, and gate prompt or parser changes on it.
 
