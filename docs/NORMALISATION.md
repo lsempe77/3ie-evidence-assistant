@@ -98,6 +98,24 @@ Three behaviours were corrected by testing against the data: classification was 
 
 Next: close the remaining missed results tables, and measure the reader end to end on a few documents with the structure hint in place.
 
+## A/B result (6 studies, 14 November 2026)
+
+`evaluation/extraction_ab.py` re-extracts a sample with the current reader and scores both the rows already on disk and the new rows against the hand-typed key. Six studies that map to the key:
+
+| | Old rows on disk | New reader |
+| --- | --- | --- |
+| Estimate value recall | 51 of 84 (61%) | 84 of 84 (100%) |
+| SE value recall | 45 of 80 (56%) | 80 of 80 (100%) |
+| Rows produced | 1,596 | 3,539 |
+| Descriptive tables skipped | 0 | 18 |
+| Non-outcome rows dropped | 0 | 26 |
+
+The new reader finds every hand-typed number in the sample, where the old one missed about two in five. That is the coverage gap this work targeted, and it closes it on this sample.
+
+The cost is over-extraction: 2.2 times as many rows. Part of that is better reading of tables the old pipeline under-read, and part is likely duplicates of the same estimate across panels and tables, which the human key keeps once. Because the reader is shown the estimates closest to the question, duplicates waste those slots, so precision and deduplication must be measured before the collection is re-extracted. The change is kept in the pipeline; the collection has not been re-extracted.
+
+Next: deduplicate the new rows (same study, outcome, arm and value), then re-run this A/B on a larger sample before a full re-extraction.
+
 ## Derivation and consistency rules
 
 - `t = estimate / se`; `se` from a CI as `(high - low) / (2 * z)` at the stated level; `p` from `t` and df when df is known; stars to a p-bound otherwise.
