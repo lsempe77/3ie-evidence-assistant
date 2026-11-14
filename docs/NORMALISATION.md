@@ -83,13 +83,20 @@ TVET already solved two adjacent problems (`pipelines/TVET/pipeline/`, outside t
 Applied to the corpus, with the two fixes it exposed in our own reader:
 
 - Results by caption: 456 tables (28%). Descriptive: 210 (13%). Unknown: 951 (59%), mostly tables with no caption.
-- With the extra layouts (a row labelled "Treatment" plus a parenthesised standard-error row, and combined cells on half the rows), an estimate is now found in 556 tables (34%, up from 460), and a standard error in 378 of them (68%, up from 60%).
-- The caption and the reader disagree in two useful ways. In 93 tables the caption says descriptive while the reader read an estimate; inspection shows these are attrition and baseline-mean tables, so the reader over-reads and the caption should veto it. In 182 tables the caption says results while no estimate was read; these are the remaining misses to close.
+- With the extra layouts (a row labelled "Treatment" plus a parenthesised standard-error row, and combined cells on half the rows), an estimate is now found in 521 tables (32%), and a standard error in 353 of them (68%).
+- The caption and the reader disagree in two useful ways. In 81 tables the caption says descriptive while the reader read an estimate; inspection shows these are attrition and baseline-mean tables, so the reader over-reads and the caption should veto it. In 189 tables the caption says results while no estimate was read; these are the remaining misses to close.
 - Non-outcome rows: 514 of the 10,014 extracted rows (5.1%) carry a non-outcome label, mostly control-group means ("Mean in pure control", 258) and "Constant" (21). An early version also flagged "Average effect of T1" because of the word "average"; that false positive is fixed.
 
-Two behaviours were corrected by testing against the data: classification was reading the surrounding paragraphs (so a nearby "baseline" made a results table look descriptive), and the word "matching" made "propensity score matching results" look like a balance table. Classification now reads only the caption and the table's notes, and "matching" and "propensity" are no longer standalone descriptive cues.
+Three behaviours were corrected by testing against the data: classification was reading the surrounding paragraphs (so a nearby "baseline" made a results table look descriptive); the word "matching" made "propensity score matching results" look like a balance table; and the short form "ATT" matched "attrition" because it was a prefix match. Classification now reads only the caption and the table's notes, "matching" and "propensity" are no longer standalone descriptive cues, and short forms must match whole words.
 
-Next: apply the caption as a veto (descriptive caption over a read estimate becomes a review flag), close the 182 missed results tables, and run the roles inside `table_estimates.py`.
+### Inside the table reader
+
+`table_estimates.py` now uses both modules before and after the model call:
+
+- Before the call it computes the table type and the inferred structure. A descriptive table with no estimate inferred is skipped without a model call, and the inferred structure is added to the prompt ("standard error is the column headed 'SE'"), so the model is told what each column is rather than guessing.
+- After the call it drops rows whose label is not an outcome (Observations, R², Constant, Controls, means), and marks a table for review when the caption said descriptive but the model still returned estimates. Each table record now carries `skipped`, `non_outcome_rows` and `review`.
+
+Next: close the remaining missed results tables, and measure the reader end to end on a few documents with the structure hint in place.
 
 ## Derivation and consistency rules
 

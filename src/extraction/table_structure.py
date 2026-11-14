@@ -211,8 +211,12 @@ def _role_from_header(header: str) -> Tuple[Optional[str], str]:
         return None, ""
     for role, phrases in _HEADER_ROLES:
         for phrase in phrases:
-            if len(phrase) <= 2:
-                matched = key == phrase or re.search(rf"\b{re.escape(phrase)}\b", key)
+            if "." in phrase:
+                matched = phrase in key
+            elif len(phrase) <= 4:
+                # Short forms such as ATT, ATE, SE, N, mean must be whole words, so "att" does not
+                # match "attrition" and "ate" does not match "rate".
+                matched = bool(re.search(rf"\b{re.escape(phrase)}s?\b", key))
             else:
                 matched = key == phrase or key.startswith(phrase) or f" {phrase}" in f" {key}"
             if matched:

@@ -1,37 +1,37 @@
 # Table-structure coverage audit
 
 Tables parsed from 97 documents: 1617. Documents with at least one table: 93.
-Tables with an estimate column or estimate row (results tables): 556 (34%). The rest are mostly descriptive tables (treatments, modules, sample sizes), which correctly have no estimate.
+Tables with an estimate column or estimate row (results tables): 521 (32%). The rest are mostly descriptive tables (treatments, modules, sample sizes), which correctly have no estimate.
 
 | Layout | Tables |
 | --- | --- |
-| statistics in columns | 1446 (89%) |
-| statistics in rows | 171 (11%) |
+| statistics in columns | 1462 (90%) |
+| statistics in rows | 155 (10%) |
 
 ## Table type (TVET phase 2 definitions)
 
 | Type | Tables | Of those, an estimate was read |
 | --- | --- | --- |
-| results | 456 (28%) | 274 |
-| descriptive | 210 (13%) | 93 |
-| unknown | 951 (59%) | 189 |
+| results | 456 (28%) | 267 |
+| descriptive | 210 (13%) | 81 |
+| unknown | 951 (59%) | 173 |
 
 ## Coverage among results tables
 
 | Structure found | Of the tables with an estimate |
 | --- | --- |
-| standard error (column or in the estimate cell) | 378 (68%) |
-| p-value | 78 (14%) |
-| confidence interval, both bounds | 6 (1%) |
+| standard error (column or in the estimate cell) | 353 (68%) |
+| p-value | 69 (13%) |
+| confidence interval, both bounds | 4 (1%) |
 
 | Structure found | All tables |
 | --- | --- |
-| estimate column | 556 (34%) |
+| estimate column | 521 (32%) |
 | standard error column | 488 (30%) |
-| combined estimate and SE in one cell | 225 (14%) |
+| combined estimate and SE in one cell | 210 (13%) |
 
 Mean confidence: 0.67.
-Mean share of columns left unknown, on results tables: 39%.
+Mean share of columns left unknown, on results tables: 38%.
 
 ## Non-outcome rows in our extracted estimates
 
@@ -48,16 +48,16 @@ Mean share of columns left unknown, on results tables: 39%.
 ## Caption classifier against the estimate reader
 
 Descriptive by caption, yet an estimate was read (check which side is wrong):
-- caption `Table 3.1. Household interviews and attrition, by region` / header `Region | Interviewed | Not interviewed | Total | Attrition rate`
-- caption `Table 3.2. Number of index children found, by region and baseline enrollment status` / header ` | Found | Not found | Total | Attrition rate`
 - caption `Table 5: Means of baseline characteristics for endline sample (standard deviations in pare` / header ` | Control | T1 (GrpLH/ GrpC) | T2 (IndLH/ GrpC) mean | T3 (IndLH/ IndC) | C v. T1 | C v. `
-- caption `Appendix 2. Baseline comparison between attrition and non-attrition households` / header ` | Attrition (during 2002-2008) | Available HH in 2008 | Difference`
 - caption `Appendix 3. Baseline (2002) value of the outcome variables of interest` / header `Outcome variable (mean) | Participants | Non-participants | Difference`
 - caption `Table 3. Impact estimate of per capita income after controlling for baseline characteristi` / header `Explanatory variable | Coefficient`
-- caption `Table A1. Baseline comparison between attrition and nonattrition households (2002-2011).` / header `Indicators | Attrition during 2002-2011 - Treatment | Attrition during 2002-2011 - Control`
 - caption `Tabla 3.7 Probit-perfil de quienes no fueron entrevistados en la revisita (attrition)` / header `Variables explicativas | Coeficiente`
 - caption `Table 1: Balance across key variables` / header ` | (1) - Obs. | (2) Control - Mean | (3) Full - Package | (4) Financial - Capital | (5) Hu`
 - caption `Table B2: Intent-to-treat estimates: Attrition` / header ` | (1) - Obs. | (2) Control - Mean, [s.d.] | (3) Full - Package | (4) Financial - Capital `
+- caption `Table B3: Impacts: Aggregate measures (w/ LASSO-selected covariates)` / header ` | (1) Obs. | (2) Control Mean, [s.d.] | (3) Full Package | (4) Financial Capital | (5) Hu`
+- caption `Table 9: Indirect Effects on the Family Network of STUPs II` / header ` | (1) Pce | (2) Durables Value | (3) Radios | (4) Bicycles | (5) Chairs | (6) Tables | (7`
+- caption `Table 1. Baseline characteristics of the participants and comparison groups` / header ` | Average for beneficiaries | Difference between participants and - Not-selected ultra-po`
+- caption `Table 8. Impact estimates controlling for baseline variables` / header `VARIABLES | Impact compared to NSUP | Impact compared to comparison villages`
 
 Results by caption, yet no estimate was read (a table the reader misses):
 - caption `Table 3.4. Power calculations for the nutrition outcomes based on SPIR-I endline data, ori` / header ` | Original power calculations - Caregiver IYCF knowledge | Original power calculations - `
@@ -75,7 +75,7 @@ Results by caption, yet no estimate was read (a table the reader misses):
 
 | Header row | Tables |
 | --- | --- |
-| `(no header)` | 28 |
+| `(no header)` | 30 |
 | ` | (1) Depression severity score (PHQ-9, 0- 27) | (2) Depression severity score is 8 or hi` | 4 |
 | ` | (1) Primary female has personal savings of her own | (2) Primary female's amount of sav` | 3 |
 | ` | (1) Household has taken out a loan for productive purposes in the last 12 months | (2) ` | 3 |

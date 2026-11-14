@@ -36,6 +36,9 @@ TEXT AROUND THE TABLE (caption, notes, nearby paragraphs):
 TABLE (Markdown, page {page}):
 {table}
 
+INFERRED STRUCTURE (from the headers, notes and arithmetic; may be empty or wrong, and the table itself wins):
+{structure}
+
 First decide: does this table report estimated effects of a programme or treatment, such as
 regression coefficients, differences between treatment and control (or before and after),
 impact estimates or marginal effects? Descriptive statistics, sample descriptions, balance
@@ -240,31 +243,98 @@ def _parse_json(text: str) -> Dict[str, Any]:
     return json.loads(m.group(0) if m else text)
 
 
+def _table_analysis(u: Dict[str, Any]):
+    """Table type and inferred structure, computed before the model call (lazy imports avoid a cycle)."""
+    from src.extraction.table_rules import classify_table
+    from src.extraction.table_structure import ESTIMATE, LAYOUT_ROWS, interpret_table, parse_markdown_table
+
+    grid = parse_markdown_table(u["text"])
+    header = " | ".join(grid.headers[-1]) if grid.headers else ""
+    kind, _ = classify_table(u.get("caption") or "", " ".join(grid.notes), header)
+    result = interpret_table(u["text"], notes=f"{u.get('caption') or ''}\n{u.get('context') or ''}".strip())
+    has_estimate = (ESTIMATE in result.row_roles) if result.layout == LAYOUT_ROWS else (result.estimate is not None)
+    return kind, result, has_estimate
+
+
+def _structure_hint(result) -> str:
+    """A short description of the inferred columns, for the model prompt."""
+    from src.extraction.table_structure import LAYOUT_ROWS
+
+    parts: List[str] = []
+    if result.layout == LAYOUT_ROWS:
+        parts.append("statistics are in rows and outcomes or models are in the columns")
+    for index, name in ((result.estimate, "estimate"), (result.se, "standard error"),
+                        (result.t, "t or z statistic"), (result.p, "p-value"),
+                        (result.ci_low, "confidence interval lower end"),
+                        (result.ci_high, "confidence interval upper end")):
+        if index is not None and index < len(result.roles):
+            header = result.roles[index].header or f"column {index + 1}"
+            parts.append(f"{name} is the column headed '{header}'")
+    if result.combined:
+        parts.append("each cell holds the estimate with its standard error in parentheses")
+    if result.conventions.get("se_in_parens"):
+        parts.append("the notes say standard errors are in parentheses")
+    if result.stars_map:
+        parts.append("the notes give a significance-star map")
+    return "; ".join(parts)
+
+
+def _should_skip(kind: str, has_estimate: bool) -> bool:
+    """A descriptive table with no estimate inferred is not worth a model call."""
+    from src.extraction.table_rules import DESCRIPTIVE
+
+    return kind == DESCRIPTIVE and not has_estimate
+
+
+def _drop_non_outcome_rows(raw: List[Any]):
+    """Remove rows whose label is not an outcome (Observations, R2, Constant, Controls, ...)."""
+    from src.extraction.table_rules import is_non_outcome_label
+
+    kept, dropped = [], 0
+    for row in raw:
+        if isinstance(row, dict) and is_non_outcome_label(str(row.get("outcome") or "")):
+            dropped += 1
+        else:
+            kept.append(row)
+    return kept, dropped
+
+
 async def extract_document(content_list: List[Dict[str, Any]], model: str, api_key: str) -> Dict[str, Any]:
     """All estimates in a document's tables, plus per-table decisions for auditing."""
+    from src.extraction.table_rules import DESCRIPTIVE
+
     units = table_units(content_list)
     sem = asyncio.Semaphore(TABLE_CONCURRENCY)
     async with httpx.AsyncClient(timeout=300, headers={"Authorization": f"Bearer {api_key}"}) as client:
         async def one(u):
+            kind, result, has_estimate = _table_analysis(u)
+            if _should_skip(kind, has_estimate):
+                return u, {"skipped": "descriptive table", "estimates": []}, None, kind
+            structure = _structure_hint(result)
             prompt = PROMPT.format(context=(u["caption"] + "\n" + u["context"]).strip()[:4000] or "(none)",
-                                   table=u["text"], page=u["page"] if u["page"] is not None else "?")
+                                   table=u["text"], page=u["page"] if u["page"] is not None else "?",
+                                   structure=structure or "(none)")
             async with sem:
                 for attempt in range(2):
                     try:
-                        return u, _parse_json(await _chat(client, model, prompt)), None
+                        return u, _parse_json(await _chat(client, model, prompt)), None, kind
                     except Exception as e:
                         err = f"{type(e).__name__}: {e}"[:200]
-                return u, {}, err
+                return u, {}, err, kind
 
         results = await asyncio.gather(*(one(u) for u in units))
 
     estimates, tables = [], []
-    for u, data, err in results:
+    for u, data, err, kind in results:
         label = str(data.get("table_label") or u["caption"][:40] or f"table at item {u['index']}")
         is_results = bool(data.get("results_table"))
         raw = (data.get("estimates") or []) if is_results else []
+        raw, non_outcome = _drop_non_outcome_rows(raw)
         rows = [to_estimate(r, label, u["page"], u["text"]) for r in raw if isinstance(r, dict)]
         estimates += rows
         tables.append({"table": label, "page": u["page"], "results_table": is_results, "estimates": len(rows),
-                       "grounded": sum(r.grounded for r in rows), "error": err})
+                       "grounded": sum(r.grounded for r in rows), "error": err,
+                       "skipped": data.get("skipped"),
+                       "non_outcome_rows": non_outcome,
+                       "review": kind == DESCRIPTIVE and is_results})
     return {"estimates": [asdict(e) for e in estimates], "tables": tables}
