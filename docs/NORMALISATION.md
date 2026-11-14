@@ -98,23 +98,27 @@ Three behaviours were corrected by testing against the data: classification was 
 
 Next: close the remaining missed results tables, and measure the reader end to end on a few documents with the structure hint in place.
 
-## A/B result (6 studies, 14 November 2026)
+## A/B result (14 November 2026)
 
-`evaluation/extraction_ab.py` re-extracts a sample with the current reader and scores both the rows already on disk and the new rows against the hand-typed key. Six studies that map to the key:
+`evaluation/extraction_ab.py` re-extracts a sample with the current reader and scores both the rows already on disk and the new rows against the hand-typed key. Two runs: 6 studies first, then 12 studies with deduplication in place.
 
 | | Old rows on disk | New reader |
 | --- | --- | --- |
-| Estimate value recall | 51 of 84 (61%) | 84 of 84 (100%) |
-| SE value recall | 45 of 80 (56%) | 80 of 80 (100%) |
-| Rows produced | 1,596 | 3,539 |
-| Descriptive tables skipped | 0 | 18 |
-| Non-outcome rows dropped | 0 | 26 |
+| Estimate value recall, 12 studies | 66 of 149 (44%) | 137 of 149 (92%) |
+| SE value recall, 12 studies | 63 of 134 (47%) | 121 of 134 (90%) |
+| Estimate value recall, first 6 studies | 51 of 84 (61%) | 84 of 84 (100%) |
+| Rows, 12 studies | 1,816 | 4,679 |
+| Duplicate rows removed | 0 | 91 |
+| Descriptive tables skipped | 0 | 24 |
+| Non-outcome rows dropped | 12 | 37 |
 
-The new reader finds every hand-typed number in the sample, where the old one missed about two in five. That is the coverage gap this work targeted, and it closes it on this sample.
+The new reader finds about twice as many of the hand-typed numbers, which is the coverage gap this work targeted. The first six studies reached 100%; the 12-study sample is 92%, so a few numbers are still missed and the gap is not closed everywhere.
 
-The cost is over-extraction: 2.2 times as many rows. Part of that is better reading of tables the old pipeline under-read, and part is likely duplicates of the same estimate across panels and tables, which the human key keeps once. Because the reader is shown the estimates closest to the question, duplicates waste those slots, so precision and deduplication must be measured before the collection is re-extracted. The change is kept in the pipeline; the collection has not been re-extracted.
+The cost is size. Deduplication removed only 91 rows, and the reader produces 2.6 times as many rows as the old pipeline, from 1,816 to 4,679 on the sample. Part of that is genuinely more estimates read from wide tables (one study goes from 657 to 2,246 rows), not duplicates. Extrapolated, a full re-extraction would grow the estimates table from about 20,000 rows to something like 40,000 to 50,000.
 
-Next: deduplicate the new rows (same study, outcome, arm and value), then re-run this A/B on a larger sample before a full re-extraction.
+That is why the collection has not been re-extracted. The estimates carry embeddings, and the disk-IO budget was only just fixed by moving the project to Pro on Micro. Nearly doubling the table would put that budget under pressure again for a coverage gain. The pipeline change is kept (new documents benefit), and a full re-extraction waits for one of two things: a cap on estimates per study, or a compute step-up so the larger table fits the IO budget.
+
+Next: add a cap that prefers main effects with a standard error (so the table grows less), re-run this A/B, and only then re-extract the collection.
 
 ## Derivation and consistency rules
 

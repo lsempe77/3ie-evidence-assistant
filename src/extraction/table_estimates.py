@@ -301,6 +301,7 @@ def _drop_non_outcome_rows(raw: List[Any]):
 
 async def extract_document(content_list: List[Dict[str, Any]], model: str, api_key: str) -> Dict[str, Any]:
     """All estimates in a document's tables, plus per-table decisions for auditing."""
+    from src.extraction.dedupe import dedupe_estimates
     from src.extraction.table_rules import DESCRIPTIVE
 
     units = table_units(content_list)
@@ -337,4 +338,5 @@ async def extract_document(content_list: List[Dict[str, Any]], model: str, api_k
                        "skipped": data.get("skipped"),
                        "non_outcome_rows": non_outcome,
                        "review": kind == DESCRIPTIVE and is_results})
-    return {"estimates": [asdict(e) for e in estimates], "tables": tables}
+    estimate_dicts, duplicates = dedupe_estimates([asdict(e) for e in estimates])
+    return {"estimates": estimate_dicts, "tables": tables, "duplicates": duplicates}

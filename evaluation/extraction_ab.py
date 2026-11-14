@@ -123,6 +123,7 @@ def main() -> None:
                     "old_est_t": ot, "new_est_t": len(h["estimate"]), "old_se_t": ost,
                     "new_se_t": len(h["se"]), "old_non": old_non, "new_non": new_non,
                     "old_rows": len(old), "new_rows": len(new["estimates"]),
+                    "dups": new.get("duplicates", 0),
                     "skipped": skipped, "review": review})
         lines.append(f"| {sid} | {oe}/{ot} | {ne}/{len(h['estimate'])} | {os_}/{ost} | {ns}/{len(h['se'])} | "
                      f"{old_non} | {new_non} | {len(old)} | {len(new['estimates'])} | {skipped} | {review} |")
@@ -135,8 +136,8 @@ def main() -> None:
               f"({100 * agg['old_se'] / max(1, agg['old_se_t']):.0f}%), "
               f"new {agg['new_se']}/{agg['new_se_t']} ({100 * agg['new_se'] / max(1, agg['new_se_t']):.0f}%).",
               f"Non-outcome rows: old {agg['old_non']}, new {agg['new_non']} (dropped before output).",
-              f"Rows: old {agg['old_rows']}, new {agg['new_rows']}. Tables skipped as descriptive: "
-              f"{agg['skipped']}. Tables flagged for review: {agg['review']}."]
+              f"Rows: old {agg['old_rows']}, new {agg['new_rows']}. Duplicate rows removed: {agg['dups']}. "
+              f"Tables skipped as descriptive: {agg['skipped']}. Tables flagged for review: {agg['review']}."]
     REPORT.write_text("\n".join(lines), encoding="utf-8")
     print("\n".join(lines).encode("ascii", "replace").decode("ascii"))
     print(f"\nwritten to {REPORT}")
