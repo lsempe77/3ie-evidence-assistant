@@ -22,7 +22,7 @@ from src.extraction.table_estimates import extract_document
 
 SOURCE = "tables_v1"
 DEFAULT_MODEL = "anthropic/claude-haiku-5.5"
-DOC_CONCURRENCY = 4
+DOC_CONCURRENCY = 2
 INSERT_BATCH = 50  # rows carry 1536-d vectors, and the small Supabase instance drops large writes
 
 
@@ -77,7 +77,11 @@ def _r2():
 
 
 async def _post(db: httpx.AsyncClient, rows: List[Dict[str, Any]]) -> Optional[str]:
-    """Insert with retries. Returns an error message, or None."""
+    """Insert with retries. Returns an error message, or None.
+
+    Transport failures here are not always `httpx.TransportError`: a bad TLS record surfaces as
+    `ssl.SSLError`, which once aborted a whole re-extraction. Catch any exception and retry.
+    """
     last = ""
     for attempt in range(5):
         try:
@@ -87,8 +91,8 @@ async def _post(db: httpx.AsyncClient, rows: List[Dict[str, Any]]) -> Optional[s
             last = f"insert {r.status_code}: {r.text[:300]}"
             if r.status_code < 500:
                 return last
-        except httpx.TransportError as e:
-            last = f"{type(e).__name__}"
+        except Exception as e:
+            last = f"{type(e).__name__}: {e}"[:200]
         await asyncio.sleep(5 * (attempt + 1))
     return last
 
@@ -145,14 +149,17 @@ async def extract_and_store(
                     totals["errors"] += 1
                     log(f"  ✗ {name[:60]}: {type(e).__name__}: {str(e)[:120]}")
                     return
-                await db.delete("/effect_estimates", params={
-                    "rag_project_id": f"eq.{project_id}", "doc_key": f"eq.{name}", "source": f"eq.{SOURCE}"})
-                for i in range(0, len(rows), INSERT_BATCH):
-                    err = await _post(db, rows[i:i + INSERT_BATCH])
-                    if err:
-                        totals["errors"] += 1
-                        log(f"  ✗ {name[:60]}: {err}")
-                        return
+                try:
+                    await db.delete("/effect_estimates", params={
+                        "rag_project_id": f"eq.{project_id}", "doc_key": f"eq.{name}", "source": f"eq.{SOURCE}"})
+                    for i in range(0, len(rows), INSERT_BATCH):
+                        err = await _post(db, rows[i:i + INSERT_BATCH])
+                        if err:
+                            raise RuntimeError(err)
+                except Exception as e:
+                    totals["errors"] += 1
+                    log(f"  ✗ {name[:60]}: {type(e).__name__}: {str(e)[:120]}")
+                    return
                 results = sum(t["results_table"] for t in out["tables"])
                 totals["docs"] += 1
                 totals["estimates"] += len(out["estimates"])
@@ -162,5 +169,5 @@ async def extract_and_store(
                 log(f"  {name[:60]:60} tables {len(out['tables']):3} results {results:3} "
                     f"kept {len(rows):4} ({time.time() - t0:.0f}s)")
 
-        await asyncio.gather(*(one(d) for d in docs))
+        await asyncio.gather(*(one(d) for d in docs), return_exceptions=True)
     return totals
