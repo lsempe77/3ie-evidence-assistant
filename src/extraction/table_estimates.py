@@ -299,8 +299,14 @@ def _drop_non_outcome_rows(raw: List[Any]):
     return kept, dropped
 
 
-async def extract_document(content_list: List[Dict[str, Any]], model: str, api_key: str) -> Dict[str, Any]:
-    """All estimates in a document's tables, plus per-table decisions for auditing."""
+async def extract_document(content_list: List[Dict[str, Any]], model: str, api_key: str,
+                           drop_duplicates: bool = False) -> Dict[str, Any]:
+    """All estimates in a document's tables, plus per-table decisions for auditing.
+
+    `drop_duplicates` is off by default: on the extracted rows so far the merge rule finds nothing,
+    so a repeated row is far more likely to be the reader emitting the same line twice than a repeat
+    in the paper, and keeping it loses no real estimate.
+    """
     from src.extraction.dedupe import dedupe_estimates
     from src.extraction.table_rules import DESCRIPTIVE
 
@@ -338,5 +344,8 @@ async def extract_document(content_list: List[Dict[str, Any]], model: str, api_k
                        "skipped": data.get("skipped"),
                        "non_outcome_rows": non_outcome,
                        "review": kind == DESCRIPTIVE and is_results})
-    estimate_dicts, duplicates = dedupe_estimates([asdict(e) for e in estimates])
+    estimate_dicts = [asdict(e) for e in estimates]
+    duplicates = 0
+    if drop_duplicates:
+        estimate_dicts, duplicates = dedupe_estimates(estimate_dicts)
     return {"estimates": estimate_dicts, "tables": tables, "duplicates": duplicates}

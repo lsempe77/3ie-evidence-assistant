@@ -118,9 +118,11 @@ Across the 12 studies the reader parsed 388 tables, read 265 of them as results 
 
 The growth is not mostly duplicates. Distinct outcomes rose from 372 to 993, and exact dedupe removed only 93 rows, so the reader is genuinely finding more outcomes, not copying the same ones. Because 4,688 rows map to 3,014 outcome-and-arm pairs, about 1,674 rows repeat the same outcome and arm across specifications or tables. Keeping one best row per outcome and arm would cut the new side to about 3,014 rows, roughly 1.7 times the old 1,816 before any per-study ceiling. That is the cap to implement.
 
+Deduplication is now opt-in and off by default. Run over the 10,014 old rows the merge rule finds zero duplicates, so a repeated row is far more likely to be the reader emitting the same line twice than a repeat in the paper. Keeping those rows loses no real estimate; with dedupe off the 12-study run keeps the 93 it had merged, about 4,781 rows. All distinct numbers are kept, as intended.
+
 That is why the collection has not been re-extracted. The estimates carry embeddings, and the disk-IO budget was only just fixed by moving the project to Pro on Micro. Nearly doubling the table would put that budget under pressure again for a coverage gain. The pipeline change is kept (new documents benefit), and a full re-extraction waits for one of two things: a cap on estimates per study, or a compute step-up so the larger table fits the IO budget.
 
-Next: add a cap that prefers main effects with a standard error (so the table grows less), re-run this A/B, and only then re-extract the collection.
+Next: keep every row (dedupe off), and re-extract the collection in one window with compute temporarily on Small, or with provisioned IOPS raised, so the write burst does not deplete the Micro disk-IO budget. Then return to Micro and watch the Disk IO graph. The per-outcome cap is not applied; it stays an option only if steady-state IO becomes a problem.
 
 ## Derivation and consistency rules
 
