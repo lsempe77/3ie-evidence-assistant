@@ -116,13 +116,15 @@ Next: close the remaining missed results tables, and measure the reader end to e
 
 Across the 12 studies the reader parsed 388 tables, read 265 of them as results tables, skipped 24 as descriptive and flagged none for review. Recall rose from 44% to 92% for estimates and from 47% to 90% for standard errors. The two runs are not identical samples of tables, so the comparison is indicative.
 
-The growth is not mostly duplicates. Distinct outcomes rose from 372 to 993, and exact dedupe removed only 93 rows, so the reader is genuinely finding more outcomes, not copying the same ones. Because 4,688 rows map to 3,014 outcome-and-arm pairs, about 1,674 rows repeat the same outcome and arm across specifications or tables. Keeping one best row per outcome and arm would cut the new side to about 3,014 rows, roughly 1.7 times the old 1,816 before any per-study ceiling. That is the cap to implement.
+The growth is not mostly duplicates. Distinct outcomes rose from 372 to 993, and exact dedupe removed only 93 rows, so the reader is genuinely finding more outcomes, not copying the same ones. Because 4,688 rows map to 3,014 outcome-and-arm pairs, about 1,674 rows repeat the same outcome and arm across specifications or tables. A per-outcome cap would cut this to about 3,014 rows, but it is not applied; every grounded row is kept.
 
 Deduplication is now opt-in and off by default. Run over the 10,014 old rows the merge rule finds zero duplicates, so a repeated row is far more likely to be the reader emitting the same line twice than a repeat in the paper. Keeping those rows loses no real estimate; with dedupe off the 12-study run keeps the 93 it had merged, about 4,781 rows. All distinct numbers are kept, as intended.
 
-That is why the collection has not been re-extracted. The estimates carry embeddings, and the disk-IO budget was only just fixed by moving the project to Pro on Micro. Nearly doubling the table would put that budget under pressure again for a coverage gain. The pipeline change is kept (new documents benefit), and a full re-extraction waits for one of two things: a cap on estimates per study, or a compute step-up so the larger table fits the IO budget.
+## Production re-extraction (14 November 2026)
 
-Next: keep every row (dedupe off), and re-extract the collection in one window with compute temporarily on Small, or with provisioned IOPS raised, so the write burst does not deplete the Micro disk-IO budget. Then return to Micro and watch the Disk IO graph. The per-outcome cap is not applied; it stays an option only if steady-state IO becomes a problem.
+The collection was re-extracted with compute temporarily on Small. It processed 97 documents, parsed 1,808 tables, read 1,080 of them as results tables, kept 18,176 grounded estimates, and reported no errors. The `effect_estimates` table now holds those 18,176 rows of this source plus 7,127 rows from the earlier OM_QEX import, 25,303 in total.
+
+Stored-row recall against the hand-typed key, over the 36 studies that map by id, is 278 of 325 estimates (86%) and 263 of 305 standard errors (86%), against 44% and 47% for the old rows. The 2.6 times growth measured in the A/B did not appear in production: the A/B counted in-memory estimates before grounding, while the writer stores grounded rows only, and skipping descriptive tables offsets the increase. The stored table is in fact a little smaller than the old one at 18,176 rows, while matching about twice as many of the hand-typed numbers. Every stored row carries an embedding. Compute can return to Micro; watch the Disk IO graph for a day.
 
 ## Derivation and consistency rules
 

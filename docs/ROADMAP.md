@@ -97,7 +97,9 @@ The reader, the index and the citations changed over 12 and 13 November. The pla
 - **In-app PDF reader.** Citations open a client-side reader (react-pdf) with zoom, page navigation, full-text search, cited-passage highlighting and windowed page rendering, replacing the browser iframe viewer.
 - **Infrastructure.** Search RPCs retry with backoff, and the Supabase project moved to Pro on Micro compute, which took queries from 11 to 47 seconds during a disk-IO-exhausted window down to 0.1 to 0.3 seconds. The Sphinx docs workflow now passes (GitHub Pages enabled), closing that N8 item.
 
-The extraction side is unchanged in this period; the role filter and the quote work sit on the retrieval and reading side.
+- **Table reading (14 November).** The table reader now classifies tables and infers their structure before extracting, skips balance and summary tables, handles statistics-in-rows and combined `estimate*** (SE)` layouts, and drops non-outcome rows. The collection was re-extracted: 97 documents, 1,808 tables, 1,080 results tables, 18,176 grounded estimates, no errors. Stored-row recall against the hand-typed key is 86% of estimates and 86% of standard errors, against 44% and 47% for the old rows. Every row is kept; dedupe and any per-outcome cap are off. Details in [NORMALISATION.md](NORMALISATION.md).
+
+The extraction side changed on 14 November; the role filter, quote work and the reader sit on the retrieval and reading side.
 
 ### ▶ Next up (after the model review, 10 November 2026)
 
